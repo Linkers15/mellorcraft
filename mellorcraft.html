@@ -318,7 +318,7 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2>v1.3.0 - The Boss Update</h2>
+        <h2>v1.3.0</h2>
         <div class="seedLabel">Enter World Seed (or leave empty for random)</div>
         <input type="text" id="seedInput" placeholder="Enter seed...">
         <div class="btnContainer">
@@ -573,6 +573,7 @@
         let currentMusicAudio = null;
         let currentMusicTrack = null;
         let musicTimeout = null;
+        let ambientMusicTimer = 0;
         let currentJukeboxDisc = null;
 
         const SOLID_BLOCKS = new Set([
@@ -2104,10 +2105,17 @@
             stopMusicPlayback();
             const src = MUSIC_TRACK_FILES[trackIndex];
             if (!src) return;
-            currentMusicAudio = new Audio(src);
-            currentMusicAudio.volume = 0.45;
-            currentMusicAudio.loop = false;
-            currentMusicAudio.play().catch(() => {});
+            const audio = new Audio(src);
+            audio.volume = 0.45;
+            audio.loop = false;
+            audio.onended = () => {
+                if (currentMusicAudio === audio) {
+                    currentMusicAudio = null;
+                    currentMusicTrack = null;
+                }
+            };
+            audio.play().catch(() => {});
+            currentMusicAudio = audio;
             currentMusicTrack = trackIndex;
         }
 
@@ -2665,6 +2673,9 @@
                 dropId = BLOCKS.COBBLESTONE;
             }
             
+            if (block === BLOCKS.JUKEBOX) {
+                stopMusicPlayback();
+            }
             addToInventory(dropId, 1);
             updateInventoryUI();
         }
@@ -3469,7 +3480,7 @@
                 BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE,
                 BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK,
                 BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK,
-                BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME
+                BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX
             ];
             
             const itemIds = [
@@ -3516,7 +3527,7 @@
             const materialsGrid = document.createElement('div');
             materialsGrid.className = 'creative-items';
             
-            const materials = [ITEMS.COAL, ITEMS.IRON_INGOT, ITEMS.GOLD_INGOT, ITEMS.DIAMOND, ITEMS.MELLORITE, ITEMS.STICK, ITEMS.RAW_MEAT];
+            const materials = [ITEMS.COAL, ITEMS.IRON_INGOT, ITEMS.GOLD_INGOT, ITEMS.DIAMOND, ITEMS.MELLORITE, ITEMS.STICK, ITEMS.RAW_MEAT, ITEMS.PINEWOOD_SPRINT_DISC, ITEMS.LAST_CAMP_STANDING_DISC];
             for (const id of materials) {
                 const slot = document.createElement('div');
                 slot.className = 'creative-slot';
@@ -3793,6 +3804,23 @@
             lastTime = time;
 
             worldTime += dt / DAY_LENGTH;
+
+            if (currentDimension === 2) {
+                if (currentMusicTrack !== 8) {
+                    playMusicTrack(8);
+                }
+                ambientMusicTimer = 0;
+            } else if (!currentMusicAudio && (currentMusicTrack === null || currentMusicTrack < 7)) {
+                ambientMusicTimer += dt;
+                if (ambientMusicTimer >= 300) {
+                    const ambientTracks = [0, 1, 2, 3, 4, 5];
+                    const trackIndex = ambientTracks[Math.floor(Math.random() * ambientTracks.length)];
+                    playMusicTrack(trackIndex);
+                    ambientMusicTimer = 0;
+                }
+            } else if (currentMusicTrack >= 7) {
+                ambientMusicTimer = 0;
+            }
 
             frames++;
             fpsTime += dt;
