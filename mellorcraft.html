@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MellorCraft v1.2.0</title>
+    <title>MellorCraft v1.3.0</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Courier New', monospace; background: #000; }
@@ -79,6 +79,27 @@
             clip-path: polygon(50% 0%, 65% 15%, 100% 15%, 100% 50%, 50% 100%, 0% 50%, 0% 15%, 35% 15%);
         }
         .heart.empty { background: #555; }
+        
+        #bossBarContainer {
+            position: fixed; top: 30px; left: 50%;
+            transform: translateX(-50%);
+            width: 400px; height: 25px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 3px solid #333;
+            display: none; z-index: 100;
+            border-radius: 4px; overflow: hidden;
+        }
+        #bossBarFill {
+            width: 100%; height: 100%;
+            background: #a040e0;
+            transition: width 0.1s;
+        }
+        #bossName {
+            position: absolute; top: 2px; left: 0; width: 100%;
+            text-align: center; color: white; font-weight: bold;
+            font-size: 14px; text-shadow: 1px 1px 2px black;
+        }
+
         #instructions {
             position: fixed; top: 10px; right: 10px;
             color: white; font-size: 12px; z-index: 100;
@@ -297,7 +318,7 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2>v1.2.0</h2>
+        <h2>v1.3.0 - The Boss Update</h2>
         <div class="seedLabel">Enter World Seed (or leave empty for random)</div>
         <input type="text" id="seedInput" placeholder="Enter seed...">
         <div class="btnContainer">
@@ -308,6 +329,12 @@
     <canvas id="gameCanvas"></canvas>
     <div id="crosshair"></div>
     <div id="damageOverlay"></div>
+    
+    <div id="bossBarContainer">
+        <div id="bossBarFill"></div>
+        <div id="bossName">Mellor Boss</div>
+    </div>
+
     <div id="timeDisplay">Day 1 - 12:00</div>
     <div id="info">
         <div>FPS: <span id="fps">0</span></div>
@@ -375,6 +402,13 @@
         // Game state
         let WORLD_SEED = 0;
         let gameStarted = false;
+        
+        // Dimension tracking
+        let currentDimension = 0; // 0 = Overworld, 1 = Alt Dimension, 2 = Boss Dimension
+        let overworldPortal = null;
+        let altDimensionSpawn = null;
+        let teleportCooldown = 0;
+        let dimensionScanTimer = 0;
 
         // Config
         const CHUNK_SIZE = 16;
@@ -439,6 +473,8 @@
         }
 
         function isNight() {
+            if (currentDimension === 1) return true;
+            if (currentDimension === 2) return true;
             const t = worldTime % 1;
             return t < 0.2 || t > 0.8;
         }
@@ -452,6 +488,15 @@
         }
 
         function getSkyColor() {
+            if (currentDimension === 2) return [0.05, 0.0, 0.1]; // Boss Dim Sky
+            if (currentDimension === 1) {
+                const px = Math.floor(player.x);
+                const pz = Math.floor(player.z);
+                const altBiome = getAltBiome(px, pz);
+                if (altBiome === 1) return [0.05, 0.05, 0.15]; // Blue
+                if (altBiome === 2) return [0.05, 0.15, 0.05]; // Green
+                return [0.1, 0.0, 0.05]; // Dark red Alt sky
+            }
             const t = worldTime % 1;
             let r, g, b;
             if (t >= 0.25 && t < 0.3) {
@@ -472,6 +517,8 @@
         }
 
         function getLightLevel() {
+            if (currentDimension === 2) return 0.6; // Boss Arena light
+            if (currentDimension === 1) return 0.2; // Dim cave light
             const t = worldTime % 1;
             if (t >= 0.3 && t < 0.7) return 1.0;
             if (t >= 0.25 && t < 0.3) return 0.4 + 0.6 * ((t - 0.25) / 0.05);
@@ -488,13 +535,16 @@
             COAL_BLOCK: 18, IRON_BLOCK: 19, GOLD_BLOCK: 20, DIAMOND_BLOCK: 21,
             FURNACE: 22, CHEST: 23, GLASS: 24, BRICK: 25,
             MELLORITE_ORE: 26, MELLORITE_BLOCK: 27, 
-            RED_SAND: 28, TERRACOTTA: 29, PACKED_ICE: 30
+            RED_SAND: 28, TERRACOTTA: 29, PACKED_ICE: 30,
+            PORTAL: 31, RED_STONE: 32, BEDROCK: 33, BLUE_STONE: 34,
+            BOSS_PORTAL_FRAME: 35, ACTIVE_BOSS_PORTAL: 36, JUKEBOX: 37
         };
 
         // Items (tools, materials)
         const ITEMS = {
             // Materials
             COAL: 100, IRON_INGOT: 101, GOLD_INGOT: 102, DIAMOND: 103, STICK: 104, MELLORITE: 105, RAW_MEAT: 106,
+            PINEWOOD_SPRINT_DISC: 107, LAST_CAMP_STANDING_DISC: 108,
             // Wooden Tools
             WOOD_PICKAXE: 200, WOOD_AXE: 201, WOOD_SWORD: 202, WOOD_SHOVEL: 203,
             // Stone Tools
@@ -505,9 +555,25 @@
             GOLD_PICKAXE: 230, GOLD_AXE: 231, GOLD_SWORD: 232, GOLD_SHOVEL: 233,
             // Diamond Tools
             DIAMOND_PICKAXE: 240, DIAMOND_AXE: 241, DIAMOND_SWORD: 242, DIAMOND_SHOVEL: 243,
-            // Mellorite Tools (best tier!)
+            // Mellorite Tools
             MELLORITE_PICKAXE: 250, MELLORITE_AXE: 251, MELLORITE_SWORD: 252, MELLORITE_SHOVEL: 253
         };
+
+        const MUSIC_TRACK_FILES = [
+            'Shelter By Moonrise.mp3', 'The Height Limit.mp3', 'Uncraftable.mp3',
+            'Mellorite in the Mineshaft.mp3', 'Fogged Hallway.mp3', 'Campfire In Frost.mp3',
+            'Pinewood Sprint.mp3', 'Last Camp Standing.mp3', 'Last Camp Standing (OV).mp3'
+        ];
+
+        const MUSIC_DISC_TRACK = {
+            [ITEMS.PINEWOOD_SPRINT_DISC]: 7,
+            [ITEMS.LAST_CAMP_STANDING_DISC]: 8
+        };
+
+        let currentMusicAudio = null;
+        let currentMusicTrack = null;
+        let musicTimeout = null;
+        let currentJukeboxDisc = null;
 
         const SOLID_BLOCKS = new Set([
             BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD,
@@ -517,7 +583,9 @@
             BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK,
             BLOCKS.GLASS, BLOCKS.BRICK,
             BLOCKS.MELLORITE_ORE, BLOCKS.MELLORITE_BLOCK,
-            BLOCKS.RED_SAND, BLOCKS.TERRACOTTA, BLOCKS.PACKED_ICE
+            BLOCKS.RED_SAND, BLOCKS.TERRACOTTA, BLOCKS.PACKED_ICE,
+            BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE,
+            BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX
         ]);
 
         const BLOCK_COLORS = {
@@ -546,7 +614,14 @@
             [BLOCKS.MELLORITE_BLOCK]: { top: [0.7, 0.3, 0.95], side: [0.65, 0.25, 0.9], bottom: [0.6, 0.2, 0.85] },
             [BLOCKS.RED_SAND]: { top: [0.8, 0.4, 0.2], side: [0.75, 0.35, 0.15], bottom: [0.7, 0.3, 0.1] },
             [BLOCKS.TERRACOTTA]: { top: [0.6, 0.3, 0.15], side: [0.55, 0.25, 0.1], bottom: [0.5, 0.2, 0.05] },
-            [BLOCKS.PACKED_ICE]: { top: [0.6, 0.8, 0.95], side: [0.55, 0.75, 0.9], bottom: [0.5, 0.7, 0.85] }
+            [BLOCKS.PACKED_ICE]: { top: [0.6, 0.8, 0.95], side: [0.55, 0.75, 0.9], bottom: [0.5, 0.7, 0.85] },
+            [BLOCKS.PORTAL]: { top: [0.6, 0.1, 0.8], side: [0.5, 0.1, 0.7], bottom: [0.4, 0.1, 0.6] },
+            [BLOCKS.RED_STONE]: { top: [0.8, 0.2, 0.2], side: [0.7, 0.15, 0.15], bottom: [0.6, 0.1, 0.1] },
+            [BLOCKS.BEDROCK]: { top: [0.15, 0.15, 0.15], side: [0.1, 0.1, 0.1], bottom: [0.05, 0.05, 0.05] },
+            [BLOCKS.BLUE_STONE]: { top: [0.2, 0.2, 0.8], side: [0.15, 0.15, 0.7], bottom: [0.1, 0.1, 0.6] },
+            [BLOCKS.JUKEBOX]: { top: [0.5, 0.4, 0.4], side: [0.35, 0.3, 0.3], bottom: [0.4, 0.35, 0.35] },
+            [BLOCKS.BOSS_PORTAL_FRAME]: { top: [0.9, 0.8, 0.2], side: [0.7, 0.6, 0.1], bottom: [0.5, 0.4, 0.05] },
+            [BLOCKS.ACTIVE_BOSS_PORTAL]: { top: [0.8, 0.2, 1.0], side: [0.6, 0.1, 0.9], bottom: [0.5, 0.1, 0.8] }
         };
 
         const BLOCK_NAMES = {
@@ -561,13 +636,17 @@
             [BLOCKS.GOLD_BLOCK]: 'Gold Block', [BLOCKS.DIAMOND_BLOCK]: 'Diamond Block',
             [BLOCKS.GLASS]: 'Glass', [BLOCKS.BRICK]: 'Brick',
             [BLOCKS.MELLORITE_ORE]: 'Mellorite Ore', [BLOCKS.MELLORITE_BLOCK]: 'Mellorite Block',
-            [BLOCKS.RED_SAND]: 'Red Sand', [BLOCKS.TERRACOTTA]: 'Terracotta', [BLOCKS.PACKED_ICE]: 'Packed Ice'
+            [BLOCKS.RED_SAND]: 'Red Sand', [BLOCKS.TERRACOTTA]: 'Terracotta', [BLOCKS.PACKED_ICE]: 'Packed Ice',
+            [BLOCKS.PORTAL]: 'Portal Block', [BLOCKS.RED_STONE]: 'Red Stone',
+            [BLOCKS.BEDROCK]: 'Bedrock', [BLOCKS.BLUE_STONE]: 'Blue Stone',
+            [BLOCKS.JUKEBOX]: 'Jukebox', [BLOCKS.BOSS_PORTAL_FRAME]: 'Boss Frame', [BLOCKS.ACTIVE_BOSS_PORTAL]: 'Active Boss Portal'
         };
 
         const ITEM_NAMES = {
             [ITEMS.COAL]: 'Coal', [ITEMS.IRON_INGOT]: 'Iron Ingot',
             [ITEMS.GOLD_INGOT]: 'Gold Ingot', [ITEMS.DIAMOND]: 'Diamond', [ITEMS.STICK]: 'Stick',
             [ITEMS.MELLORITE]: 'Mellorite', [ITEMS.RAW_MEAT]: 'Raw Meat',
+            [ITEMS.PINEWOOD_SPRINT_DISC]: 'Pinewood Sprint', [ITEMS.LAST_CAMP_STANDING_DISC]: 'Last Camp Standing',
             [ITEMS.WOOD_PICKAXE]: 'Wood Pick', [ITEMS.WOOD_AXE]: 'Wood Axe', [ITEMS.WOOD_SWORD]: 'Wood Sword', [ITEMS.WOOD_SHOVEL]: 'Wood Shovel',
             [ITEMS.STONE_PICKAXE]: 'Stone Pick', [ITEMS.STONE_AXE]: 'Stone Axe', [ITEMS.STONE_SWORD]: 'Stone Sword', [ITEMS.STONE_SHOVEL]: 'Stone Shovel',
             [ITEMS.IRON_PICKAXE]: 'Iron Pick', [ITEMS.IRON_AXE]: 'Iron Axe', [ITEMS.IRON_SWORD]: 'Iron Sword', [ITEMS.IRON_SHOVEL]: 'Iron Shovel',
@@ -579,6 +658,7 @@
         const ITEM_ICONS = {
             [ITEMS.COAL]: '⬛', [ITEMS.IRON_INGOT]: '🔩', [ITEMS.GOLD_INGOT]: '🥇',
             [ITEMS.DIAMOND]: '💎', [ITEMS.STICK]: '🥢', [ITEMS.MELLORITE]: '🔮', [ITEMS.RAW_MEAT]: '🥩',
+            [ITEMS.PINEWOOD_SPRINT_DISC]: '💿', [ITEMS.LAST_CAMP_STANDING_DISC]: '💿',
             [ITEMS.WOOD_PICKAXE]: '⛏️', [ITEMS.WOOD_AXE]: '🪓', [ITEMS.WOOD_SWORD]: '🗡️', [ITEMS.WOOD_SHOVEL]: '🔧',
             [ITEMS.STONE_PICKAXE]: '⛏️', [ITEMS.STONE_AXE]: '🪓', [ITEMS.STONE_SWORD]: '🗡️', [ITEMS.STONE_SHOVEL]: '🔧',
             [ITEMS.IRON_PICKAXE]: '⛏️', [ITEMS.IRON_AXE]: '🪓', [ITEMS.IRON_SWORD]: '🗡️', [ITEMS.IRON_SHOVEL]: '🔧',
@@ -590,6 +670,7 @@
         const ITEM_COLORS = {
             [ITEMS.COAL]: '#333', [ITEMS.IRON_INGOT]: '#ccc', [ITEMS.GOLD_INGOT]: '#ffd700',
             [ITEMS.DIAMOND]: '#5ff', [ITEMS.STICK]: '#8B4513', [ITEMS.MELLORITE]: '#a040e0', [ITEMS.RAW_MEAT]: '#c44',
+            [ITEMS.PINEWOOD_SPRINT_DISC]: '#c2a1ff', [ITEMS.LAST_CAMP_STANDING_DISC]: '#b3d4ff',
             [ITEMS.WOOD_PICKAXE]: '#8B4513', [ITEMS.WOOD_AXE]: '#8B4513', [ITEMS.WOOD_SWORD]: '#8B4513', [ITEMS.WOOD_SHOVEL]: '#8B4513',
             [ITEMS.STONE_PICKAXE]: '#888', [ITEMS.STONE_AXE]: '#888', [ITEMS.STONE_SWORD]: '#888', [ITEMS.STONE_SHOVEL]: '#888',
             [ITEMS.IRON_PICKAXE]: '#ddd', [ITEMS.IRON_AXE]: '#ddd', [ITEMS.IRON_SWORD]: '#ddd', [ITEMS.IRON_SHOVEL]: '#ddd',
@@ -609,7 +690,11 @@
             [BLOCKS.COAL_BLOCK]: 4.0, [BLOCKS.IRON_BLOCK]: 5.0,
             [BLOCKS.GOLD_BLOCK]: 5.5, [BLOCKS.DIAMOND_BLOCK]: 6.5,
             [BLOCKS.GLASS]: 0.3, [BLOCKS.BRICK]: 3.5,
-            [BLOCKS.RED_SAND]: 0.5, [BLOCKS.TERRACOTTA]: 3.0, [BLOCKS.PACKED_ICE]: 1.5
+            [BLOCKS.RED_SAND]: 0.5, [BLOCKS.TERRACOTTA]: 3.0, [BLOCKS.PACKED_ICE]: 1.5,
+            [BLOCKS.PORTAL]: 3.0, [BLOCKS.RED_STONE]: 4.0,
+            [BLOCKS.BEDROCK]: 999999, [BLOCKS.BLUE_STONE]: 4.0,
+            [BLOCKS.JUKEBOX]: 4.0,
+            [BLOCKS.BOSS_PORTAL_FRAME]: 5.0, [BLOCKS.ACTIVE_BOSS_PORTAL]: 999999
         };
 
         // Tool speed multipliers
@@ -645,7 +730,8 @@
             BLOCKS.STONE, BLOCKS.COBBLESTONE, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE,
             BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK,
             BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.BRICK,
-            BLOCKS.MELLORITE_ORE, BLOCKS.MELLORITE_BLOCK, BLOCKS.TERRACOTTA, BLOCKS.PACKED_ICE
+            BLOCKS.MELLORITE_ORE, BLOCKS.MELLORITE_BLOCK, BLOCKS.TERRACOTTA, BLOCKS.PACKED_ICE,
+            BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME
         ]);
 
         const AXE_BLOCKS = new Set([
@@ -662,7 +748,8 @@
             [BLOCKS.GOLD_ORE]: 3, [BLOCKS.DIAMOND_ORE]: 3,
             [BLOCKS.GOLD_BLOCK]: 3, [BLOCKS.DIAMOND_BLOCK]: 3,
             [BLOCKS.IRON_BLOCK]: 2,
-            [BLOCKS.MELLORITE_ORE]: 4, [BLOCKS.MELLORITE_BLOCK]: 4
+            [BLOCKS.MELLORITE_ORE]: 4, [BLOCKS.MELLORITE_BLOCK]: 4,
+            [BLOCKS.PORTAL]: 3, [BLOCKS.BOSS_PORTAL_FRAME]: 4
         };
 
         // Ore drops
@@ -684,6 +771,13 @@
             STONY_PEAKS: 8, 
             BADLANDS: 9 
         };
+        
+        const ALT_BIOMES = {
+            RED: 0,
+            BLUE: 1,
+            GREEN: 2
+        };
+
         const BIOME_NAMES = [
             'Plains', 'Barren Desert', 'Cactus Desert', 'Forest', 
             'Low Mountains', 'Mountains', 'High Mountains', 
@@ -744,6 +838,9 @@
             { category: 'Storage', name: 'Iron Block', result: BLOCKS.IRON_BLOCK, count: 1, ingredients: { [ITEMS.IRON_INGOT]: 9 }, icon: '⬜' },
             { category: 'Storage', name: 'Gold Block', result: BLOCKS.GOLD_BLOCK, count: 1, ingredients: { [ITEMS.GOLD_INGOT]: 9 }, icon: '🟨' },
             { category: 'Storage', name: 'Diamond Block', result: BLOCKS.DIAMOND_BLOCK, count: 1, ingredients: { [ITEMS.DIAMOND]: 9 }, icon: '🟦' },
+            { category: 'Music', name: 'Jukebox', result: BLOCKS.JUKEBOX, count: 1, ingredients: { [BLOCKS.PLANKS]: 8, [ITEMS.IRON_INGOT]: 1 }, icon: '🎵' },
+            { category: 'Music', name: 'Pinewood Sprint Disc', result: ITEMS.PINEWOOD_SPRINT_DISC, count: 1, ingredients: { [ITEMS.COAL]: 1, [ITEMS.STICK]: 1 }, icon: '💿' },
+            { category: 'Music', name: 'Last Camp Standing Disc', result: ITEMS.LAST_CAMP_STANDING_DISC, count: 1, ingredients: { [ITEMS.GOLD_INGOT]: 1, [ITEMS.STICK]: 1 }, icon: '💿' },
             { category: 'Storage', name: 'Mellorite Block', result: BLOCKS.MELLORITE_BLOCK, count: 1, ingredients: { [ITEMS.MELLORITE]: 9 }, icon: '🔮' },
             
             // Decompress
@@ -754,16 +851,19 @@
             { category: 'Decompress', name: 'Mellorite (from block)', result: ITEMS.MELLORITE, count: 9, ingredients: { [BLOCKS.MELLORITE_BLOCK]: 1 }, icon: '🔮' },
             
             // Misc
-            { category: 'Misc', name: 'Cobblestone', result: BLOCKS.COBBLESTONE, count: 1, ingredients: { [BLOCKS.STONE]: 1 }, icon: '🪨' }
+            { category: 'Misc', name: 'Cobblestone', result: BLOCKS.COBBLESTONE, count: 1, ingredients: { [BLOCKS.STONE]: 1 }, icon: '🪨' },
+            { category: 'Misc', name: 'Portal Block', result: BLOCKS.PORTAL, count: 1, ingredients: { [ITEMS.MELLORITE]: 3, [ITEMS.DIAMOND]: 2, [ITEMS.GOLD_INGOT]: 2 }, icon: '🌀' }
         ];
 
         const MOB_TYPES = {
-            PIG: { name: 'Pig', width: 0.6, height: 0.9, bodyColor: [1.0, 0.7, 0.7], headColor: [1.0, 0.75, 0.75], health: 10, hostile: false, burnsInDay: false, speed: 2 },
-            COW: { name: 'Cow', width: 0.6, height: 1.3, bodyColor: [0.3, 0.2, 0.15], headColor: [0.9, 0.9, 0.9], health: 10, hostile: false, burnsInDay: false, speed: 1.5 },
-            CAMEL: { name: 'Camel', width: 0.8, height: 1.8, bodyColor: [0.85, 0.75, 0.5], headColor: [0.9, 0.8, 0.55], health: 20, hostile: false, burnsInDay: false, speed: 1.8 },
-            BEAR: { name: 'Bear', width: 0.9, height: 1.4, bodyColor: [0.4, 0.25, 0.1], headColor: [0.45, 0.3, 0.15], health: 30, hostile: true, burnsInDay: false, speed: 2.2, damage: 3 },
-            ZOMBIE: { name: 'Zombie', width: 0.5, height: 1.8, bodyColor: [0.3, 0.5, 0.3], headColor: [0.4, 0.6, 0.4], health: 20, hostile: true, burnsInDay: true, speed: 2.5, damage: 1 },
-            SKELETON: { name: 'Skeleton', width: 0.5, height: 1.8, bodyColor: [0.85, 0.85, 0.8], headColor: [0.9, 0.9, 0.85], health: 20, hostile: true, burnsInDay: true, speed: 2.8, damage: 1 }
+            PIG: { name: 'Pig', width: 0.6, height: 0.9, bodyColor: [1.0, 0.7, 0.7], headColor: [1.0, 0.75, 0.75], health: 10, maxHealth: 10, hostile: false, burnsInDay: false, speed: 2 },
+            COW: { name: 'Cow', width: 0.6, height: 1.3, bodyColor: [0.3, 0.2, 0.15], headColor: [0.9, 0.9, 0.9], health: 10, maxHealth: 10, hostile: false, burnsInDay: false, speed: 1.5 },
+            CAMEL: { name: 'Camel', width: 0.8, height: 1.8, bodyColor: [0.85, 0.75, 0.5], headColor: [0.9, 0.8, 0.55], health: 20, maxHealth: 20, hostile: false, burnsInDay: false, speed: 1.8 },
+            BEAR: { name: 'Bear', width: 0.9, height: 1.4, bodyColor: [0.4, 0.25, 0.1], headColor: [0.45, 0.3, 0.15], health: 30, maxHealth: 30, hostile: true, burnsInDay: false, speed: 2.2, damage: 3 },
+            ZOMBIE: { name: 'Zombie', width: 0.5, height: 1.8, bodyColor: [0.3, 0.5, 0.3], headColor: [0.4, 0.6, 0.4], health: 20, maxHealth: 20, hostile: true, burnsInDay: true, speed: 2.5, damage: 1 },
+            SKELETON: { name: 'Skeleton', width: 0.5, height: 1.8, bodyColor: [0.85, 0.85, 0.8], headColor: [0.9, 0.9, 0.85], health: 20, maxHealth: 20, hostile: true, burnsInDay: true, speed: 2.8, damage: 1 },
+            RED_ALT_ZOMBIE: { name: 'Red Alt-Zombie', width: 0.5, height: 1.8, bodyColor: [0.8, 0.1, 0.1], headColor: [0.9, 0.2, 0.2], health: 40, maxHealth: 40, hostile: true, burnsInDay: false, speed: 2.6, damage: 3 },
+            MELLOR_BOSS: { name: 'Mellor Boss', width: 1.5, height: 3.5, bodyColor: [0.1, 0, 0.2], headColor: [0.2, 0, 0.4], health: 200, maxHealth: 200, hostile: true, burnsInDay: false, speed: 3.5, damage: 5, isBoss: true }
         };
 
         // WebGL
@@ -986,7 +1086,7 @@
         const chunks = new Map();
         const chunkMeshes = new Map();
 
-        function chunkKey(cx, cz) { return `${cx},${cz}`; }
+        function chunkKey(dim, cx, cz) { return `${dim},${cx},${cz}`; }
 
         function lerp(a, b, t) {
             return a + (b - a) * Math.max(0, Math.min(1, t));
@@ -1016,6 +1116,15 @@
                 if (moist > -0.2) return BIOMES.FOREST;
                 return BIOMES.PLAINS;
             }
+        }
+
+        function getAltBiome(x, z) {
+            // Increased the scalar slightly so biomes are less spaced apart
+            const val = biomeNoise.octave(x * 0.005 + 10000, z * 0.005 + 10000, 3, 0.5);
+            // Increased thresholds to 0.3 to make Red Wastes take up far more space in the dimension
+            if (val < -0.3) return ALT_BIOMES.GREEN; 
+            if (val > 0.3) return ALT_BIOMES.BLUE;  
+            return ALT_BIOMES.RED; 
         }
 
         function getHeight(x, z, biome) {
@@ -1171,24 +1280,61 @@
             return null;
         }
 
+        function getAltStructure(wx, wz) {
+            const altBiome = getAltBiome(wx, wz);
+            
+            if (altBiome === ALT_BIOMES.GREEN) {
+                // Lush Cavern Shrine structure
+                const sGrid = 32;
+                const sCellX = Math.floor(wx / sGrid);
+                const sCellZ = Math.floor(wz / sGrid);
+                const sHash = posRand(sCellX * 25, sCellZ * 25);
+                if (sHash > 0.70) { 
+                    const sCenterX = sCellX * sGrid + 16;
+                    const sCenterZ = sCellZ * sGrid + 16;
+                    const sWidth = 2, sDepth = 2; // 5x5 total
+                    if (Math.abs(wx - sCenterX) <= sWidth && Math.abs(wz - sCenterZ) <= sDepth) {
+                        return { type: 'BOSS_SHRINE', cx: sCenterX, cz: sCenterZ, dx: wx - sCenterX, dz: wz - sCenterZ, baseY: 25 };
+                    }
+                }
+                return null;
+            }
+
+            // Alt Mazes (Red/Blue biomes)
+            // Smaller grid makes them spawn more frequently
+            const mGrid = 64; 
+            const mCellX = Math.floor(wx / mGrid);
+            const mCellZ = Math.floor(wz / mGrid);
+            const mHash = posRand(mCellX * 15, mCellZ * 15);
+            if (mHash > 0.70) { 
+                const mCenterX = mCellX * mGrid + Math.floor(posRand(mCellX, mCellZ, 6)*32) + 16;
+                const mCenterZ = mCellZ * mGrid + Math.floor(posRand(mCellX, mCellZ, 7)*32) + 16;
+                const mWidth = 20, mDepth = 20; 
+                if (Math.abs(wx - mCenterX) <= mWidth && Math.abs(wz - mCenterZ) <= mDepth) {
+                    return { type: 'ALT_MAZE', cx: mCenterX, cz: mCenterZ, dx: wx - mCenterX, dz: wz - mCenterZ, baseY: 25 };
+                }
+            }
+            return null;
+        }
+
         function placeStructure(type, cx, cy, cz) {
             const affectedChunks = new Set();
             
-            function setBlockRaw(x, y, z, blockType) {
+            function setBlockRaw(x, y, z, blockType, dim = currentDimension) {
                 if (y < 0 || y >= WORLD_HEIGHT) return;
                 const chX = Math.floor(x / CHUNK_SIZE), chZ = Math.floor(z / CHUNK_SIZE);
-                const key = chunkKey(chX, chZ);
+                const key = chunkKey(dim, chX, chZ);
                 let chunk = chunks.get(key);
-                if (!chunk) { chunk = generateChunk(chX, chZ); chunks.set(key, chunk); }
+                if (!chunk) { chunk = generateChunk(chX, chZ, dim); chunks.set(key, chunk); }
                 const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
                 const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
                 chunk[lx + y * CHUNK_SIZE + lz * CHUNK_SIZE * WORLD_HEIGHT] = blockType;
                 
                 affectedChunks.add(key);
-                if (lx === 0) affectedChunks.add(chunkKey(chX - 1, chZ));
-                if (lx === CHUNK_SIZE - 1) affectedChunks.add(chunkKey(chX + 1, chZ));
-                if (lz === 0) affectedChunks.add(chunkKey(chX, chZ - 1));
-                if (lz === CHUNK_SIZE - 1) affectedChunks.add(chunkKey(chX, chZ + 1));
+                if (lx === 0) affectedChunks.add(chunkKey(dim, chX - 1, chZ));
+                if (lx === CHUNK_SIZE - 1) affectedChunks.add(chunkKey(dim, chX + 1, chZ));
+                if (lz === 0) affectedChunks.add(chunkKey(dim, chX, chZ - 1));
+                if (lz === CHUNK_SIZE - 1) affectedChunks.add(chunkKey(dim, chX, chZ + 1));
             }
 
             if (type === 'MANSION') {
@@ -1268,12 +1414,238 @@
             }
             
             for (const key of affectedChunks) {
-                const [achX, achZ] = key.split(',').map(Number);
-                rebuildChunk(achX, achZ);
+                const [dim, achX, achZ] = key.split(',').map(Number);
+                rebuildChunk(achX, achZ, dim);
             }
         }
 
-        function generateChunk(cx, cz) {
+        function generateChunk(cx, cz, dim = currentDimension) {
+            // --- BOSS DIMENSION GENERATION (DIM 2) ---
+            if (dim === 2) {
+                const chunk = new Uint8Array(CHUNK_SIZE * WORLD_HEIGHT * CHUNK_SIZE);
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                    for (let z = 0; z < CHUNK_SIZE; z++) {
+                        const wx = cx * CHUNK_SIZE + x;
+                        const wz = cz * CHUNK_SIZE + z;
+                        
+                        const dist = Math.sqrt(wx*wx + wz*wz);
+                        if (dist > 35) continue; // Floating island radius
+                        
+                        const depth = 25 - (dist * 0.7);
+                        const surfaceY = 48 + Math.floor(noise.noise2D(wx * 0.1, wz * 0.1) * 2);
+                        const bottomY = Math.max(1, 48 - Math.floor(depth));
+                        
+                        for (let y = 0; y < WORLD_HEIGHT; y++) {
+                            const idx = x + y * CHUNK_SIZE + z * CHUNK_SIZE * WORLD_HEIGHT;
+                            if (y >= bottomY && y <= surfaceY) {
+                                if (y === surfaceY) chunk[idx] = BLOCKS.RED_STONE;
+                                else chunk[idx] = BLOCKS.STONE;
+                            }
+                        }
+                    }
+                }
+                return chunk;
+            }
+
+            // --- ALT DIMENSION GENERATION (DIM 1) ---
+            if (dim === 1) {
+                const chunk = new Uint8Array(CHUNK_SIZE * WORLD_HEIGHT * CHUNK_SIZE);
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                    for (let z = 0; z < CHUNK_SIZE; z++) {
+                        const wx = cx * CHUNK_SIZE + x;
+                        const wz = cz * CHUNK_SIZE + z;
+                        const struct = getAltStructure(wx, wz);
+                        const altBiome = getAltBiome(wx, wz);
+                        
+                        for (let y = 0; y < WORLD_HEIGHT; y++) {
+                            const idx = x + y * CHUNK_SIZE + z * CHUNK_SIZE * WORLD_HEIGHT;
+                            if (y === 0 || y === WORLD_HEIGHT - 1) {
+                                chunk[idx] = BLOCKS.BEDROCK;
+                                continue;
+                            } 
+                            
+                            // Generate Structures
+                            if (struct) {
+                                const localY = y - struct.baseY;
+
+                                if (struct.type === 'BOSS_SHRINE') {
+                                    if (localY >= -5 && localY < 5) {
+                                        if (localY < 0) {
+                                            if (y >= 1) chunk[idx] = BLOCKS.COBBLESTONE; // foundation
+                                        } else if (localY === 0) {
+                                            chunk[idx] = BLOCKS.BRICK;
+                                        } else {
+                                            chunk[idx] = BLOCKS.AIR; // Clear area above
+                                            if (localY === 1) {
+                                                if (Math.abs(struct.dx) === 1 && Math.abs(struct.dz) === 1) {
+                                                    chunk[idx] = BLOCKS.BOSS_PORTAL_FRAME; // 4 corners
+                                                } else if (Math.abs(struct.dx) === 2 && Math.abs(struct.dz) === 2) {
+                                                    chunk[idx] = BLOCKS.TORCH; // lighting
+                                                }
+                                            }
+                                        }
+                                        continue;
+                                    }
+                                } 
+                                else if (struct.type === 'ALT_MAZE') {
+                                    if (localY >= 0 && localY <= 15) { // 3 floors * 5 + 1 roof = 16 blocks high
+                                        const mx = struct.dx + 20; // 0 to 40
+                                        const mz = struct.dz + 20; // 0 to 40
+                                        const floorNum = Math.floor(localY / 5);
+                                        const yInFloor = localY % 5;
+
+                                        const isOuterWall = mx === 0 || mx === 40 || mz === 0 || mz === 40;
+                                        const rx = Math.floor(mx / 5);
+                                        const rz = Math.floor(mz / 5);
+                                        const isRoomEdgeX = (mx % 5 === 0);
+                                        const isRoomEdgeZ = (mz % 5 === 0);
+                                        const isInnerWall = (isRoomEdgeX || isRoomEdgeZ) && !isOuterWall;
+
+                                        const isStairRoom = (coordHash(struct.cx + rx, struct.cz + rz, floorNum) < 0.3);
+                                        const isStairRoomBelow = (coordHash(struct.cx + rx, struct.cz + rz, floorNum - 1) < 0.3);
+
+                                        if (localY === 15) {
+                                            chunk[idx] = BLOCKS.TERRACOTTA; // Roof
+                                        } else if (yInFloor === 0) {
+                                            if (floorNum > 0 && isStairRoomBelow && mx%5 >= 1 && mx%5 <= 3 && mz%5 >= 1 && mz%5 <= 3) chunk[idx] = BLOCKS.AIR;
+                                            else chunk[idx] = BLOCKS.TERRACOTTA; // Floor
+                                        } else if (isOuterWall) {
+                                            // Entrances on floor 0
+                                            const isEntrance = floorNum === 0 && yInFloor < 3 && (coordHash(wx, 0, wz) < 0.15) && !isRoomEdgeX && !isRoomEdgeZ;
+                                            chunk[idx] = isEntrance ? BLOCKS.AIR : BLOCKS.TERRACOTTA;
+                                        } else if (isInnerWall) {
+                                            // Doorways ALWAYS generated in the middle of every inner wall to guarantee paths
+                                            const isDoorway = yInFloor < 3 && (isRoomEdgeX ? (mz % 5 === 2) : (mx % 5 === 2));
+                                            chunk[idx] = isDoorway ? BLOCKS.AIR : BLOCKS.TERRACOTTA;
+                                        } else {
+                                            // Inside room
+                                            chunk[idx] = BLOCKS.AIR;
+
+                                            // Spiral Stairs
+                                            let isStairStep = false;
+                                            if (isStairRoom && floorNum < 2) {
+                                                if (yInFloor === 0 && mx%5===1 && mz%5===1) isStairStep = true;
+                                                if (yInFloor === 1 && mx%5===2 && mz%5===1) isStairStep = true;
+                                                if (yInFloor === 2 && mx%5===3 && mz%5===2) isStairStep = true;
+                                                if (yInFloor === 3 && mx%5===2 && mz%5===3) isStairStep = true;
+                                                if (yInFloor === 4 && mx%5===1 && mz%5===3) isStairStep = true;
+                                            }
+
+                                            // Special Mellorite Room (only 1 in entire structure)
+                                            const specialRoomX = Math.floor(coordHash(struct.cx, struct.cz, 99) * 8);
+                                            const specialRoomZ = Math.floor(coordHash(struct.cx, struct.cz, 100) * 8);
+                                            const specialRoomFloor = Math.floor(coordHash(struct.cx, struct.cz, 101) * 3);
+
+                                            if (isStairStep) {
+                                                chunk[idx] = BLOCKS.PLANKS; 
+                                            } else if (floorNum === specialRoomFloor && rx === specialRoomX && rz === specialRoomZ) {
+                                                if (yInFloor === 1 && (mx % 5 >= 1 && mx % 5 <= 3) && (mz % 5 >= 1 && mz % 5 <= 3)) {
+                                                    chunk[idx] = BLOCKS.MELLORITE_ORE;
+                                                }
+                                            } else if (yInFloor === 1 && mx % 5 === 2 && mz % 5 === 2) {
+                                                // Other rooms have random rare ores on the ground
+                                                const mRand = coordHash(wx, localY, wz);
+                                                if (mRand < 0.02) chunk[idx] = BLOCKS.MELLORITE_ORE;
+                                                else if (mRand < 0.10) chunk[idx] = BLOCKS.DIAMOND_ORE;
+                                                else if (mRand < 0.20) chunk[idx] = BLOCKS.GOLD_ORE;
+                                                else if (mRand < 0.50) chunk[idx] = BLOCKS.IRON_ORE;
+                                                else chunk[idx] = BLOCKS.COAL_ORE;
+                                            }
+                                        }
+                                        continue;
+                                    }
+                                }
+                            }
+                            
+                            // Normal Alt Caves
+                            const caveThresh = 0.05 + (y / WORLD_HEIGHT) * 0.1;
+                            const altCaveVal = caveNoise.octave3D(wx * 0.04, y * 0.04, wz * 0.04, 3, 0.5);
+                            
+                            if (altCaveVal > caveThresh) {
+                                chunk[idx] = BLOCKS.AIR;
+                            } else {
+                                // Block is solid
+                                if (altBiome === ALT_BIOMES.GREEN) {
+                                    const caveThreshUp = 0.05 + ((y+1) / WORLD_HEIGHT) * 0.1;
+                                    const caveThreshUp2 = 0.05 + ((y+2) / WORLD_HEIGHT) * 0.1;
+                                    const upAir = (y === WORLD_HEIGHT - 1) ? false : (caveNoise.octave3D(wx * 0.04, (y+1) * 0.04, wz * 0.04, 3, 0.5) > caveThreshUp);
+                                    const up2Air = (y >= WORLD_HEIGHT - 2) ? false : (caveNoise.octave3D(wx * 0.04, (y+2) * 0.04, wz * 0.04, 3, 0.5) > caveThreshUp2);
+
+                                    if (upAir) chunk[idx] = BLOCKS.GRASS;
+                                    else if (up2Air) chunk[idx] = BLOCKS.DIRT;
+                                    else chunk[idx] = BLOCKS.STONE;
+
+                                } else if (altBiome === ALT_BIOMES.BLUE) {
+                                    const dirtVal = oreNoise.noise3D(wx * 0.1, y * 0.1, wz * 0.1);
+                                    if (dirtVal > 0.6) chunk[idx] = BLOCKS.DIRT;
+                                    else {
+                                        chunk[idx] = BLOCKS.BLUE_STONE;
+                                        const diaCenter = oreNoise.noise3D(wx * 0.25 + 150, y * 0.25, wz * 0.25 + 150);
+                                        const goldCenter = oreNoise.noise3D(wx * 0.18 + 100, y * 0.18, wz * 0.18 + 100);
+                                        if (diaCenter > 0.95) chunk[idx] = BLOCKS.DIAMOND_ORE;
+                                        else if (goldCenter > 0.88) {
+                                            const goldSpread = oreNoise.noise3D(wx * 0.5 + 100, y * 0.5, wz * 0.5 + 100);
+                                            if (goldSpread > 0.3) chunk[idx] = BLOCKS.GOLD_ORE;
+                                        }
+                                    }
+                                } else {
+                                    // Default RED
+                                    const dirtVal = oreNoise.noise3D(wx * 0.1, y * 0.1, wz * 0.1);
+                                    if (dirtVal > 0.6) {
+                                        chunk[idx] = BLOCKS.DIRT;
+                                    } else {
+                                        chunk[idx] = BLOCKS.RED_STONE;
+                                        const goldCenter = oreNoise.noise3D(wx * 0.18 + 100, y * 0.18, wz * 0.18 + 100);
+                                        if (goldCenter > 0.88) {
+                                            const goldSpread = oreNoise.noise3D(wx * 0.5 + 100, y * 0.5, wz * 0.5 + 100);
+                                            if (goldSpread > 0.3) chunk[idx] = BLOCKS.GOLD_ORE;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Generate trees post-column in Green Biome
+                        if (altBiome === ALT_BIOMES.GREEN && !struct) {
+                            const tr = posRand(wx, wz);
+                            if (tr < 0.08 && x >= 2 && x < CHUNK_SIZE - 2 && z >= 2 && z < CHUNK_SIZE - 2) {
+                                let topGrassY = -1;
+                                for (let y = WORLD_HEIGHT - 3; y > 0; y--) {
+                                    const idx = x + y * CHUNK_SIZE + z * CHUNK_SIZE * WORLD_HEIGHT;
+                                    const idxUp = x + (y+1) * CHUNK_SIZE + z * CHUNK_SIZE * WORLD_HEIGHT;
+                                    if (chunk[idx] === BLOCKS.GRASS && chunk[idxUp] === BLOCKS.AIR) {
+                                        topGrassY = y;
+                                        break; 
+                                    }
+                                }
+                                
+                                if (topGrassY !== -1 && topGrassY < WORLD_HEIGHT - 8) {
+                                    const th = 4 + Math.floor(posRand(wx, wz, 50) * 3);
+                                    for (let ty = 0; ty < th; ty++) {
+                                        const idx = x + (topGrassY + 1 + ty) * CHUNK_SIZE + z * CHUNK_SIZE * WORLD_HEIGHT;
+                                        if (topGrassY + 1 + ty < WORLD_HEIGHT - 1) chunk[idx] = BLOCKS.WOOD;
+                                    }
+                                    for (let lx = -2; lx <= 2; lx++) {
+                                        for (let lz = -2; lz <= 2; lz++) {
+                                            for (let ly = -1; ly <= 2; ly++) {
+                                                if (Math.abs(lx) === 2 && Math.abs(lz) === 2) continue;
+                                                const leafY = topGrassY + 1 + th + ly;
+                                                if (leafY < WORLD_HEIGHT - 1 && (lx !== 0 || lz !== 0 || ly >= 0)) {
+                                                    const idx = (x+lx) + leafY * CHUNK_SIZE + (z+lz) * CHUNK_SIZE * WORLD_HEIGHT;
+                                                    if (chunk[idx] === BLOCKS.AIR) chunk[idx] = BLOCKS.LEAVES;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return chunk;
+            }
+
+            // --- OVERWORLD GENERATION ---
             const chunk = new Uint8Array(CHUNK_SIZE * WORLD_HEIGHT * CHUNK_SIZE);
             
             const getNodeY = (nx, nz) => 10 + Math.floor(coordHash(nx, nz, 0) * 5) * 4; 
@@ -1461,7 +1833,7 @@
                             }
                         }
                         
-                        if (y === 0) chunk[idx] = BLOCKS.STONE;
+                        if (y === 0) chunk[idx] = BLOCKS.BEDROCK;
                         else if (y < height - 4) {
                             let ore = getOreType(wx, y, wz);
                             
@@ -1539,37 +1911,37 @@
             return chunk;
         }
 
-        function getBlock(x, y, z) {
+        function getBlock(x, y, z, dim = currentDimension) {
             if (y < 0 || y >= WORLD_HEIGHT) return BLOCKS.AIR;
             const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
-            const key = chunkKey(cx, cz);
+            const key = chunkKey(dim, cx, cz);
             let chunk = chunks.get(key);
-            if (!chunk) { chunk = generateChunk(cx, cz); chunks.set(key, chunk); }
+            if (!chunk) { chunk = generateChunk(cx, cz, dim); chunks.set(key, chunk); }
             const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
             const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
             return chunk[lx + y * CHUNK_SIZE + lz * CHUNK_SIZE * WORLD_HEIGHT];
         }
 
-        function setBlock(x, y, z, type) {
+        function setBlock(x, y, z, type, dim = currentDimension) {
             if (y < 0 || y >= WORLD_HEIGHT) return;
             const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
-            const key = chunkKey(cx, cz);
+            const key = chunkKey(dim, cx, cz);
             let chunk = chunks.get(key);
-            if (!chunk) { chunk = generateChunk(cx, cz); chunks.set(key, chunk); }
+            if (!chunk) { chunk = generateChunk(cx, cz, dim); chunks.set(key, chunk); }
             const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
             const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
             chunk[lx + y * CHUNK_SIZE + lz * CHUNK_SIZE * WORLD_HEIGHT] = type;
-            rebuildChunk(cx, cz);
-            if (lx === 0) rebuildChunk(cx - 1, cz);
-            if (lx === CHUNK_SIZE - 1) rebuildChunk(cx + 1, cz);
-            if (lz === 0) rebuildChunk(cx, cz - 1);
-            if (lz === CHUNK_SIZE - 1) rebuildChunk(cx, cz + 1);
+            rebuildChunk(cx, cz, dim);
+            if (lx === 0) rebuildChunk(cx - 1, cz, dim);
+            if (lx === CHUNK_SIZE - 1) rebuildChunk(cx + 1, cz, dim);
+            if (lz === 0) rebuildChunk(cx, cz - 1, dim);
+            if (lz === CHUNK_SIZE - 1) rebuildChunk(cx, cz + 1, dim);
         }
 
-        function buildChunkMesh(cx, cz) {
-            const key = chunkKey(cx, cz);
+        function buildChunkMesh(cx, cz, dim = currentDimension) {
+            const key = chunkKey(dim, cx, cz);
             let chunk = chunks.get(key);
-            if (!chunk) { chunk = generateChunk(cx, cz); chunks.set(key, chunk); }
+            if (!chunk) { chunk = generateChunk(cx, cz, dim); chunks.set(key, chunk); }
             
             const pos = [], col = [], nor = [];
             const dirs = [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
@@ -1597,7 +1969,7 @@
                             const nx = x + d[0], ny = y + d[1], nz = z + d[2];
                             let neighbor;
                             if (nx < 0 || nx >= CHUNK_SIZE || nz < 0 || nz >= CHUNK_SIZE) {
-                                neighbor = getBlock(wx + d[0], ny, wz + d[2]);
+                                neighbor = getBlock(wx + d[0], ny, wz + d[2], dim);
                             } else if (ny < 0 || ny >= WORLD_HEIGHT) {
                                 neighbor = BLOCKS.AIR;
                             } else {
@@ -1606,7 +1978,8 @@
 
                             if (neighbor === BLOCKS.AIR ||
                                (neighbor === BLOCKS.LEAVES && block !== BLOCKS.LEAVES) ||
-                                neighbor === BLOCKS.GLASS) {
+                                neighbor === BLOCKS.GLASS ||
+                                neighbor === BLOCKS.ACTIVE_BOSS_PORTAL) {
                                 const fc = f === 0 ? colors.top : f === 1 ? colors.bottom : colors.side;
                                 for (const v of faces[f]) {
                                     pos.push(wx + v[0], y + v[1], wz + v[2]);
@@ -1634,13 +2007,13 @@
             return { pb, cb, nb, count: pos.length / 3 };
         }
 
-        function rebuildChunk(cx, cz) {
-            const key = chunkKey(cx, cz);
+        function rebuildChunk(cx, cz, dim = currentDimension) {
+            const key = chunkKey(dim, cx, cz);
             const old = chunkMeshes.get(key);
             if (old) {
                 gl.deleteBuffer(old.pb); gl.deleteBuffer(old.cb); gl.deleteBuffer(old.nb);
             }
-            const mesh = buildChunkMesh(cx, cz);
+            const mesh = buildChunkMesh(cx, cz, dim);
             if (mesh) chunkMeshes.set(key, mesh);
             else chunkMeshes.delete(key);
         }
@@ -1726,6 +2099,40 @@
             return id > 0 && id < 100;
         }
 
+        function playMusicTrack(trackIndex) {
+            if (trackIndex < 0 || trackIndex >= MUSIC_TRACK_FILES.length) return;
+            stopMusicPlayback();
+            const src = MUSIC_TRACK_FILES[trackIndex];
+            if (!src) return;
+            currentMusicAudio = new Audio(src);
+            currentMusicAudio.volume = 0.45;
+            currentMusicAudio.loop = false;
+            currentMusicAudio.play().catch(() => {});
+            currentMusicTrack = trackIndex;
+        }
+
+        function stopMusicPlayback() {
+            if (currentMusicAudio) {
+                currentMusicAudio.pause();
+                currentMusicAudio.currentTime = 0;
+                currentMusicAudio = null;
+            }
+            currentMusicTrack = null;
+            if (musicTimeout) {
+                clearTimeout(musicTimeout);
+                musicTimeout = null;
+            }
+        }
+
+        function useDiscOnJukebox(discId) {
+            const trackIndex = MUSIC_DISC_TRACK[discId];
+            if (trackIndex === undefined) return false;
+            playMusicTrack(trackIndex);
+            const label = ITEM_NAMES[discId] || 'Music Disc';
+            addChatMessage(`Playing ${label} on the jukebox.`, 'chatSuccess');
+            return true;
+        }
+
         function spawnPlayer() {
             let x = 0, z = 0;
             let h = getHeight(0, 0, getBiome(0, 0));
@@ -1788,8 +2195,8 @@
                 const dz = player.z - this.z;
                 const dist = Math.sqrt(dx*dx + dz*dz);
 
-                const surfaceY = getHeight(Math.floor(this.x), Math.floor(this.z), getBiome(Math.floor(this.x), Math.floor(this.z)));
-                if (this.type.hostile && this.type.burnsInDay && !isNight() && this.y >= surfaceY) {
+                const surfaceY = currentDimension === 0 ? getHeight(Math.floor(this.x), Math.floor(this.z), getBiome(Math.floor(this.x), Math.floor(this.z))) : WORLD_HEIGHT;
+                if (this.type.hostile && this.type.burnsInDay && !isNight() && currentDimension === 0 && this.y >= surfaceY) {
                     this.health -= dt * 2;
                 }
 
@@ -1800,8 +2207,9 @@
                 }
 
                 let targetHeadRotation = this.headRotation;
+                let aggroRange = this.type.isBoss ? 40 : 16;
 
-                if (this.type.hostile && dist < 16 && player.gamemode === 'survival') {
+                if (this.type.hostile && dist < aggroRange && player.gamemode === 'survival') {
                     if (dist > 1.2) {
                         this.vx = (dx/dist) * this.type.speed;
                         this.vz = (dz/dist) * this.type.speed;
@@ -2098,6 +2506,21 @@
                 const hit = raycast();
                 if (hit) {
                     const slot = player.inventory[player.selectedSlot];
+                    const targetBlockId = getBlock(hit.x, hit.y, hit.z);
+                    if (targetBlockId === BLOCKS.JUKEBOX) {
+                        if (slot && slot.count > 0 && MUSIC_DISC_TRACK[slot.id] !== undefined) {
+                            if (useDiscOnJukebox(slot.id) && player.gamemode === 'survival') {
+                                slot.count--;
+                                if (slot.count === 0) slot.id = 0;
+                                updateInventoryUI();
+                            }
+                        } else if (!slot || slot.count === 0) {
+                            stopMusicPlayback();
+                            addChatMessage('Stopped jukebox music.', 'chatSystem');
+                        }
+                        return;
+                    }
+
                     if (slot && slot.count > 0 && isBlock(slot.id)) {
                         const px = hit.x + hit.n[0];
                         const py = hit.y + hit.n[1];
@@ -2187,6 +2610,13 @@
 
             const block = getBlock(hit.x, hit.y, hit.z);
             if (block === BLOCKS.AIR) return;
+
+            if (block === BLOCKS.BEDROCK && player.gamemode !== 'creative') {
+                breakingBlock = null;
+                breakProgress = 0;
+                document.getElementById('breakProgress').style.display = 'none';
+                return;
+            }
 
             const blockKey = `${hit.x},${hit.y},${hit.z}`;
             
@@ -2280,7 +2710,7 @@
                     addChatMessage("/gamemode [survival|creative|spectator]", "chatSystem");
                     addChatMessage("/health [1-10] - Set health", "chatSystem");
                     addChatMessage("/give [item] [count] - Give items", "chatSystem");
-                    addChatMessage("/summon [pig|cow|camel|bear|zombie|skeleton]", "chatSystem");
+                    addChatMessage("/summon [pig|cow|camel|bear|zombie|skeleton|red_alt_zombie|mellor_boss]", "chatSystem");
                     addChatMessage("/tp [x] [y] [z] - Teleport", "chatSystem");
                     addChatMessage("/time [0-24] - Set time of day", "chatSystem");
                     addChatMessage("/rd [value] - Set render distance", "chatSystem");
@@ -2468,7 +2898,7 @@
                 const y = Math.floor(player.y + 1.6 + dy*d);
                 const z = Math.floor(player.z + dz*d);
                 const b = getBlock(x, y, z);
-                if (b !== BLOCKS.AIR) {
+                if (b !== BLOCKS.AIR && b !== BLOCKS.ACTIVE_BOSS_PORTAL) {
                     let n = [0,1,0];
                     if (px !== undefined) {
                         if (px !== x) n = [px > x ? 1 : -1, 0, 0];
@@ -2508,6 +2938,7 @@
                     const damage = getSwordDamage();
                     mob.health -= damage;
                     attackCooldown = 0.4;
+                    showDamage(); // Little visual hit confirm
                     if (mob.health <= 0) {
                         if (!mob.type.hostile || mob.type === MOB_TYPES.BEAR) {
                             addToInventory(ITEMS.RAW_MEAT, 1);
@@ -2519,8 +2950,200 @@
                 }
             }
         }
+        
+        function checkPortalTeleport(dt) {
+            if (teleportCooldown > 0) {
+                teleportCooldown -= dt;
+                return;
+            }
+
+            const px = Math.floor(player.x);
+            const py = Math.floor(player.y);
+            const pz = Math.floor(player.z);
+            
+            // Check if player's body or feet is intersecting a portal block
+            let inPortal = false;
+            let inBossPortal = false;
+            const pb1 = getBlock(px, py, pz);
+            const pb2 = getBlock(px, Math.floor(player.y - 0.2), pz);
+            
+            if (pb1 === BLOCKS.PORTAL || pb2 === BLOCKS.PORTAL) inPortal = true;
+            if (pb1 === BLOCKS.ACTIVE_BOSS_PORTAL || pb2 === BLOCKS.ACTIVE_BOSS_PORTAL) inBossPortal = true;
+
+            if (inBossPortal && currentDimension !== 2) {
+                teleportCooldown = 5.0;
+                currentDimension = 2; // Enter Boss Dimension
+                addChatMessage("Entering the Void...", "chatSystem");
+                
+                player.x = 0; player.z = 0;
+                player.y = 52;
+                player.highestY = player.y;
+                player.vy = 0;
+                player.invincibleTime = 3;
+                mobs.length = 0; 
+                
+                // Spawn the boss!
+                mobs.push(new Mob(MOB_TYPES.MELLOR_BOSS, 0, 52, 10));
+                document.getElementById('bossBarContainer').style.display = 'block';
+                return;
+            }
+
+            if (inPortal) {
+                teleportCooldown = 5.0; // Wait 5 seconds before allowing another tp
+                
+                if (currentDimension === 0) {
+                    overworldPortal = { x: player.x, y: player.y, z: player.z };
+                    currentDimension = 1;
+                    addChatMessage("Teleported to the Alt Dimension...", "chatSystem");
+                    
+                    if (!altDimensionSpawn) {
+                        let sx = px;
+                        let sz = pz;
+                        let sy = 50;
+                        
+                        let found = false;
+                        for(let y = WORLD_HEIGHT - 10; y > 10; y--) {
+                            if (getBlock(sx, y, sz, 1) !== BLOCKS.AIR && getBlock(sx, y, sz, 1) !== BLOCKS.PORTAL) {
+                                sy = y + 1;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if(!found) {
+                            setBlock(sx, 40, sz, BLOCKS.RED_STONE, 1);
+                            sy = 41;
+                        }
+                        
+                        // Clear 3x3x4 space above for safe arrival
+                        for(let dx = -1; dx <= 1; dx++){
+                            for(let dz = -1; dz <= 1; dz++){
+                                for(let dy = 0; dy <= 3; dy++){
+                                    setBlock(sx + dx, sy + dy, sz + dz, BLOCKS.AIR, 1);
+                                }
+                            }
+                        }
+                        
+                        setBlock(sx, sy, sz, BLOCKS.PORTAL, 1);
+                        altDimensionSpawn = { x: sx + 0.5, y: sy + 1, z: sz + 0.5 };
+                    }
+                    
+                    player.x = altDimensionSpawn.x;
+                    player.y = altDimensionSpawn.y;
+                    player.highestY = player.y;
+                    player.z = altDimensionSpawn.z;
+                    player.vy = 0;
+                    player.invincibleTime = 3;
+                    mobs.length = 0; // Despawn everything
+                    
+                } else if (currentDimension === 1) {
+                    currentDimension = 0;
+                    addChatMessage("Returned to the Overworld!", "chatSystem");
+                    
+                    if (overworldPortal) {
+                        player.x = overworldPortal.x;
+                        player.y = overworldPortal.y + 0.5; // Bump up safely
+                        player.z = overworldPortal.z;
+                    } else {
+                        // Fallback
+                        player.y = WORLD_HEIGHT; 
+                    }
+                    player.highestY = player.y; // RESET highestY to avoid fall damage bug
+                    player.vy = 0;
+                    player.invincibleTime = 3;
+                    mobs.length = 0; // Despawn alt mobs
+                }
+            }
+        }
+
+        function checkBossDimensionTriggers(dt) {
+            if (currentDimension === 1) {
+                dimensionScanTimer += dt;
+                if (dimensionScanTimer >= 1.0) { // Scan for portal structure every 1 second to save performance
+                    dimensionScanTimer = 0;
+                    let foundFrames = 0;
+                    let foundMellorite = 0;
+                    let framePositions = [];
+                    
+                    const px = Math.floor(player.x);
+                    const py = Math.floor(player.y);
+                    const pz = Math.floor(player.z);
+
+                    // Scan 6x6 area around player
+                    for (let dx = -3; dx <= 3; dx++) {
+                        for (let dy = -3; dy <= 3; dy++) {
+                            for (let dz = -3; dz <= 3; dz++) {
+                                const bx = px + dx, by = py + dy, bz = pz + dz;
+                                const b = getBlock(bx, by, bz);
+                                if (b === BLOCKS.BOSS_PORTAL_FRAME) {
+                                    foundFrames++;
+                                    framePositions.push({ x: bx, y: by, z: bz });
+                                }
+                                if (b === BLOCKS.MELLORITE_BLOCK) foundMellorite++;
+                            }
+                        }
+                    }
+
+                    // If Shrine is completely filled, swap the center to an active portal!
+                    if (foundFrames >= 4 && foundMellorite >= 4 && framePositions.length) {
+                        let cx = 0, cy = 0, cz = 0;
+                        for (const frame of framePositions) {
+                            cx += frame.x;
+                            cy += frame.y;
+                            cz += frame.z;
+                        }
+                        cx = Math.round(cx / framePositions.length);
+                        cy = Math.round(cy / framePositions.length);
+                        cz = Math.round(cz / framePositions.length);
+
+                        // Activate it right next to the frame
+                        if (getBlock(cx + 1, cy, cz + 1) === BLOCKS.BOSS_PORTAL_FRAME) {
+                            setBlock(cx + 1, cy, cz, BLOCKS.ACTIVE_BOSS_PORTAL);
+                            setBlock(cx, cy, cz + 1, BLOCKS.ACTIVE_BOSS_PORTAL);
+                            addChatMessage("A Boss Portal has opened!", "chatSuccess");
+                        } else if (getBlock(cx - 1, cy, cz - 1) === BLOCKS.BOSS_PORTAL_FRAME) {
+                            setBlock(cx - 1, cy, cz, BLOCKS.ACTIVE_BOSS_PORTAL);
+                            setBlock(cx, cy, cz - 1, BLOCKS.ACTIVE_BOSS_PORTAL);
+                            addChatMessage("A Boss Portal has opened!", "chatSuccess");
+                        }
+                    }
+                }
+            } else if (currentDimension === 2) {
+                const boss = mobs.find(m => m.type.isBoss);
+                if (boss) {
+                    document.getElementById('bossBarFill').style.width = `${Math.max(0, (boss.health / boss.type.maxHealth) * 100)}%`;
+                } else {
+                    // Boss is dead!
+                    addChatMessage("You defeated the Mellor Boss!", "chatSuccess");
+                    document.getElementById('bossBarContainer').style.display = 'none';
+                    
+                    // Send to overworld spawn
+                    currentDimension = 0;
+                    player.x = 0; player.z = 0;
+                    let sh = getHeight(0, 0, getBiome(0, 0));
+                    player.y = sh + 3;
+                    player.highestY = player.y;
+                    player.vy = 0;
+                    player.invincibleTime = 5;
+                    mobs.length = 0;
+                }
+                
+                // Spawn boss minions
+                if (mobs.length < 8 && boss) {
+                    const a = Math.random() * Math.PI * 2;
+                    const d = 5 + Math.random() * 20;
+                    const bx = Math.cos(a) * d;
+                    const bz = Math.sin(a) * d;
+                    if (getBlock(Math.floor(bx), 48, Math.floor(bz), 2) !== BLOCKS.AIR) {
+                        mobs.push(new Mob(MOB_TYPES.RED_ALT_ZOMBIE, bx, 50, bz));
+                    }
+                }
+            }
+        }
 
         function updatePlayer(dt) {
+            checkPortalTeleport(dt);
+            checkBossDimensionTriggers(dt);
+
             if (player.invincibleTime > 0) player.invincibleTime -= dt;
 
             if (player.gamemode === 'survival') {
@@ -2845,7 +3468,8 @@
                 BLOCKS.SAND, BLOCKS.RED_SAND, BLOCKS.SNOW, BLOCKS.PACKED_ICE, BLOCKS.CACTUS, BLOCKS.PLANKS, BLOCKS.COBBLESTONE,
                 BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE,
                 BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK,
-                BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK
+                BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK,
+                BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME
             ];
             
             const itemIds = [
@@ -3039,12 +3663,25 @@
 
         function updateInfo() {
             document.getElementById('position').textContent = `${player.x.toFixed(1)}, ${player.y.toFixed(1)}, ${player.z.toFixed(1)}`;
-            document.getElementById('biome').textContent = BIOME_NAMES[getBiome(Math.floor(player.x), Math.floor(player.z))];
             
-            const time = getTimeOfDay();
-            const h = time.hours.toString().padStart(2, '0');
-            const m = time.minutes.toString().padStart(2, '0');
-            document.getElementById('timeDisplay').textContent = `Day ${time.dayCount} - ${h}:${m} (${time.period})`;
+            if (currentDimension === 2) {
+                document.getElementById('biome').textContent = 'The Final Void';
+                document.getElementById('timeDisplay').textContent = `The End is Near`;
+            } else if (currentDimension === 1) {
+                let biomeStr = 'Red Stone Wastes';
+                const altBiome = getAltBiome(Math.floor(player.x), Math.floor(player.z));
+                if (altBiome === ALT_BIOMES.BLUE) biomeStr = 'Blue Stone Depths';
+                if (altBiome === ALT_BIOMES.GREEN) biomeStr = 'Lush Caverns';
+                
+                document.getElementById('biome').textContent = biomeStr;
+                document.getElementById('timeDisplay').textContent = `Timeless Void`;
+            } else {
+                document.getElementById('biome').textContent = BIOME_NAMES[getBiome(Math.floor(player.x), Math.floor(player.z))];
+                const time = getTimeOfDay();
+                const h = time.hours.toString().padStart(2, '0');
+                const m = time.minutes.toString().padStart(2, '0');
+                document.getElementById('timeDisplay').textContent = `Day ${time.dayCount} - ${h}:${m} (${time.period})`;
+            }
         }
 
         function render() {
@@ -3073,17 +3710,17 @@
 
             for (let cx = pcx - RENDER_DISTANCE; cx <= pcx + RENDER_DISTANCE; cx++) {
                 for (let cz = pcz - RENDER_DISTANCE; cz <= pcz + RENDER_DISTANCE; cz++) {
-                    const key = chunkKey(cx, cz);
+                    const key = chunkKey(currentDimension, cx, cz);
                     if (!chunkMeshes.has(key)) {
-                        const m = buildChunkMesh(cx, cz);
+                        const m = buildChunkMesh(cx, cz, currentDimension);
                         if (m) chunkMeshes.set(key, m);
                     }
                 }
             }
 
             for (const [key, m] of chunkMeshes) {
-                const [cx, cz] = key.split(',').map(Number);
-                if (Math.abs(cx - pcx) > RENDER_DISTANCE + 1 || Math.abs(cz - pcz) > RENDER_DISTANCE + 1) {
+                const [dim, cx, cz] = key.split(',').map(Number);
+                if (dim !== currentDimension || Math.abs(cx - pcx) > RENDER_DISTANCE + 1 || Math.abs(cz - pcz) > RENDER_DISTANCE + 1) {
                     gl.deleteBuffer(m.pb); gl.deleteBuffer(m.cb); gl.deleteBuffer(m.nb);
                     chunkMeshes.delete(key);
                     continue;
@@ -3173,60 +3810,118 @@
 
             for (const m of mobs) m.update(dt);
 
-            hostileSpawnCooldown -= dt;
-            
-            if (Math.random() < 0.09 * dt && mobs.filter(m => !m.type.hostile).length < Math.floor(MOB_CAP / 2)) {
-                const a = Math.random() * Math.PI * 2;
-                const d = 25 + Math.random() * 35;
-                const x = player.x + Math.cos(a) * d;
-                const z = player.z + Math.sin(a) * d;
+            if (currentDimension === 1) {
+                // ALT DIMENSION MOBS
+                hostileSpawnCooldown -= dt;
                 
-                let h = getHeight(Math.floor(x), Math.floor(z), getBiome(Math.floor(x), Math.floor(z)));
-                const biome = getBiome(Math.floor(x), Math.floor(z));
-
-                if (!isRavine(x, h-1, z)) {
-                    if (biome === BIOMES.DESERT_CACTUS || biome === BIOMES.DESERT_BARREN || biome === BIOMES.BADLANDS) {
-                        mobs.push(new Mob(MOB_TYPES.CAMEL, x, h+1, z));
-                    } else if (biome === BIOMES.FOREST || biome === BIOMES.TAIGA) {
-                        const rand = Math.random();
-                        let type = MOB_TYPES.PIG;
-                        if (rand > 0.8) type = MOB_TYPES.BEAR;
-                        else if (rand > 0.4) type = MOB_TYPES.COW;
-                        mobs.push(new Mob(type, x, h+1, z));
-                    } else if ([BIOMES.PLAINS, BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID, BIOMES.MOUNTAINS_HIGH].includes(biome)) {
-                        const type = Math.random() < 0.5 ? MOB_TYPES.PIG : MOB_TYPES.COW;
-                        mobs.push(new Mob(type, x, h+1, z));
-                    }
-                }
-            }
-
-            if (isNight() && hostileSpawnCooldown <= 0 && mobs.filter(m => m.type.hostile).length < MOB_CAP) {
-                const a = Math.random() * Math.PI * 2;
-                const d = 25 + Math.random() * 25;
-                const x = player.x + Math.cos(a) * d;
-                const z = player.z + Math.sin(a) * d;
-                
-                let h = getHeight(Math.floor(x), Math.floor(z), getBiome(Math.floor(x), Math.floor(z)));
-                const biome = getBiome(Math.floor(x), Math.floor(z));
-
-                if (!isRavine(x, h-1, z)) {
-                    let type;
-                    if (biome === BIOMES.FOREST || biome === BIOMES.TAIGA) {
-                        const rand = Math.random();
-                        if (rand < 0.33) type = MOB_TYPES.BEAR;
-                        else if (rand < 0.66) type = MOB_TYPES.ZOMBIE;
-                        else type = MOB_TYPES.SKELETON;
-                    } else {
-                        type = Math.random() < 0.5 ? MOB_TYPES.SKELETON : MOB_TYPES.ZOMBIE;
+                if (Math.random() < 0.35 * dt && mobs.length < MOB_CAP) {
+                    const a = Math.random() * Math.PI * 2;
+                    const d = 15 + Math.random() * 20;
+                    const x = player.x + Math.cos(a) * d;
+                    const z = player.z + Math.sin(a) * d;
+                    
+                    let sy = -1;
+                    // Find a valid surface down in the caves OR inside structures (Raycast downwards within vertical range of player)
+                    let searchYBase = Math.floor(player.y) + Math.floor((Math.random() - 0.5) * 40);
+                    searchYBase = Math.max(1, Math.min(WORLD_HEIGHT - 3, searchYBase));
+                    for(let y = searchYBase; y > Math.max(1, searchYBase - 25); y--) {
+                        if(getBlock(Math.floor(x), y, Math.floor(z), 1) !== BLOCKS.AIR && getBlock(Math.floor(x), y+1, Math.floor(z), 1) === BLOCKS.AIR && getBlock(Math.floor(x), y+2, Math.floor(z), 1) === BLOCKS.AIR) {
+                            if (y < WORLD_HEIGHT - 2 && getBlock(Math.floor(x), y, Math.floor(z), 1) !== BLOCKS.BEDROCK) {
+                                sy = y;
+                                break;
+                            }
+                        }
                     }
                     
-                    mobs.push(new Mob(type, x, h+1, z));
-                    hostileSpawnCooldown = 1.5 + Math.random() * 3;
+                    if (sy !== -1) {
+                        const altBiome = getAltBiome(Math.floor(x), Math.floor(z));
+                        const struct = getAltStructure(Math.floor(x), Math.floor(z));
+                        const isMaze = struct && struct.type === 'ALT_MAZE';
+                        
+                        if (altBiome === ALT_BIOMES.GREEN) {
+                            // Lush Caverns - No hostile mobs
+                            const type = Math.random() < 0.5 ? MOB_TYPES.PIG : MOB_TYPES.COW;
+                            mobs.push(new Mob(type, x, sy + 1, z));
+                        } else {
+                            let type;
+
+                            if (isMaze) {
+                                if (Math.random() < 0.90) {
+                                    type = MOB_TYPES.RED_ALT_ZOMBIE;
+                                } else {
+                                    type = Math.random() < 0.5 ? MOB_TYPES.SKELETON : MOB_TYPES.ZOMBIE;
+                                }
+                            } else {
+                                if (Math.random() < 0.55) {
+                                    type = MOB_TYPES.RED_ALT_ZOMBIE;
+                                } else {
+                                    type = Math.random() < 0.6 ? MOB_TYPES.SKELETON : MOB_TYPES.ZOMBIE;
+                                }
+                            }
+
+                            mobs.push(new Mob(type, x, sy + 1, z));
+                        }
+                    }
+                }
+            } else if (currentDimension === 0) {
+                // OVERWORLD MOBS
+                hostileSpawnCooldown -= dt;
+                
+                if (Math.random() < 0.09 * dt && mobs.filter(m => !m.type.hostile).length < Math.floor(MOB_CAP / 2)) {
+                    const a = Math.random() * Math.PI * 2;
+                    const d = 25 + Math.random() * 35;
+                    const x = player.x + Math.cos(a) * d;
+                    const z = player.z + Math.sin(a) * d;
+                    
+                    let h = getHeight(Math.floor(x), Math.floor(z), getBiome(Math.floor(x), Math.floor(z)));
+                    const biome = getBiome(Math.floor(x), Math.floor(z));
+
+                    if (!isRavine(x, h-1, z)) {
+                        if (biome === BIOMES.DESERT_CACTUS || biome === BIOMES.DESERT_BARREN || biome === BIOMES.BADLANDS) {
+                            mobs.push(new Mob(MOB_TYPES.CAMEL, x, h+1, z));
+                        } else if (biome === BIOMES.FOREST || biome === BIOMES.TAIGA) {
+                            const rand = Math.random();
+                            let type = MOB_TYPES.PIG;
+                            if (rand > 0.8) type = MOB_TYPES.BEAR;
+                            else if (rand > 0.4) type = MOB_TYPES.COW;
+                            mobs.push(new Mob(type, x, h+1, z));
+                        } else if ([BIOMES.PLAINS, BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID, BIOMES.MOUNTAINS_HIGH].includes(biome)) {
+                            const type = Math.random() < 0.5 ? MOB_TYPES.PIG : MOB_TYPES.COW;
+                            mobs.push(new Mob(type, x, h+1, z));
+                        }
+                    }
+                }
+
+                if (isNight() && hostileSpawnCooldown <= 0 && mobs.filter(m => m.type.hostile).length < MOB_CAP) {
+                    const a = Math.random() * Math.PI * 2;
+                    const d = 25 + Math.random() * 25;
+                    const x = player.x + Math.cos(a) * d;
+                    const z = player.z + Math.sin(a) * d;
+                    
+                    let h = getHeight(Math.floor(x), Math.floor(z), getBiome(Math.floor(x), Math.floor(z)));
+                    const biome = getBiome(Math.floor(x), Math.floor(z));
+
+                    if (!isRavine(x, h-1, z)) {
+                        let type;
+                        if (biome === BIOMES.FOREST || biome === BIOMES.TAIGA) {
+                            const rand = Math.random();
+                            if (rand < 0.33) type = MOB_TYPES.BEAR;
+                            else if (rand < 0.66) type = MOB_TYPES.ZOMBIE;
+                            else type = MOB_TYPES.SKELETON;
+                        } else {
+                            type = Math.random() < 0.5 ? MOB_TYPES.SKELETON : MOB_TYPES.ZOMBIE;
+                        }
+                        
+                        mobs.push(new Mob(type, x, h+1, z));
+                        hostileSpawnCooldown = 1.5 + Math.random() * 3;
+                    }
                 }
             }
 
+            // Despawn far mobs
             for (let i = mobs.length - 1; i >= 0; i--) {
                 const m = mobs[i];
+                if (m.type.isBoss) continue; // NEVER DESPAWN BOSS
                 const dx = m.x - player.x, dz = m.z - player.z;
                 if (dx*dx + dz*dz > Math.pow(RENDER_DISTANCE * CHUNK_SIZE + 10, 2)) mobs.splice(i, 1);
             }
