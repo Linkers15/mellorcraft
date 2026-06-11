@@ -853,7 +853,7 @@
             
             // Misc
             { category: 'Misc', name: 'Cobblestone', result: BLOCKS.COBBLESTONE, count: 1, ingredients: { [BLOCKS.STONE]: 1 }, icon: '🪨' },
-            { category: 'Misc', name: 'Portal Block', result: BLOCKS.PORTAL, count: 1, ingredients: { [ITEMS.MELLORITE]: 3, [ITEMS.DIAMOND]: 2, [ITEMS.GOLD_INGOT]: 2 }, icon: '🌀' }
+            { category: 'Misc', name: 'Portal Block', result: BLOCKS.PORTAL, count: 1, ingredients: { [ITEMS.MELLORITE]: 1, [ITEMS.DIAMOND]: 2, [ITEMS.GOLD_INGOT]: 2 }, icon: '🌀' }
         ];
 
         const MOB_TYPES = {
@@ -3139,7 +3139,8 @@
                 }
                 
                 // Spawn boss minions
-                if (mobs.length < 8 && boss) {
+                const currentRedAltZombies = mobs.filter(m => m.type === MOB_TYPES.RED_ALT_ZOMBIE).length;
+                if (currentRedAltZombies < 3 && boss) {
                     const a = Math.random() * Math.PI * 2;
                     const d = 5 + Math.random() * 20;
                     const bx = Math.cos(a) * d;
