@@ -2066,7 +2066,7 @@
             else if (type.model === 'pig') addBox(-0.2, -0.1, 0.4, 0.4, 0.4, 0.4, hc);
             else if (type.model === 'cow') addBox(-0.2, 0.1, 0.4, 0.4, 0.4, 0.4, hc);
             else if (type.model === 'bear') addBox(-0.25, 0.1, 0.45, 0.5, 0.4, 0.5, hc);
-            else if (type.model === 'camel') addBox(-0.2, 0.4, 0.45, 0.4, 0.4, 0.5, hc);
+            else if (type.model === 'camel') addBox(-0.2, 0.2, 0.2, 0.4, 0.4, 0.5, hc);
             else if (type.model === 'boss') addBox(-0.5, 0, -0.5, 1.0, 1.0, 1.0, hc);
             else addBox(-0.2, -0.2, 0.3, 0.4, 0.4, 0.4, hc);
 
@@ -2868,8 +2868,8 @@
             if (currentDimension === 2) bName = 'The Void';
             else if (currentDimension === 1) {
                 const ab = getAltBiome(bx, bz);
-                if (ab === 0) bName = 'Red Caverns';
-                else if (ab === 1) bName = 'Blue Caverns';
+                if (ab === 0) bName = 'Red Stone Wastes';
+                else if (ab === 1) bName = 'Blue Depths';
                 else bName = 'Lush Caverns';
             } else {
                 bName = BIOME_NAMES[getBiome(bx, bz)] || 'Unknown';
@@ -2902,6 +2902,16 @@
                 
                 const timeOfDay = getTimeOfDay();
                 document.getElementById('timeDisplay').textContent = `Day ${timeOfDay.dayCount} - ${timeOfDay.hours.toString().padStart(2, '0')}:${timeOfDay.minutes.toString().padStart(2, '0')} (${timeOfDay.period})`;
+
+                if (!currentMusicAudio || currentMusicAudio.paused) {
+                    ambientMusicTimer -= dt;
+                    if (ambientMusicTimer <= 0) {
+                        playMusicTrack(Math.floor(Math.random() * 6));
+                        ambientMusicTimer = 60 + Math.random() * 120; // Wait 1-3 minutes before next track
+                    }
+                } else {
+                    ambientMusicTimer = 60 + Math.random() * 120; // Keep delaying while music is playing
+                }
 
                 updatePlayer(dt);
                 processBreaking(dt);
