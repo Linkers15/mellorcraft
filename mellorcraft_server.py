@@ -18,6 +18,7 @@ import re
 import socket
 import tempfile
 import threading
+import webbrowser
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -37,7 +38,7 @@ WEBSOCKET_PORT = 8765
 DAY_LENGTH_SECONDS = 600.0
 PROTOCOL_VERSION = 4
 SUPPORTED_PROTOCOLS = (4, 3, 2)
-WORLD_HEIGHT = 100
+WORLD_HEIGHT = 200
 PORTAL_BLOCK = 31
 AIR_BLOCK = 0
 RAW_MEAT_ITEM = 106
@@ -60,7 +61,10 @@ USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_ -]{1,20}$")
 ENTITY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 SCRIPT_DIR = Path(__file__).resolve().parent
 CLIENT_FILENAME = "mellorcraft_multiplayer.html"
-SAVE_FILENAME = "mellorcraft_world.json"
+LEGACY_SAVE_FILENAME = "mellorcraft_world.json"
+WORLDS_DIRNAME = "worlds"
+DEFAULT_WORLD_NAME = "World"
+WORLD_NAME_PATTERN = re.compile(r"^[A-Za-z0-9 _.-]{1,48}$")
 
 
 @dataclass
@@ -117,14 +121,18 @@ class DroppedItemState:
 
 
 class MellorCraftWorld:
-    def __init__(self, save_path: Path, requested_seed: int | None = None) -> None:
+    def __init__(self, save_path: Path, requested_seed: int | None = None, world_name: str = DEFAULT_WORLD_NAME) -> None:
         self.save_path = save_path
+        self.world_name = world_name
         self.seed = requested_seed if requested_seed is not None else random.randint(0, 2_147_483_646)
         self.world_time = 0.25
+        self.boss_defeated = False
         self.blocks: dict[str, int] = {}
         self.players: dict[str, PlayerState] = {}
         self.connections: dict[str, Any] = {}
         self.client_protocols: dict[str, int] = {}
+        self.client_device_classes: dict[str, str] = {}
+        self.client_last_updates: dict[str, float] = {}
         self.operators: set[str] = set()
         self.player_profiles: dict[str, dict[str, Any]] = {}
         self.mobs: dict[str, MobState] = {}
@@ -234,8 +242,10 @@ class MellorCraftWorld:
             return
         try:
             raw = json.loads(self.save_path.read_text(encoding="utf-8"))
+            self.world_name = str(raw.get("worldName", self.world_name)).strip()[:48] or self.world_name
             self.seed = int(raw.get("seed", self.seed)) % 2_147_483_647
             self.world_time = float(raw.get("worldTime", self.world_time))
+            self.boss_defeated = bool(raw.get("bossDefeated", False))
             blocks = raw.get("blocks", {})
             if isinstance(blocks, dict):
                 self.blocks = {str(k): int(v) for k, v in blocks.items()}
@@ -258,7 +268,7 @@ class MellorCraftWorld:
             for entry in raw.get("mobs", []):
                 try:
                     type_key = str(entry["typeKey"])
-                    if type_key not in MOB_DEFINITIONS:
+                    if type_key not in MOB_DEFINITIONS or (self.boss_defeated and type_key == "MELLOR_BOSS"):
                         continue
                     definition = MOB_DEFINITIONS[type_key]
                     mob = MobState(
@@ -274,7 +284,7 @@ class MellorCraftWorld:
                 except (KeyError, TypeError, ValueError):
                     continue
             print(
-                f"Loaded shared world: seed={self.seed}, edits={len(self.blocks)}, "
+                f"Loaded world '{self.world_name}': seed={self.seed}, edits={len(self.blocks)}, "
                 f"operators={len(self.operators)}, players={len(self.player_profiles)}, mobs={len(self.mobs)}"
             )
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -286,9 +296,11 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "formatVersion": 4,
+            "formatVersion": 6,
+            "worldName": self.world_name,
             "seed": self.seed,
             "worldTime": self.world_time,
+            "bossDefeated": self.boss_defeated,
             "blocks": self.blocks,
             "operators": sorted(self.operators),
             "playerProfiles": profiles,
@@ -326,15 +338,18 @@ class MellorCraftWorld:
 
     def recompute_mob_hosts(self) -> bool:
         changed = False
+        now = time.monotonic()
         for dimension in (0, 1, 2):
             old = self.mob_hosts.get(dimension)
-            eligible = [
-                player.id for player in self.players.values()
-                if player.dimension == dimension and player.health > 0 and player.gamemode != "spectator"
-            ]
-            new = old if old in eligible else (eligible[0] if eligible else None)
-            if new != old:
-                self.mob_hosts[dimension] = new
+            eligible = [player.id for player in self.players.values()
+                        if player.dimension == dimension and player.health > 0 and player.gamemode != "spectator"]
+            active = [pid for pid in eligible if now - self.client_last_updates.get(pid, 0.0) <= 1.25]
+            active_desktop = [pid for pid in active if self.client_device_classes.get(pid, "desktop") != "mobile"]
+            desktop_eligible = [pid for pid in eligible if self.client_device_classes.get(pid, "desktop") != "mobile"]
+            preferred = active_desktop or active or desktop_eligible or eligible
+            new_host = old if old in preferred else (preferred[0] if preferred else None)
+            if new_host != old:
+                self.mob_hosts[dimension] = new_host
                 changed = True
         return changed
 
@@ -414,6 +429,8 @@ async def broadcast(payload: dict[str, Any], exclude_id: str | None = None, mini
         if player is not None:
             world.remember_player(player)
         world.client_protocols.pop(player_id, None)
+        world.client_device_classes.pop(player_id, None)
+        world.client_last_updates.pop(player_id, None)
 
 
 async def broadcast_mob_hosts() -> None:
@@ -431,17 +448,37 @@ async def handle_block_change(player_id: str, data: dict[str, Any]) -> None:
     block_type = bounded_int(data.get("blockType"), 0, 255)
     previous_type = bounded_int(data.get("previousType"), 0, 255)
 
-    target_dimensions = [dimension]
-    if dimension in (0, 1) and (block_type == PORTAL_BLOCK or previous_type == PORTAL_BLOCK):
-        target_dimensions = [0, 1]
-
-    for target_dimension in target_dimensions:
-        world.blocks[world.block_key(target_dimension, x, y, z)] = block_type
-        await broadcast({
-            "type": "block_update", "playerId": player_id, "dimension": target_dimension,
-            "x": x, "y": y, "z": z, "blockType": block_type,
-        })
+    # Dimensions now have different vertical layouts. Mirroring a portal at the
+    # same Y coordinate placed the Alt Y=30 portal underground in the Overworld,
+    # corrupting terrain and causing repeated teleport loops. Portal changes are
+    # therefore stored only in the explicitly requested dimension.
+    world.blocks[world.block_key(dimension, x, y, z)] = block_type
+    await broadcast({
+        "type": "block_update", "playerId": player_id, "dimension": dimension,
+        "x": x, "y": y, "z": z, "blockType": block_type,
+    })
     world.dirty = True
+
+
+async def handle_block_batch(player_id: str, data: dict[str, Any]) -> None:
+    raw_changes = data.get("changes", [])
+    if not isinstance(raw_changes, list):
+        return
+    sanitized: list[dict[str, int]] = []
+    for entry in raw_changes[:256]:
+        if not isinstance(entry, dict):
+            continue
+        x = bounded_int(entry.get("x"), -2_000_000, 2_000_000)
+        y = bounded_int(entry.get("y"), 0, WORLD_HEIGHT - 1)
+        z = bounded_int(entry.get("z"), -2_000_000, 2_000_000)
+        dimension = bounded_int(entry.get("dimension"), 0, 2)
+        block_type = bounded_int(entry.get("blockType"), 0, 255)
+        world.blocks[world.block_key(dimension, x, y, z)] = block_type
+        sanitized.append({"dimension": dimension, "x": x, "y": y, "z": z, "blockType": block_type})
+    if not sanitized:
+        return
+    world.dirty = True
+    await broadcast({"type": "block_batch_update", "playerId": player_id, "changes": sanitized}, exclude_id=player_id)
 
 
 async def damage_player(
@@ -525,7 +562,9 @@ async def remove_mob(
     if player_kill and definition.get("dropMeat"):
         await spawn_dropped_item(RAW_MEAT_ITEM, 1, mob.x, mob.y + 0.4, mob.z, mob.dimension)
     if mob.typeKey == "MELLOR_BOSS" and player_kill:
+        world.boss_defeated = True
         await broadcast({"type": "system", "message": "The Mellor Boss was defeated!"})
+        await broadcast({"type": "boss_defeated", "bossDefeated": True}, minimum_protocol=3)
     world.dirty = True
 
 
@@ -659,6 +698,7 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         return
 
     if message_type == "player_update":
+        world.client_last_updates[player_id] = time.monotonic()
         player.x = max(-2_000_000.0, min(2_000_000.0, finite_number(data.get("x"), player.x)))
         player.y = max(-100.0, min(1000.0, finite_number(data.get("y"), player.y)))
         player.z = max(-2_000_000.0, min(2_000_000.0, finite_number(data.get("z"), player.z)))
@@ -682,6 +722,8 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
 
     if message_type == "block_change":
         await handle_block_change(player_id, data)
+    elif message_type == "block_batch":
+        await handle_block_batch(player_id, data)
     elif message_type == "attack_player" and world.client_protocols.get(player_id, 1) >= 2:
         await handle_player_attack(player_id, data)
     elif message_type == "attack_mob" and world.client_protocols.get(player_id, 1) >= 3:
@@ -703,7 +745,7 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
     elif message_type == "drop_item" and world.client_protocols.get(player_id, 1) >= 3:
         await handle_drop_item(player_id, data)
     elif message_type == "request_boss_spawn" and world.client_protocols.get(player_id, 1) >= 3:
-        if player.dimension == 2 and not any(m.typeKey == "MELLOR_BOSS" and m.dimension == 2 for m in world.mobs.values()):
+        if not world.boss_defeated and player.dimension == 2 and not any(m.typeKey == "MELLOR_BOSS" and m.dimension == 2 for m in world.mobs.values()):
             definition = MOB_DEFINITIONS["MELLOR_BOSS"]
             mob = MobState(uuid.uuid4().hex, "MELLOR_BOSS", 0.0, 52.0, 10.0, 2, definition["health"], definition["health"])
             world.mobs[mob.id] = mob
@@ -784,13 +826,16 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
         world.players[player_id] = player
         world.connections[player_id] = websocket
         world.client_protocols[player_id] = client_protocol
+        world.client_device_classes[player_id] = "mobile" if str(join.get("deviceClass", "desktop")).lower() == "mobile" else "desktop"
+        world.client_last_updates[player_id] = time.monotonic()
         world.tick()
         world.recompute_mob_hosts()
 
         await send_json(websocket, {
             "type": "welcome", "protocol": PROTOCOL_VERSION, "negotiatedProtocol": client_protocol,
-            "clientId": player_id, "username": username, "seed": world.seed,
+            "clientId": player_id, "username": username, "seed": world.seed, "worldName": world.world_name,
             "worldTime": world.world_time, "dayLength": DAY_LENGTH_SECONDS,
+            "bossDefeated": world.boss_defeated,
             "isOperator": player.isOperator, "blocks": world.block_snapshot(),
             "playerState": world.player_profile(player) if restored and client_protocol >= 4 else None,
             "players": world.player_snapshot(),
@@ -826,6 +871,8 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
                 world.remember_player(player)
             world.connections.pop(player_id, None)
             world.client_protocols.pop(player_id, None)
+            world.client_device_classes.pop(player_id, None)
+            world.client_last_updates.pop(player_id, None)
             world.damage_locks.pop(player_id, None)
             world.attack_cooldowns.pop(player_id, None)
             hosts_changed = world.recompute_mob_hosts()
@@ -843,6 +890,7 @@ async def world_broadcast_loop() -> None:
         hosts_changed = world.recompute_mob_hosts()
         await broadcast({
             "type": "world_state", "worldTime": world.world_time,
+            "bossDefeated": world.boss_defeated,
             "players": world.player_snapshot(),
             "mobs": world.mob_snapshot(), "items": world.item_snapshot(),
             "mobHosts": {str(k): v for k, v in world.mob_hosts.items()},
@@ -1002,10 +1050,131 @@ async def run_websocket_server() -> None:
                 task.cancel()
 
 
+def safe_world_filename(world_name: str) -> str:
+    cleaned = world_name.strip()[:48]
+    if not cleaned or not WORLD_NAME_PATTERN.fullmatch(cleaned):
+        raise ValueError("World names may use letters, numbers, spaces, dots, dashes, and underscores.")
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", cleaned).strip("._") or DEFAULT_WORLD_NAME
+    return slug + ".json"
+
+
+def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
+    result: list[tuple[str, Path]] = []
+    if not worlds_dir.exists():
+        return result
+    for path in sorted(worlds_dir.glob("*.json"), key=lambda item: item.name.casefold()):
+        display_name = path.stem.replace("_", " ")
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            display_name = str(raw.get("worldName", display_name)).strip() or display_name
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            pass
+        result.append((display_name, path))
+    return result
+
+
+def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
+    worlds = available_worlds(worlds_dir)
+    print("\nMellorCraft v1.4.0 World Selection")
+    if worlds:
+        print("Existing worlds:")
+        for index, (name, path) in enumerate(worlds, 1):
+            print(f"  {index}. {name}  ({path.name})")
+    else:
+        print("No named worlds exist yet.")
+    print("  C. Create a new world")
+
+    while True:
+        choice = input("Load a world number or create [C]: ").strip()
+        if worlds and choice.isdigit() and 1 <= int(choice) <= len(worlds):
+            name, path = worlds[int(choice) - 1]
+            open_game = input("Open the local game page after startup? [Y/n]: ").strip().lower() not in {"n", "no"}
+            return name, path, None, open_game
+        if choice.lower() in {"c", "create", "new"} or (not worlds and choice == ""):
+            while True:
+                name = input(f"World name [{DEFAULT_WORLD_NAME}]: ").strip() or DEFAULT_WORLD_NAME
+                try:
+                    path = worlds_dir / safe_world_filename(name)
+                except ValueError as exc:
+                    print(exc)
+                    continue
+                if path.exists():
+                    print("A world with that file name already exists. Choose another name.")
+                    continue
+                break
+            seed_text = input("Seed (blank for random): ").strip()
+            try:
+                seed = None if not seed_text else abs(int(seed_text)) % 2_147_483_647
+            except ValueError:
+                print("Invalid seed; a random seed will be used.")
+                seed = None
+            open_game = input("Open the local game page after startup? [Y/n]: ").strip().lower() not in {"n", "no"}
+            return name, path, seed, open_game
+        print("Enter an existing world number or C.")
+
+
+def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool]:
+    worlds_dir = SCRIPT_DIR / WORLDS_DIRNAME
+    worlds_dir.mkdir(parents=True, exist_ok=True)
+
+    legacy_path = SCRIPT_DIR / LEGACY_SAVE_FILENAME
+    if legacy_path.exists() and not available_worlds(worlds_dir):
+        migrated = worlds_dir / "Legacy_World.json"
+        legacy_path.replace(migrated)
+        print(f"Migrated {LEGACY_SAVE_FILENAME} to {migrated.relative_to(SCRIPT_DIR)}")
+
+    if args.list_worlds:
+        worlds = available_worlds(worlds_dir)
+        if not worlds:
+            print("No saved worlds.")
+        for name, path in worlds:
+            print(f"{name}: {path}")
+        raise SystemExit(0)
+
+    if args.create_world:
+        name = args.create_world.strip()
+        path = worlds_dir / safe_world_filename(name)
+        if path.exists() and not args.reset_world:
+            raise SystemExit(f"World already exists: {path.name}. Use --world to load it or --reset-world to replace it.")
+        if args.reset_world and path.exists():
+            path.unlink()
+        seed = None if args.seed is None else abs(args.seed) % 2_147_483_647
+        return name, path, seed, bool(args.open_browser)
+
+    if args.world:
+        requested = args.world.strip()
+        matches = [(name, path) for name, path in available_worlds(worlds_dir) if name.casefold() == requested.casefold() or path.stem.casefold() == requested.casefold()]
+        if matches:
+            name, path = matches[0]
+        else:
+            name = requested
+            path = worlds_dir / safe_world_filename(name)
+        if args.reset_world and path.exists():
+            path.unlink()
+        seed = None if path.exists() or args.seed is None else abs(args.seed) % 2_147_483_647
+        return name, path, seed, bool(args.open_browser)
+
+    if not args.no_menu and os.isatty(0):
+        return choose_world_interactively(worlds_dir)
+
+    name = DEFAULT_WORLD_NAME
+    path = worlds_dir / safe_world_filename(name)
+    if args.reset_world and path.exists():
+        path.unlink()
+    seed = None if path.exists() or args.seed is None else abs(args.seed) % 2_147_483_647
+    return name, path, seed, bool(args.open_browser)
+
+
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft multiplayer world.")
-    parser.add_argument("--seed", type=int, help="Seed used only when creating a new world save.")
-    parser.add_argument("--reset-world", action="store_true", help="Delete the current shared-world save before starting.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.4.0 multiplayer world.")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
+    group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
+    parser.add_argument("--seed", type=int, help="Seed used only when creating a new world.")
+    parser.add_argument("--reset-world", action="store_true", help="Delete the selected world's JSON before starting.")
+    parser.add_argument("--list-worlds", action="store_true", help="List named world saves and exit.")
+    parser.add_argument("--open-browser", action="store_true", help="Open the local game page after startup.")
+    parser.add_argument("--no-menu", action="store_true", help="Skip the interactive world selection menu.")
     return parser.parse_args()
 
 
@@ -1013,25 +1182,30 @@ def main() -> None:
     global world
     args = parse_args()
     client_path = SCRIPT_DIR / CLIENT_FILENAME
-    save_path = SCRIPT_DIR / SAVE_FILENAME
     if not client_path.exists():
         raise SystemExit(f"Missing client file: {client_path}")
-    if args.reset_world and save_path.exists():
-        save_path.unlink()
-    seed = None if args.seed is None else abs(args.seed) % 2_147_483_647
-    world = MellorCraftWorld(save_path, requested_seed=seed)
+
+    world_name, save_path, seed, open_game = resolve_world(args)
+    world = MellorCraftWorld(save_path, requested_seed=seed, world_name=world_name)
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft multiplayer server is running")
+    print("\nMellorCraft v1.4.0 multiplayer server is running")
+    print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")
     print(f"  WebSocket:     ws://{ip}:{WEBSOCKET_PORT}")
     print(f"  Protocol:      {PROTOCOL_VERSION} (accepts {', '.join(map(str, SUPPORTED_PROTOCOLS))})")
     print(f"  World seed:    {world.seed}")
-    print(f"  Save file:     {save_path.name}")
+    print(f"  Save file:     {save_path.relative_to(SCRIPT_DIR)}")
+    print("Join this same world on the host PC using the Host PC address above.")
     print("Console commands: /op <username>, /deop <username>, /ops, /list, /mobs, /help")
     print("Press Ctrl+C to stop.\n")
+    if open_game:
+        try:
+            webbrowser.open(f"http://127.0.0.1:{HTTP_PORT}")
+        except Exception as exc:
+            print(f"Could not open the browser automatically: {exc}")
     try:
         asyncio.run(run_websocket_server())
     except KeyboardInterrupt:

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MellorCraft v1.4.0 Seed Map</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#15171b;color:#eee;font-family:Arial,sans-serif}
+#toolbar{position:fixed;z-index:5;top:0;left:0;right:0;min-height:58px;background:rgba(20,22,27,.96);display:flex;align-items:center;gap:10px;padding:8px 12px;box-shadow:0 2px 12px #0008;flex-wrap:wrap}
+input,select,button{background:#262a32;color:#eee;border:1px solid #555;border-radius:5px;padding:8px 10px}
+button{cursor:pointer;background:#285b38}
+button:hover{filter:brightness(1.15)}
+label{font-size:13px;color:#ccc}
+#map{position:absolute;top:58px;left:0;width:100%;height:calc(100% - 58px);cursor:grab;image-rendering:pixelated}
+#map.dragging{cursor:grabbing}
+#tooltip{position:fixed;z-index:8;display:none;pointer-events:none;background:#111e;border:1px solid #aaa;padding:8px 10px;border-radius:5px;font-size:12px;line-height:1.45;max-width:270px}
+#legend{position:fixed;z-index:6;right:10px;bottom:10px;background:#111d;border:1px solid #777;border-radius:7px;padding:9px;font-size:11px;max-height:45vh;overflow:auto}
+.legend-row{display:flex;align-items:center;gap:6px;margin:3px 0}
+.swatch{width:13px;height:13px;border:1px solid #aaa;display:inline-block}
+#status{font-size:12px;color:#bbb;min-width:230px}
+.small{font-size:12px}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <strong>MellorCraft Seed Map</strong>
+  <input id="seed" value="12345" placeholder="Seed number or text">
+  <button id="apply">Load Seed</button>
+  <select id="dimension">
+    <option value="0">Overworld</option>
+    <option value="1">Alt Dimension</option>
+    <option value="2">Boss Dimension</option>
+  </select>
+  <label><input type="checkbox" id="structures" checked> Structures</label>
+  <label><input type="checkbox" id="grid" checked> Chunk grid</label>
+  <button id="home">Center 0,0</button>
+  <span id="status">Drag to pan • wheel to zoom</span>
+</div>
+<canvas id="map"></canvas>
+<div id="tooltip"></div>
+<div id="legend"></div>
+<script>
+class SimplexNoise {
+    constructor(seed) {
+        this.p = new Uint8Array(512);
+        const perm = new Uint8Array(256);
+        for (let i = 0; i < 256; i++) perm[i] = i;
+        let n = seed;
+        for (let i = 255; i > 0; i--) {
+            n = ((n * 1103515245) + 12345) & 0x7fffffff;
+            const j = n % (i + 1);
+            [perm[i], perm[j]] = [perm[j], perm[i]];
+        }
+        for (let i = 0; i < 512; i++) this.p[i] = perm[i & 255];
+    }
+    noise2D(x, y) {
+        const F2 = 0.5 * (Math.sqrt(3) - 1);
+        const G2 = (3 - Math.sqrt(3)) / 6;
+        const s = (x + y) * F2;
+        const i = Math.floor(x + s), j = Math.floor(y + s);
+        const t = (i + j) * G2;
+        const x0 = x - (i - t), y0 = y - (j - t);
+        const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+        const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+        const x2 = x0 - 1 + 2*G2, y2 = y0 - 1 + 2*G2;
+        const ii = i & 255, jj = j & 255;
+        const grad = (h, x, y) => {
+            const hh = h & 7;
+            const u = hh < 4 ? x : y, v = hh < 4 ? y : x;
+            return ((hh & 1) ? -u : u) + ((hh & 2) ? -2*v : 2*v);
+        };
+        let n0 = 0, n1 = 0, n2 = 0;
+        let t0 = 0.5 - x0*x0 - y0*y0;
+        if (t0 >= 0) { t0 *= t0; n0 = t0*t0*grad(this.p[ii+this.p[jj]], x0, y0); }
+        let t1 = 0.5 - x1*x1 - y1*y1;
+        if (t1 >= 0) { t1 *= t1; n1 = t1*t1*grad(this.p[ii+i1+this.p[jj+j1]], x1, y1); }
+        let t2 = 0.5 - x2*x2 - y2*y2;
+        if (t2 >= 0) { t2 *= t2; n2 = t2*t2*grad(this.p[ii+1+this.p[jj+1]], x2, y2); }
+        return 70 * (n0 + n1 + n2);
+    }
+    noise3D(x, y, z) {
+        const F3 = 1/3, G3 = 1/6;
+        const s = (x + y + z) * F3;
+        const i = Math.floor(x + s), j = Math.floor(y + s), k = Math.floor(z + s);
+        const t = (i + j + k) * G3;
+        const x0 = x - (i - t), y0 = y - (j - t), z0 = z - (k - t);
+        let i1, j1, k1, i2, j2, k2;
+        if (x0 >= y0) {
+            if (y0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=1; k2=0; }
+            else if (x0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=0; k2=1; }
+            else { i1=0; j1=0; k1=1; i2=1; j2=0; k2=1; }
+        } else {
+            if (y0 < z0) { i1=0; j1=0; k1=1; i2=0; j2=1; k2=1; }
+            else if (x0 < z0) { i1=0; j1=1; k1=0; i2=0; j2=1; k2=1; }
+            else { i1=0; j1=1; k1=0; i2=1; j2=1; k2=0; }
+        }
+        const x1 = x0 - i1 + G3, y1 = y0 - j1 + G3, z1 = z0 - k1 + G3;
+        const x2 = x0 - i2 + 2*G3, y2 = y0 - j2 + 2*G3, z2 = z0 - k2 + 2*G3;
+        const x3 = x0 - 1 + 3*G3, y3 = y0 - 1 + 3*G3, z3 = z0 - 1 + 3*G3;
+        const ii = i & 255, jj = j & 255, kk = k & 255;
+        const grad3 = (h, x, y, z) => {
+            const hh = h & 15;
+            const u = hh < 8 ? x : y;
+            const v = hh < 4 ? y : (hh === 12 || hh === 14 ? x : z);
+            return ((hh & 1) ? -u : u) + ((hh & 2) ? -v : v);
+        };
+        let n0 = 0, n1 = 0, n2 = 0, n3 = 0;
+        let t0 = 0.6 - x0*x0 - y0*y0 - z0*z0;
+        if (t0 >= 0) { t0 *= t0; n0 = t0*t0*grad3(this.p[ii+this.p[jj+this.p[kk]]], x0, y0, z0); }
+        let t1 = 0.6 - x1*x1 - y1*y1 - z1*z1;
+        if (t1 >= 0) { t1 *= t1; n1 = t1*t1*grad3(this.p[ii+i1+this.p[jj+j1+this.p[kk+k1]]], x1, y1, z1); }
+        let t2 = 0.6 - x2*x2 - y2*y2 - z2*z2;
+        if (t2 >= 0) { t2 *= t2; n2 = t2*t2*grad3(this.p[ii+i2+this.p[jj+j2+this.p[kk+k2]]], x2, y2, z2); }
+        let t3 = 0.6 - x3*x3 - y3*y3 - z3*z3;
+        if (t3 >= 0) { t3 *= t3; n3 = t3*t3*grad3(this.p[ii+1+this.p[jj+1+this.p[kk+1]]], x3, y3, z3); }
+        return 32 * (n0 + n1 + n2 + n3);
+    }
+    octave(x, y, oct, pers) {
+        let total = 0, freq = 1, amp = 1, max = 0;
+        for (let i = 0; i < oct; i++) {
+            total += this.noise2D(x*freq, y*freq) * amp;
+            max += amp; amp *= pers; freq *= 2;
+        }
+        return total / max;
+    }
+    octave3D(x, y, z, oct, pers) {
+        let total = 0, freq = 1, amp = 1, max = 0;
+        for (let i = 0; i < oct; i++) {
+            total += this.noise3D(x*freq, y*freq, z*freq) * amp;
+            max += amp; amp *= pers; freq *= 2;
+        }
+        return total / max;
+    }
+}
+
+const BIOMES={
+    PLAINS:0,DESERT_BARREN:1,DESERT_CACTUS:2,FOREST:3,
+    MOUNTAINS_LOW:4,MOUNTAINS_MID:5,MOUNTAINS_HIGH:6,
+    TAIGA:7,STONY_PEAKS:8,BADLANDS:9,OCEAN:10,SWAMP:11,
+    JUNGLE:12,SAVANNA:13,BEACH:14
+};
+const ALT_BIOMES={RED:0,BLUE:1,GREEN:2};
+const BIOME_NAMES=['Plains','Barren Desert','Cactus Desert','Forest','Low Mountains','Medium Mountains','High Mountains','Taiga','Stony Peaks','Badlands','Ocean','Swamp','Jungle','Savanna','Beach'];
+const BIOME_COLORS=['#78a84b','#d7b968','#d9c36d','#2f7b39','#859271','#7b8177','#e8edf0','#477d55','#7f858b','#b65c34','#2f69a8','#4c7658','#176d31','#a8aa49','#e5d394'];
+const ALT_NAMES=['Red Wastes','Blue Caverns','Green Depths'];
+const ALT_COLORS=['#9a3434','#344f9a','#397a47'];
+const WATER_LEVEL=32;
+let WORLD_SEED=12345;
+let noise,biomeNoise,treeNoise,caveNoise,oreNoise,ravineNoise,structNoise,continentalNoise,lavaNoise;
+const mountainRegionCache=new Map();
+const mountainInfoCache=new Map();
+
+function hashString(str){let hash=0;for(let i=0;i<str.length;i++){hash=((hash<<5)-hash)+str.charCodeAt(i);hash|=0}return Math.abs(hash)}
+function setSeed(value){
+  const n=Number(value);
+  WORLD_SEED=value.trim()===''?0:(Number.isFinite(n)?Math.trunc(n):hashString(value));
+  noise=new SimplexNoise(WORLD_SEED);biomeNoise=new SimplexNoise(WORLD_SEED+1000);
+  treeNoise=new SimplexNoise(WORLD_SEED+2000);caveNoise=new SimplexNoise(WORLD_SEED+3000);
+  oreNoise=new SimplexNoise(WORLD_SEED+4000);ravineNoise=new SimplexNoise(WORLD_SEED+5000);
+  structNoise=new SimplexNoise(WORLD_SEED+6000);continentalNoise=new SimplexNoise(WORLD_SEED+7000);
+  lavaNoise=new SimplexNoise(WORLD_SEED+8000);mountainRegionCache.clear();mountainInfoCache.clear();
+}
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+
+function smoothstep(edge0, edge1, value) {
+            const t = clamp((value - edge0) / Math.max(0.000001, edge1 - edge0), 0, 1);
+            return t * t * (3 - 2 * t);
+        }
+
+function mix(a, b, amount) { return a + (b - a) * amount; }
+
+function getClimate(x, z) {
+            const scale = 0.0008;
+            const temp = biomeNoise.octave(x * scale, z * scale, 3, 0.5);
+            const moist = biomeNoise.octave(x * scale + 5000, z * scale + 5000, 3, 0.5);
+            return { temp, moist };
+        }
+
+function getContinentValue(x, z) {
+            // Broad, low-frequency coastlines keep ocean and land transitions
+            // rounded. The former high-frequency detail could change the coastal
+            // blend too much in only a few blocks and create sheer walls.
+            const continent = continentalNoise.octave(x * 0.00045, z * 0.00045, 3, 0.55);
+            const coastDetail = continentalNoise.octave(x * 0.0012 + 800, z * 0.0012 - 800, 2, 0.5) * 0.08;
+            return continent + coastDetail;
+        }
+
+function getBaseBiome(x, z) {
+  const {temp,moist}=getClimate(x,z);
+  if(temp>.32){
+    if(moist>.48)return BIOMES.JUNGLE;
+    if(moist>.10)return BIOMES.SAVANNA;
+    if(moist<-.18)return BIOMES.BADLANDS;
+    if(moist<-.02)return BIOMES.DESERT_BARREN;
+    return BIOMES.DESERT_CACTUS;
+  }
+  if(temp<-.28){if(moist<-.70)return BIOMES.STONY_PEAKS;return BIOMES.TAIGA}
+  if(moist>.02)return BIOMES.FOREST;
+  return BIOMES.PLAINS;
+}
+
+function getMountainRegion(cellX, cellZ) {
+const key = `${cellX},${cellZ}`;
+if (mountainRegionCache.has(key)) return mountainRegionCache.get(key);
+const grid = 680;
+const mh = (salt) => coordHash(cellX, cellZ, salt, WORLD_SEED + salt * 131);
+// Mountain regions remain twice as common as the older generator, but
+// each seed receives different locations, chains, heights, and outlines.
+if (mh(900) >= 0.38) {
+    mountainRegionCache.set(key, null);
+    return null;
+}
+
+const cx = cellX * grid + 70 + mh(901) * (grid - 140);
+const cz = cellZ * grid + 70 + mh(902) * (grid - 140);
+const chainAngle = mh(903) * Math.PI * 2;
+const chainLength = 250 + mh(904) * 210;
+const peakCount = 2 + Math.floor(mh(905) * 3);
+const maxTierRoll = mh(906);
+const maxTier = maxTierRoll < 0.35 ? 0 : (maxTierRoll < 0.74 ? 1 : 2);
+const peaks = [];
+
+for (let i = 0; i < peakCount; i++) {
+    const t = peakCount === 1 ? 0 : (i / (peakCount - 1) - 0.5);
+    const bend = (mh(920 + i) - 0.5) * 145;
+    const along = t * chainLength + (mh(930 + i) - 0.5) * 55;
+    const px = cx + Math.cos(chainAngle) * along - Math.sin(chainAngle) * bend;
+    const pz = cz + Math.sin(chainAngle) * along + Math.cos(chainAngle) * bend;
+
+    let tier;
+    if (i === Math.floor(peakCount / 2)) tier = maxTier;
+    else tier = Math.floor(mh(940 + i) * (maxTier + 1));
+    let peakHeight;
+    if (tier === 0) peakHeight = 100 + Math.floor(mh(950 + i) * 31);
+    else if (tier === 1) peakHeight = 130 + Math.floor(mh(950 + i) * 31);
+    else peakHeight = 161 + Math.floor(mh(950 + i) * 30);
+
+    const broadness = tier === 2 ? 1.28 : (tier === 1 ? 1.12 : 1.0);
+    peaks.push({
+        x: px,
+        z: pz,
+        height: peakHeight,
+        tier,
+        spreadLong: (105 + mh(960 + i) * 100) * broadness,
+        spreadCross: (72 + mh(970 + i) * 78) * broadness,
+        angle: chainAngle + (mh(980 + i) - 0.5) * 0.95,
+        phaseX: mh(990 + i) * 4000,
+        phaseZ: mh(1000 + i) * 4000
+    });
+}
+
+const region = { cx, cz, grid, chainAngle, peaks };
+mountainRegionCache.set(key, region);
+return region;
+        }
+
+function getMountainInfo(x, z) {
+const ix = Math.floor(x), iz = Math.floor(z);
+const cacheKey = `${ix},${iz}`;
+if (mountainInfoCache.has(cacheKey)) return mountainInfoCache.get(cacheKey);
+if (mountainInfoCache.size > 220000) mountainInfoCache.clear();
+
+const grid = 680;
+const baseCellX = Math.floor(x / grid), baseCellZ = Math.floor(z / grid);
+let bestTarget = -Infinity;
+let best = null;
+
+for (let ox = -1; ox <= 1; ox++) {
+    for (let oz = -1; oz <= 1; oz++) {
+        const region = getMountainRegion(baseCellX + ox, baseCellZ + oz);
+        if (!region) continue;
+
+        // Offset, rotated ellipses produce lopsided peaks. Low-frequency
+        // noise changes their outline so the same height contour is never
+        // a perfect circle or a repeated man-made ring.
+        for (let i = 0; i < region.peaks.length; i++) {
+            const peak = region.peaks[i];
+            const dx = x - peak.x, dz = z - peak.z;
+            const c = Math.cos(peak.angle), s = Math.sin(peak.angle);
+            const along = dx * c + dz * s;
+            const cross = -dx * s + dz * c;
+            const warpedAlong = along + noise.octave((x + peak.phaseX) * 0.0032, (z - peak.phaseZ) * 0.0032, 2, 0.5) * 34;
+            const warpedCross = cross + noise.octave((x - peak.phaseZ) * 0.0041, (z + peak.phaseX) * 0.0041, 2, 0.5) * 27;
+            const q2 = (warpedAlong * warpedAlong) / (peak.spreadLong * peak.spreadLong) +
+                       (warpedCross * warpedCross) / (peak.spreadCross * peak.spreadCross);
+            if (q2 > 8.4) continue;
+            let profile = Math.exp(-0.5 * q2);
+            const outline = 1 + noise.octave((x + peak.phaseX) * 0.007, (z + peak.phaseZ) * 0.007, 3, 0.52) * 0.16;
+            profile = clamp(profile * outline, 0, 1);
+            const broadProfile = Math.pow(profile, 0.72);
+            const crownProfile = Math.pow(profile, 3.6);
+            const target = 88 + (peak.height - 88) * (broadProfile * 0.76 + crownProfile * 0.24);
+            if (target > bestTarget) {
+                bestTarget = target;
+                best = { ...region, peak, targetHeight: target, strength: profile };
+            }
+        }
+
+        // Broad ridges join neighboring peaks, but their bent chain and
+        // uneven widths keep the range from becoming a symmetric island.
+        for (let i = 0; i + 1 < region.peaks.length; i++) {
+            const a = region.peaks[i], b = region.peaks[i + 1];
+            const vx = b.x - a.x, vz = b.z - a.z;
+            const len2 = vx * vx + vz * vz;
+            if (len2 < 1) continue;
+            const t = clamp(((x - a.x) * vx + (z - a.z) * vz) / len2, 0, 1);
+            const bend = Math.sin(t * Math.PI) * noise.octave((x + region.cx) * 0.0045, (z - region.cz) * 0.0045, 2, 0.5) * 42;
+            const px = a.x + vx * t - (vz / Math.sqrt(len2)) * bend;
+            const pz = a.z + vz * t + (vx / Math.sqrt(len2)) * bend;
+            const width = 66 + (a.spreadCross + b.spreadCross) * 0.19;
+            const dist = Math.hypot(x - px, z - pz);
+            const profile = Math.exp(-0.5 * (dist * dist) / (width * width)) * Math.pow(Math.sin(Math.PI * (0.08 + t * 0.84)), 0.55);
+            const ridgeTop = Math.min(a.height, b.height) - 10;
+            const target = 90 + (ridgeTop - 90) * clamp(profile, 0, 1) * 0.78;
+            if (target > bestTarget) {
+                bestTarget = target;
+                best = { ...region, peak: null, targetHeight: target, strength: clamp(profile, 0, 1) };
+            }
+        }
+    }
+}
+
+if (!best || bestTarget < 88.5) best = null;
+mountainInfoCache.set(cacheKey, best);
+return best;
+        }
+
+function getBiome(x, z) {
+const mountain = getMountainInfo(x, z);
+if (mountain) {
+    if (mountain.targetHeight >= 161) return BIOMES.MOUNTAINS_HIGH;
+    if (mountain.targetHeight >= 130) return BIOMES.MOUNTAINS_MID;
+    if (mountain.targetHeight >= 100) return BIOMES.MOUNTAINS_LOW;
+}
+return getBaseBiome(x, z);
+        }
+
+function getAltBiome(x, z) {
+            const val = biomeNoise.octave(x * 0.005 + 10000, z * 0.005 + 10000, 3, 0.5);
+            if (val < -0.3) return ALT_BIOMES.GREEN;
+            if (val > 0.3) return ALT_BIOMES.BLUE;
+            return ALT_BIOMES.RED;
+        }
+
+function getHeight(x, z, biome = getBiome(x, z)) {
+            const broad = noise.octave(x * 0.006, z * 0.006, 4, 0.52);
+            const detail = noise.octave(x * 0.022 + 400, z * 0.022 - 400, 3, 0.48);
+            const ridge = 1 - Math.abs(noise.octave(x * 0.0022 + 1200, z * 0.0022 + 1200, 4, 0.55));
+            const { temp, moist } = getClimate(x, z);
+
+            const cold = smoothstep(0.02, 0.34, -temp);
+            const hot = smoothstep(0.16, 0.52, temp);
+            let naturalHeight = 58 + broad * 10 + detail * 3;
+            naturalHeight += hot * (2 + broad * 3);
+            naturalHeight += smoothstep(0.55, 0.82, -moist) * 5;
+
+            const coldTerrain = 80 + broad * 9 + detail * 2.2 + (ridge - 0.5) * 6;
+            naturalHeight = mix(naturalHeight, coldTerrain, cold);
+            naturalHeight += hot * smoothstep(0.22, 0.68, moist) * 3;
+
+            const mountain = getMountainInfo(x, z);
+            if (mountain) {
+                // Foothills begin below the named Low Mountain threshold, allowing
+                // the terrain to climb smoothly into the 100-130, 130-160, and
+                // 161-190 peak ranges without a cliff at the biome label boundary.
+                const target = mountain.targetHeight;
+                const weight = smoothstep(88, 105, target);
+                const roughScale = clamp((target - 92) / 85, 0, 1);
+                let irregularDetail = detail * (0.7 + roughScale * 1.4) + (ridge - 0.5) * (0.8 + roughScale * 1.8);
+                // Fine crags break up equal-height summit shelves while the broad
+                // Gaussian base keeps the overall climb gradual. Positive detail
+                // fades near each tier ceiling so clamping cannot create flat tops.
+                irregularDetail += noise.octave(x * 0.075 + 2700, z * 0.075 - 2700, 2, 0.48) * 2.1 * roughScale * roughScale;
+                const tierCeiling = target >= 161 ? 190 : (target >= 130 ? 160 : 130);
+                if (irregularDetail > 0) irregularDetail *= clamp((tierCeiling - target) / 7, 0, 1);
+                naturalHeight = mix(naturalHeight, target + irregularDetail, weight);
+            }
+            // Biome names describe the mountain's eventual height band, not a
+            // mandatory floor for every edge column. Hard lower clamps created
+            // vertical walls where Low Mountains met ordinary terrain. Keep only
+            // the tier ceilings and let the shared mountain profile rise smoothly.
+            if (biome === BIOMES.MOUNTAINS_LOW) naturalHeight = Math.min(naturalHeight, 130.999);
+            else if (biome === BIOMES.MOUNTAINS_MID) naturalHeight = Math.min(naturalHeight, 160.999);
+            else if (biome === BIOMES.MOUNTAINS_HIGH) naturalHeight = Math.min(naturalHeight, 190.999);
+            return clamp(Math.floor(naturalHeight), 8, 190);
+        }
+
+function posRand(x, z, off = 0) { return (treeNoise.noise2D(x * 0.1 + off, z * 0.1 + off) + 1) * 0.5; }
+
+function coordHash(x, y, z, seed = 0) {
+            let h = Math.imul(x + seed, 374761393) ^ Math.imul(y + seed, 668265263) ^ Math.imul(z + seed, 878028967);
+            h = Math.imul(h ^ (h >>> 13), 1274126177);
+            return (h ^ (h >>> 16)) / 4294967296.0 + 0.5;
+        }
+
+function storageLootName(rand){
+  if(rand<.02)return 'Mellorite Block';
+  if(rand<.10)return 'Diamond Block';
+  if(rand<.20)return 'Gold Block';
+  if(rand<.50)return 'Iron Block';
+  return 'Coal Block';
+}
+function getSurfaceStructuresInBounds(minX,minZ,maxX,maxZ){
+  const result=[];
+  function scan(grid,chance,seed,type,radius,allowed){
+    const minCX=Math.floor(minX/grid)-1,maxCX=Math.floor(maxX/grid)+1;
+    const minCZ=Math.floor(minZ/grid)-1,maxCZ=Math.floor(maxZ/grid)+1;
+    for(let cellX=minCX;cellX<=maxCX;cellX++)for(let cellZ=minCZ;cellZ<=maxCZ;cellZ++){
+      if(coordHash(cellX,cellZ,seed)>=chance)continue;
+      const margin=radius+4;
+      const cx=cellX*grid+margin+Math.floor(coordHash(cellX,cellZ,seed+1)*Math.max(1,grid-margin*2));
+      const cz=cellZ*grid+margin+Math.floor(coordHash(cellX,cellZ,seed+2)*Math.max(1,grid-margin*2));
+      const biome=getBiome(cx,cz);if(!allowed.includes(biome))continue;
+      if(cx>=minX-radius&&cx<=maxX+radius&&cz>=minZ-radius&&cz<=maxZ+radius){
+        const entry={type,cx,cz,y:getHeight(cx,cz,biome)};
+        if(type==='Cabin')entry.loot=storageLootName(coordHash(cx,cz,0));
+        result.push(entry);
+      }
+    }
+  }
+  scan(128,.05,610,'Mansion',15,[BIOMES.FOREST]);
+  scan(128,.10,620,'Outpost',4,[BIOMES.PLAINS,BIOMES.SAVANNA,BIOMES.FOREST]);
+  scan(64,.15,630,'Cabin',3,[BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH,BIOMES.TAIGA]);
+  return result;
+}
+function getAltMazeCenter(cellX,cellZ){
+  if(posRand(cellX*15,cellZ*15)<=.70)return null;
+  const cx=cellX*64+Math.floor(posRand(cellX,cellZ,6)*32)+16;
+  const cz=cellZ*64+Math.floor(posRand(cellX,cellZ,7)*32)+16;
+  const baseY=4+Math.floor(clamp(posRand(cx,cz,556),0,.999999)*20);
+  const roomX=Math.floor(coordHash(cx,cz,99)*8),roomZ=Math.floor(coordHash(cx,cz,100)*8);
+  const melloriteFloor=Math.floor(coordHash(cx,cz,101)*3);
+  return {
+    type:'Alt Maze',cx,cz,y:baseY,
+    melloriteRelativeX:roomX*5-18,
+    melloriteRelativeZ:roomZ*5-18,
+    melloriteFloor:melloriteFloor+1,
+    melloriteY:baseY+melloriteFloor*5+1
+  };
+}
+function altMazeAt(x,z){
+  const gx=Math.floor(x/64),gz=Math.floor(z/64);
+  for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++){
+    const m=getAltMazeCenter(gx+ox,gz+oz);if(m&&Math.abs(x-m.cx)<=20&&Math.abs(z-m.cz)<=20)return m;
+  }return null;
+}
+function getAltStructuresInBounds(minX,minZ,maxX,maxZ){
+  const result=[];
+  for(let x=Math.floor(minX/64)-1;x<=Math.floor(maxX/64)+1;x++)for(let z=Math.floor(minZ/64)-1;z<=Math.floor(maxZ/64)+1;z++){
+    const m=getAltMazeCenter(x,z);if(m&&m.cx>=minX-20&&m.cx<=maxX+20&&m.cz>=minZ-20&&m.cz<=maxZ+20)result.push(m);
+  }
+  for(let cellX=Math.floor(minX/32)-1;cellX<=Math.floor(maxX/32)+1;cellX++)for(let cellZ=Math.floor(minZ/32)-1;cellZ<=Math.floor(maxZ/32)+1;cellZ++){
+    if(posRand(cellX*25,cellZ*25)<=.70)continue;
+    const cx=cellX*32+16,cz=cellZ*32+16;
+    let near=false;for(const sx of [-5,0,5])for(const sz of [-5,0,5])if(altMazeAt(cx+sx,cz+sz))near=true;
+    if(!near&&cx>=minX-2&&cx<=maxX+2&&cz>=minZ-2&&cz<=maxZ+2)result.push({type:'Boss Shrine',cx,cz,y:7+Math.floor(clamp(posRand(cx,cz,555),0,.999999)*34)});
+  }
+  return result;
+}
+
+const canvas=document.getElementById('map'),ctx=canvas.getContext('2d');
+let centerX=0,centerZ=0,scale=1.8,drag=false,lastX=0,lastY=0,lastStructures=[];
+function resize(){canvas.width=innerWidth;canvas.height=Math.max(1,innerHeight-58);render()}
+addEventListener('resize',resize);
+function worldFromScreen(sx,sy){return {x:centerX+(sx-canvas.width/2)/scale,z:centerZ+(sy-canvas.height/2)/scale}}
+function screenFromWorld(x,z){return {x:(x-centerX)*scale+canvas.width/2,y:(z-centerZ)*scale+canvas.height/2}}
+function render(){
+  const dim=Number(document.getElementById('dimension').value);
+  const cellPx=4,worldStep=Math.max(1,cellPx/scale);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let sy=0;sy<canvas.height;sy+=cellPx)for(let sx=0;sx<canvas.width;sx+=cellPx){
+    const w=worldFromScreen(sx+cellPx/2,sy+cellPx/2);let color;
+    if(dim===0)color=BIOME_COLORS[getBiome(Math.floor(w.x),Math.floor(w.z))];
+    else if(dim===1)color=ALT_COLORS[getAltBiome(Math.floor(w.x),Math.floor(w.z))];
+    else color=Math.hypot(w.x,w.z)<=35?'#56176a':'#08030d';
+    ctx.fillStyle=color;ctx.fillRect(sx,sy,cellPx+1,cellPx+1);
+  }
+  const bounds={minX:centerX-canvas.width/(2*scale),maxX:centerX+canvas.width/(2*scale),minZ:centerZ-canvas.height/(2*scale),maxZ:centerZ+canvas.height/(2*scale)};
+  if(document.getElementById('grid').checked&&scale>=.65){
+    const startX=Math.floor(bounds.minX/16)*16,startZ=Math.floor(bounds.minZ/16)*16;
+    ctx.strokeStyle='rgba(255,255,255,.16)';ctx.lineWidth=1;
+    for(let x=startX;x<=bounds.maxX;x+=16){const p=screenFromWorld(x,0);ctx.beginPath();ctx.moveTo(p.x,0);ctx.lineTo(p.x,canvas.height);ctx.stroke()}
+    for(let z=startZ;z<=bounds.maxZ;z+=16){const p=screenFromWorld(0,z);ctx.beginPath();ctx.moveTo(0,p.y);ctx.lineTo(canvas.width,p.y);ctx.stroke()}
+  }
+  lastStructures=[];
+  if(document.getElementById('structures').checked){
+    lastStructures=dim===0?getSurfaceStructuresInBounds(bounds.minX,bounds.minZ,bounds.maxX,bounds.maxZ):dim===1?getAltStructuresInBounds(bounds.minX,bounds.minZ,bounds.maxX,bounds.maxZ):[{type:'Boss Arena',cx:0,cz:0,y:48}];
+    ctx.font='bold 12px Arial';ctx.textAlign='center';ctx.textBaseline='bottom';
+    const symbols={Mansion:'M',Outpost:'O',Cabin:'C','Alt Maze':'A','Boss Shrine':'S','Boss Arena':'B'};
+    for(const s of lastStructures){
+      const p=screenFromWorld(s.cx,s.cz);if(p.x<-20||p.x>canvas.width+20||p.y<-20||p.y>canvas.height+20)continue;
+      ctx.fillStyle='#ffdf4d';ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#111';ctx.fillText(symbols[s.type]||'?',p.x,p.y+5);
+    }
+  }
+  ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(canvas.width/2-8,canvas.height/2);ctx.lineTo(canvas.width/2+8,canvas.height/2);ctx.moveTo(canvas.width/2,canvas.height/2-8);ctx.lineTo(canvas.width/2,canvas.height/2+8);ctx.stroke();
+  document.getElementById('status').textContent=`Seed ${WORLD_SEED} • Center ${Math.round(centerX)}, ${Math.round(centerZ)} • ${scale.toFixed(2)} px/block`;
+}
+canvas.addEventListener('mousedown',e=>{drag=true;lastX=e.clientX;lastY=e.clientY;canvas.classList.add('dragging')});
+addEventListener('mouseup',()=>{drag=false;canvas.classList.remove('dragging')});
+addEventListener('mousemove',e=>{
+  if(drag){centerX-=(e.clientX-lastX)/scale;centerZ-=(e.clientY-lastY)/scale;lastX=e.clientX;lastY=e.clientY;render()}
+  const rect=canvas.getBoundingClientRect(),w=worldFromScreen(e.clientX-rect.left,e.clientY-rect.top),x=Math.floor(w.x),z=Math.floor(w.z),dim=Number(document.getElementById('dimension').value);
+  let lines=[`X: ${x} &nbsp; Z: ${z}`];
+  if(dim===0){const b=getBiome(x,z);lines.push(`Biome: ${BIOME_NAMES[b]}`,`Surface Y: ${getHeight(x,z,b)}`)}
+  else if(dim===1)lines.push(`Biome: ${ALT_NAMES[getAltBiome(x,z)]}`,`Alt Dimension height: 50 blocks (Y 0-49)`);
+  else lines.push(Math.hypot(x,z)<=35?'Inside boss island':'Void');
+  let near=null,dist=Infinity;for(const s of lastStructures){const d=Math.hypot(s.cx-x,s.cz-z);if(d<dist){dist=d;near=s}}
+  if(near&&dist<30){
+    lines.push(`Nearby: ${near.type} (${Math.round(dist)} blocks)`,`Structure Y: ${Math.round(near.y||0)}`);
+    if(near.type==='Cabin')lines.push(`Cabin block: ${near.loot}`);
+    if(near.type==='Alt Maze')lines.push(`Maze base Y: ${near.y}`,`Mellorite room relative: X ${near.melloriteRelativeX}, Z ${near.melloriteRelativeZ}`,`Mellorite room floor: ${near.melloriteFloor}`,`Mellorite room Y: ${near.melloriteY}`);
+  }
+  const tip=document.getElementById('tooltip');tip.innerHTML=lines.join('<br>');tip.style.display='block';tip.style.left=Math.min(innerWidth-280,e.clientX+14)+'px';tip.style.top=Math.min(innerHeight-110,e.clientY+14)+'px';
+});
+canvas.addEventListener('mouseleave',()=>document.getElementById('tooltip').style.display='none');
+canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect(),before=worldFromScreen(e.clientX-r.left,e.clientY-r.top);scale=clamp(scale*(e.deltaY<0?1.22:.82),.15,12);const after=worldFromScreen(e.clientX-r.left,e.clientY-r.top);centerX+=before.x-after.x;centerZ+=before.z-after.z;render()},{passive:false});
+document.getElementById('apply').onclick=()=>{setSeed(document.getElementById('seed').value);centerX=0;centerZ=0;render()};
+document.getElementById('home').onclick=()=>{centerX=0;centerZ=0;render()};
+document.getElementById('dimension').onchange=render;document.getElementById('structures').onchange=render;document.getElementById('grid').onchange=render;
+document.getElementById('seed').addEventListener('keypress',e=>{if(e.key==='Enter')document.getElementById('apply').click()});
+function buildLegend(){
+ const dim=Number(document.getElementById('dimension').value),el=document.getElementById('legend');
+ const active=[BIOMES.PLAINS,BIOMES.DESERT_BARREN,BIOMES.DESERT_CACTUS,BIOMES.FOREST,BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH,BIOMES.TAIGA,BIOMES.STONY_PEAKS,BIOMES.BADLANDS,BIOMES.JUNGLE,BIOMES.SAVANNA];
+ const rows=dim===0?active.map(i=>[BIOME_NAMES[i],BIOME_COLORS[i]]):dim===1?ALT_NAMES.map((n,i)=>[n,ALT_COLORS[i]]):[['Boss island','#56176a'],['Void','#08030d']];
+ el.innerHTML='<strong>Legend</strong>'+rows.map(r=>`<div class="legend-row"><span class="swatch" style="background:${r[1]}"></span>${r[0]}</div>`).join('')+'<hr><div>M Mansion • O Outpost • C Cabin<br>A Alt Maze • S Boss Shrine</div>';
+}
+document.getElementById('dimension').addEventListener('change',buildLegend);
+setSeed('12345');buildLegend();resize();
+</script>
+</body>
+</html>
