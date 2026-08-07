@@ -1,5 +1,5 @@
 # MellorCraft 1.3.1 Server
-A way to play MellorCraft 1.3.1 together! Works Cross-Platform using a Python server.
+A way to play MellorCraft 1.3.1 together or singleplayer! Works Cross-Platform using a Python server.
 
 # Prerequisites
 1. Windows, Mac, or Linux PC
@@ -16,3 +16,6 @@ A way to play MellorCraft 1.3.1 together! Works Cross-Platform using a Python se
 1. Find the IPv4 address of your PC by opening a second terminal and typing ipconfig
 2. Type http://YOUR_IP:8000 into another devices' browser
 3. Welcome!
+
+# How to play singleplayer
+1. Just run mellorcraft_singleplayer.html
