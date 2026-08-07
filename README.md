@@ -101,6 +101,8 @@ engine without the Python server. Named worlds autosave to browser storage and
 include the seed, block edits, time, player state, inventory, mobs, and dropped
 items.
 
+You can also open the singleplayer edition online by opening linkers15.github.io/mellorcraft
+
 Export World downloads the selected save as JSON. Import JSON World restores a
 save or transfers it to another browser. Browser storage is tied to the page
 origin, so direct-file and web-served copies may have separate save collections.
