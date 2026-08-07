@@ -1,4 +1,4 @@
-MellorCraft v1.4.0 — Mobile Resolution & Mining Flash Fix
+MellorCraft v1.4.0
 =========================================================
 
 Files
