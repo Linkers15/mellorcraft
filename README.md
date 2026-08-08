@@ -1,5 +1,13 @@
-MellorCraft v1.4.0
+MellorCraft v1.4.1
 =========================================================
+
+
+Mobile menu scrolling hotfix
+----------------------------
+- Mobile singleplayer no longer applies `touch-action: none` to the entire page.
+- The start screen is now a native vertical scroll container on small displays, so Delete World and LAN Join controls remain reachable.
+- Game Settings now uses native touch panning and momentum scrolling, allowing the Open to LAN controls at the bottom to be reached on phones.
+- Gameplay canvas/joystick surfaces still suppress browser panning while the game itself is active.
 
 Files
 -----
@@ -7,8 +15,39 @@ mellorcraft_multiplayer.html   Multiplayer HTML client
 mellorcraft_singleplayer.html  Browser-only singleplayer edition
 mellorcraft_seed_map.html      Interactive seed and structure map
 mellorcraft_server.py          HTTP + WebSocket multiplayer host
+mellorcraft_relay.py           Singleplayer LAN relay (WebSocket, default port 8000)
 requirements.txt               Python dependency
 worlds/                        One JSON save per named multiplayer world
+
+
+v1.4.1 respawn / shared-save / disconnect update
+-----------------------------------------------
+- Added the **Respawn Block**, a placeable block crafted from 5 Gold Ingots. Right-click/tap Place while targeting it to set your personal respawn point one block above it.
+- Activating a Respawn Block clears the two blocks directly above it so the player cannot respawn inside terrain.
+- Death and defeating the Mellorite Entity now return each player to their active Respawn Block. If that block is broken, the player's respawn is reset to that player's original deterministic world-spawn coordinates.
+- Respawn points and original spawn coordinates are persisted per player in singleplayer, relay-hosted LAN worlds, and Python-server worlds.
+- Relay world hosts can use the server-management commands `/op`, `/deop`, `/ops`, `/list`, and `/mobs` from in-game chat. Operator state is saved with the world.
+- Browser-hosted worlds and Python-server worlds now write the same canonical `MellorCraftWorld` JSON schema (`formatVersion` 7): name, seed, time, boss state, block edits, operators, player profiles, mobs, dropped items, and timestamps. Both loaders retain compatibility with the older browser and server save layouts.
+- A browser-exported world JSON can therefore be imported into singleplayer or placed in the Python server's `worlds` folder; Python-server JSON can likewise be imported into singleplayer.
+- LAN guests are forced back to the world-selection screen when the world host or relay disappears. Multiplayer clients similarly return to the join screen when the Python server goes offline, preventing disconnected clients from continuing an unsaved phantom session.
+- The relay now uses WebSocket keepalive timeouts so dead host connections are detected and closed more promptly.
+
+v1.4.1 update
+-------------
+- Browser singleplayer worlds now have a red Delete World button with an irreversible confirmation prompt.
+- Singleplayer gameplay now routes shared actions through an in-page authoritative integrated server. Mob melee damage, weapon damage, attack cooldowns, mob/player knockback, dropped items, mob hosting, PvP validation, and shared state use the same protocol behavior as multiplayer.
+- A singleplayer world can be opened to LAN from Game Settings through `mellorcraft_relay.py`. The browser owning the save remains authoritative; the relay only discovers rooms and forwards protocol messages.
+- Another singleplayer client can press Join World, enter the relay address, discover open worlds, and join one. The default relay address in the UI is `192.168.0.1:8000`.
+- Mountain ranges keep their existing seeded outlines and heights, but their X/Z footprint is affine-scaled by `sqrt(1/2)`. This halves mountain land area and makes the same vertical ranges noticeably steeper. The seed map uses the identical rule.
+
+Singleplayer LAN relay
+----------------------
+1. On a PC reachable by the players, install the existing dependency with `python -m pip install -r requirements.txt`.
+2. Start `python mellorcraft_relay.py`. It listens on WebSocket port 8000 by default.
+3. In the world-owning singleplayer client, open Game Settings, scroll to **Open Singleplayer World to LAN**, enter the relay IP/port, and choose **Open World to LAN**.
+4. On another singleplayer client, choose **Join World**, enter the same relay IP/port, choose **Find Worlds on Relay**, select the world, and join it.
+
+The relay is intended for a trusted local network and has no accounts, TLS, or Internet hardening. If the singleplayer page is loaded from an HTTPS site, the browser may block an insecure `ws://` LAN relay as mixed content; use the local HTML file or serve the page over HTTP on the LAN.
 
 Mobile login hotfix
 -------------------
@@ -64,9 +103,7 @@ Current world-generation rules
   crafting or the Creative inventory.
 - Plains, Forest, Taiga, Stony Peaks, Jungle, Savanna, deserts, Badlands, and all
   three Mountain biomes remain available.
-- Mountain regions use a 76% regional chance, exactly twice the earlier 38%
-  chance. Low outer terrain rises gradually through Mountains to one-block High
-  Mountain summits between Y=175 and Y=190.
+- Mountain-region occurrence remains at the v1.4.0 frequency. In v1.4.1 each seeded range keeps its shape and height bands while its horizontal footprint is compressed to 50% of its former land area, producing steeper slopes.
 - Taiga and Stony Peaks remain centered near Y=80.
 - Normal caves and varied ravines remain. Rare mega-caves are approximately
   92–168 blocks across and 30–56 blocks tall, with overlapping irregular lobes.
@@ -131,7 +168,7 @@ Mouse       Look
 Space       Jump / fly upward
 Shift       Fly downward
 Left click  Break / attack
-Right click Place / use jukebox
+Right click Place / use jukebox / set Respawn Block
 Q           Drop selected item
 G           Eat raw meat
 T           Chat
@@ -143,8 +180,8 @@ Esc         Settings / pause
 Multiplayer persistence
 -----------------------
 Each named multiplayer world has its own JSON save. The server preserves block
-edits, time, operators, mobs, and player profiles including position, view angle,
-dimension, health, gamemode, inventory, and selected hotbar slot. Player physics
+edits, time, operators, mobs, dropped items, and player profiles including position, view angle,
+dimension, health, gamemode, inventory, selected hotbar slot, original spawn, and Respawn Block location. Player physics
 and position updates continue while the settings menu is open.
 
 Network notes
@@ -263,3 +300,17 @@ ALT MAZE / RAVINE / ORE / BOSS REVISION
 - Maximum rare-ore generation heights are doubled: Mellorite below Y=16, Diamond below Y=24, Gold below Y=30.
 - Boss victory returns players to the world's deterministic spawn point instead of coordinate 0,0.
 - Boss defeat is now a persistent world property in both server JSON worlds and singleplayer browser/JSON worlds. Once defeated, the Mellor Boss does not respawn in that world.
+
+IN-GAME CONFIRMATION HOTFIX
+---------------------------
+- Singleplayer no longer relies on the browser's native confirm() dialog for deleting
+  or replacing worlds.
+- Delete World now opens a MellorCraft in-game confirmation overlay with Cancel and
+  Delete World buttons, so confirmation works consistently on mobile Safari, Chrome,
+  Firefox, and desktop browsers.
+- Replacing an existing named world uses the same in-game confirmation system.
+
+Relay skin labels
+-----------------
+- The singleplayer LAN relay join screen now uses the same shirt-color labels as the multiplayer client: Blue, Green, Purple, Red, Light Blue, and Dark Green.
+- The underlying skin IDs are unchanged for protocol compatibility.

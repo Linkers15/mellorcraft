@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MellorCraft v1.4.0 Singleplayer - Mobile Input Hotfix</title>
+    <title>MellorCraft v1.4.1 Singleplayer - Mobile Input Hotfix</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Courier New', monospace; background: #000; }
@@ -171,6 +171,8 @@
         .menuBtn:hover { transform: scale(1.05); }
         .blueBtn { background: #3498db; color: white; }
         .blueBtn:hover { background: #2980b9; }
+        .redBtn { background: #c0392b; color: white; font-weight: bold; }
+        .redBtn:hover { background: #a93226; }
         .greenBtn { background: #4ecca3; color: #1a1a2e; font-weight: bold; }
         .greenBtn:hover { background: #3db892; }
         .seedLabel { margin-top: 30px; margin-bottom: 10px; font-size: 14px; color: #aaa; }
@@ -320,10 +322,44 @@
             background: rgba(20, 20, 20, 0.95); border: 2px solid #4ecca3;
             padding: 30px; border-radius: 10px; z-index: 400; color: white; pointer-events: auto;
             flex-direction: column; gap: 20px; width: 350px;
+            max-height: 86vh; overflow-y: auto; overscroll-behavior: contain;
         }
         #settingsMenu h2 { text-align: center; color: #4ecca3; margin-bottom: 10px; }
+
+        /* Browser-independent in-game confirmation dialog */
+        #gameConfirmOverlay {
+            display: none; position: fixed; inset: 0; z-index: 5000;
+            background: rgba(0,0,0,0.72); align-items: center; justify-content: center;
+            padding: 20px; pointer-events: auto; touch-action: manipulation;
+        }
+        #gameConfirmOverlay.visible { display: flex; }
+        #gameConfirmDialog {
+            width: min(420px, 92vw); max-height: 82vh; overflow-y: auto;
+            background: rgba(24,24,24,0.98); border: 2px solid #e74c3c;
+            border-radius: 10px; padding: 22px; color: white; text-align: center;
+            box-shadow: 0 12px 36px rgba(0,0,0,0.65);
+            -webkit-overflow-scrolling: touch; touch-action: pan-y;
+        }
+        #gameConfirmTitle { color: #ff6b6b; margin: 0 0 12px; font-size: 22px; }
+        #gameConfirmMessage { color: #eee; line-height: 1.45; margin-bottom: 18px; white-space: pre-wrap; }
+        #gameConfirmButtons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        #gameConfirmButtons .menuBtn { margin: 0; min-width: 130px; touch-action: manipulation; }
         .setting-group { display: flex; flex-direction: column; gap: 5px; }
         .setting-group label { font-size: 14px; color: #ccc; }
+        .lan-panel {
+            margin-top: 8px; padding: 12px; border: 1px solid #4ecca3; border-radius: 7px;
+            background: rgba(0,0,0,0.28); display: none; width: min(92vw, 470px);
+        }
+        .lan-panel.visible { display: block; }
+        .lan-panel h3 { color: #4ecca3; margin: 0 0 8px; font-size: 15px; }
+        .lan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .lan-grid .full { grid-column: 1 / -1; }
+        .lan-panel input, .lan-panel select {
+            width: 100%; padding: 9px; font-family: 'Courier New', monospace;
+            background: rgba(0,0,0,.45); color: white; border: 1px solid #666; border-radius: 5px;
+        }
+        .lan-status { color: #aaa; font-size: 12px; line-height: 1.35; margin-top: 7px; min-height: 16px; }
+        .lan-section-title { border-top: 1px solid #555; padding-top: 14px; margin-top: 4px; color: #4ecca3; font-weight: bold; }
         .setting-group select, .setting-group input[type="range"] {
             width: 100%; padding: 8px; font-family: 'Courier New', monospace;
             background: rgba(0,0,0,0.5); color: white; border: 1px solid #555; border-radius: 4px;
@@ -380,7 +416,8 @@
         #chatSendBtn, .mobile-menu-close, .mobile-only-setting { display: none; }
 
         html.mobile-mode, html.mobile-mode body {
-            overflow: hidden; overscroll-behavior: none; touch-action: none;
+            /* Keep the page itself fixed while allowing menu scroll containers to own pan gestures. */
+            overflow: hidden; overscroll-behavior: none;
         }
         html.mobile-mode #uiLayer { z-index: 60; }
         html.mobile-mode #ui {
@@ -407,9 +444,23 @@
         html.mobile-mode #deathScreen h1 { font-size: 50px; }
         html.mobile-mode #startScreen h2 { font-size: 16px; margin-bottom: 24px; text-align: center; }
         html.mobile-mode .joinField { width: 80%; max-width: 300px; padding: 12px 15px; font-size: 16px; }
-        html.mobile-mode #startScreen { touch-action: manipulation; -webkit-user-select: auto; user-select: auto; }
+        html.mobile-mode #startScreen {
+            /* iPhone-size screens can be shorter than the full world/LAN menu. */
+            justify-content: flex-start;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: max(22px, env(safe-area-inset-top)) 12px max(28px, env(safe-area-inset-bottom));
+            touch-action: pan-y;
+            overscroll-behavior-y: contain;
+            -webkit-overflow-scrolling: touch;
+            -webkit-user-select: auto;
+            user-select: auto;
+        }
         html.mobile-mode #startScreen .joinField,
         html.mobile-mode #startScreen button { touch-action: manipulation; pointer-events: auto; }
+        html.mobile-mode #settingsMenu button,
+        html.mobile-mode #settingsMenu input,
+        html.mobile-mode #settingsMenu select { pointer-events: auto; }
         html.mobile-mode #startScreen input.joinField { -webkit-user-select: text; user-select: text; }
         html.mobile-mode #startScreen input.joinField, html.mobile-mode #startScreen select.joinField { touch-action: auto; -webkit-tap-highlight-color: rgba(255,255,255,0.12); }
         html.mobile-mode #startScreen select.joinField { -webkit-user-select: auto; user-select: auto; }
@@ -451,7 +502,15 @@
         html.mobile-mode .creative-slot { width: auto; height: auto; aspect-ratio: 1; font-size: 7px; user-select: none; -webkit-user-select: none; }
         html.mobile-mode .creative-slot .slot-icon { font-size: 16px; }
         html.mobile-mode #creativeHotbar { grid-template-columns: repeat(9, 1fr); gap: 4px; padding-top: 10px; margin-top: 10px; }
-        html.mobile-mode #settingsMenu { padding: 20px; gap: 15px; width: 90%; max-width: 320px; touch-action: auto; }
+        html.mobile-mode #settingsMenu {
+            padding: 20px; gap: 15px; width: 90%; max-width: 320px;
+            max-height: calc(100dvh - max(24px, env(safe-area-inset-top)) - max(24px, env(safe-area-inset-bottom)));
+            overflow-y: auto;
+            overflow-x: hidden;
+            touch-action: pan-y;
+            overscroll-behavior-y: contain;
+            -webkit-overflow-scrolling: touch;
+        }
         html.mobile-mode #settingsMenu h2 { font-size: 18px; margin-bottom: 5px; }
         html.mobile-mode .setting-group label { font-size: 12px; }
         html.mobile-mode .mobile-only-setting { display: flex; }
@@ -462,7 +521,8 @@
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; z-index: 50;
         }
-        html.mobile-mode, html.mobile-mode body, html.mobile-mode #gameCanvas, html.mobile-mode #mobileControls {
+        /* Only the gameplay surfaces suppress browser panning. Menus retain native mobile scrolling. */
+        html.mobile-mode #gameCanvas, html.mobile-mode #mobileControls {
             touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none;
         }
         html.mobile-mode .touch-zone { position: absolute; top: 0; width: 50%; height: 100%; pointer-events: auto; touch-action: none; }
@@ -507,7 +567,7 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2 id="versionSubtitle">v1.4.0 Singleplayer - Mobile Smoothness + Input Hotfix</h2>
+        <h2 id="versionSubtitle">v1.4.1 Singleplayer - Mobile Smoothness + Input Hotfix</h2>
         <div class="seedLabel">Create or load a browser world</div>
         <input class="joinField" type="text" id="worldNameInput" maxlength="40" placeholder="World name">
         <input class="joinField" type="text" id="seedInput" placeholder="Seed (number or text)">
@@ -515,11 +575,32 @@
         <div class="btnContainer">
             <button class="menuBtn greenBtn" id="createWorldBtn">Create World</button>
             <button class="menuBtn blueBtn" id="loadWorldBtn">Load Selected</button>
+            <button class="menuBtn redBtn" id="deleteWorldBtn">Delete World</button>
         </div>
         <div class="btnContainer">
             <button class="menuBtn blueBtn" id="exportWorldBtn">Export JSON</button>
             <button class="menuBtn blueBtn" id="importWorldBtn">Import JSON</button>
+            <button class="menuBtn blueBtn" id="showLanJoinBtn">Join World</button>
             <input type="file" id="importWorldFile" accept=".json,application/json" style="display:none">
+        </div>
+        <div id="lanJoinPanel" class="lan-panel">
+            <h3>Join a Singleplayer World over LAN</h3>
+            <div class="lan-grid">
+                <input class="full" id="relayJoinAddress" value="192.168.0.1:8000" placeholder="Relay IP (host:port)">
+                <input id="lanUsernameInput" value="Player" maxlength="20" placeholder="Player name">
+                <select id="lanSkinInput" aria-label="Shirt color">
+                    <option value="steve">Blue Shirt</option>
+                    <option value="alex">Green Shirt</option>
+                    <option value="mellorite">Purple Shirt</option>
+                    <option value="ember">Red Shirt</option>
+                    <option value="frost">Light Blue Shirt</option>
+                    <option value="forest">Dark Green Shirt</option>
+                </select>
+                <button class="menuBtn blueBtn full" id="refreshRelayWorldsBtn" style="margin:0;">Find Worlds on Relay</button>
+                <select class="full" id="relayWorldSelect"><option value="">Connect to a relay first</option></select>
+                <button class="menuBtn greenBtn full" id="joinRelayWorldBtn" style="margin:0;">Join Selected World</button>
+            </div>
+            <div id="relayJoinStatus" class="lan-status">Default relay: 192.168.0.1:8000</div>
         </div>
         <div id="joinStatus">Worlds autosave to this browser. Export JSON for backups or another device.</div>
         <input type="hidden" id="usernameInput" value="Player">
@@ -531,6 +612,17 @@
     <div id="deathScreen">
         <h1>You Died!</h1>
         <button class="menuBtn greenBtn" id="respawnBtn">Respawn</button>
+    </div>
+
+    <div id="gameConfirmOverlay" role="dialog" aria-modal="true" aria-labelledby="gameConfirmTitle" aria-describedby="gameConfirmMessage">
+        <div id="gameConfirmDialog">
+            <h2 id="gameConfirmTitle">Confirm</h2>
+            <div id="gameConfirmMessage"></div>
+            <div id="gameConfirmButtons">
+                <button class="menuBtn blueBtn" id="gameConfirmCancelBtn" type="button">Cancel</button>
+                <button class="menuBtn redBtn" id="gameConfirmOkBtn" type="button">Confirm</button>
+            </div>
+        </div>
     </div>
 
     <div id="settingsMenu">
@@ -563,6 +655,14 @@
             <label>Resolution: <span id="resolutionVal">70</span>%</label>
             <input type="range" id="setResolution" min="40" max="100" step="5" value="70">
         </div>
+        <div class="lan-section-title">Open Singleplayer World to LAN</div>
+        <div class="setting-group">
+            <label>Relay Server IP:</label>
+            <input type="text" id="relayHostAddress" value="192.168.0.1:8000" placeholder="192.168.0.1:8000">
+        </div>
+        <button class="menuBtn blueBtn" id="openLanBtn" style="width:100%; margin:0;">Open World to LAN</button>
+        <button class="menuBtn redBtn" id="closeLanBtn" style="width:100%; margin:0; display:none;">Close LAN World</button>
+        <div id="relayHostStatus" class="lan-status">Private until opened to a relay.</div>
         <button class="menuBtn greenBtn" id="closeSettingsBtn" style="width:100%; margin: 10px 0 0 0;">Resume Game</button>
     </div>
 
@@ -694,7 +794,7 @@
         const isIPhonePlaying = /iPhone|iPod/i.test(navigator.userAgent);
         document.documentElement.classList.toggle('mobile-mode', isMobilePlaying);
         if (isMobilePlaying) {
-            document.getElementById('versionSubtitle').textContent = 'v1.4.0 iPhone Smoothness + Portal Fix';
+            document.getElementById('versionSubtitle').textContent = 'v1.4.1 iPhone Smoothness + Portal Fix';
             document.getElementById('positionLabel').textContent = 'Pos:';
             document.getElementById('gamemodeLabel').textContent = 'Mode:';
             const mobileDefaultDistance = isIOSDevice ? 2 : 4;
@@ -719,11 +819,14 @@
         let bossDimensionEnteredAt = 0;
         let lastBossSpawnRequest = 0;
         let bossDefeated = false;
+        let playerOriginalSpawn = null;
+        let playerRespawnPoint = null;
 
         // Config
         const CHUNK_SIZE = 16;
         const WORLD_HEIGHT = 200;
         const WATER_LEVEL = 32; // retained only for legacy-save compatibility
+        const MOUNTAIN_XZ_SCALE = Math.SQRT1_2; // v1.4.1: same range shape at 50% X/Z land area
         const ALT_WORLD_HEIGHT = 50;
         function getDimensionHeight(dim = currentDimension) { return dim === 1 ? ALT_WORLD_HEIGHT : WORLD_HEIGHT; }
         let RENDER_DISTANCE = isIOSDevice ? 2 : (isMobilePlaying ? 4 : 6);
@@ -791,6 +894,20 @@
         let singleplayerWorldName = '';
         let singleplayerAutosaveTimer = 0;
         let singleplayerDirty = false;
+        let singleplayerNetworkMode = 'local'; // local | lan-host | lan-guest
+        let singleplayerLanProfiles = {};
+        let singleplayerOperators = new Set(['player']);
+        let relaySocket = null;
+        let relayWorldId = '';
+        let relayGuestId = '';
+        let relayHostConnected = false;
+        let integratedStateBroadcastTimer = 0;
+        const integratedPlayers = new Map();
+        const integratedDamageLocks = new Map();
+        const integratedAttackCooldowns = new Map();
+        const integratedMobAttackCooldowns = new Map();
+        const integratedMobEnvironmentCooldowns = new Map();
+        const SWORD_DAMAGE = { 202:4, 212:5, 222:6, 232:5, 242:8, 252:10 };
 
         function safeStorageGet(key) {
             try { return window.localStorage ? window.localStorage.getItem(key) : null; }
@@ -800,6 +917,14 @@
         function safeStorageSet(key, value) {
             try { if (window.localStorage) window.localStorage.setItem(key, value); }
             catch (_) {}
+        }
+        function safeStorageRemove(key) { try { if(window.localStorage) window.localStorage.removeItem(key); } catch(_){} }
+        function exitLanGuestToMenu(reason='The LAN world is no longer available.') {
+            if(singleplayerNetworkMode!=='lan-guest')return;
+            safeStorageSet('mellorcraftLanExitNotice',String(reason));
+            multiplayerConnected=false;setConnectionBadge(false);
+            try{if(relaySocket)relaySocket.close();}catch(_){}
+            window.location.reload();
         }
 
         function defaultServerHost() {
@@ -838,67 +963,454 @@
         function setConnectionBadge(connected) {
             const badge = document.getElementById('connectionBadge');
             if (!badge) return;
-            badge.textContent = connected ? 'Singleplayer' : 'Offline';
-            badge.className = connected ? 'connected' : 'disconnected';
+            if (!connected) {
+                badge.textContent = 'Offline'; badge.className = 'disconnected'; return;
+            }
+            badge.textContent = singleplayerNetworkMode === 'lan-host' ? 'LAN Host' :
+                                singleplayerNetworkMode === 'lan-guest' ? 'LAN Guest' : 'Singleplayer';
+            badge.className = 'connected';
         }
 
-        function applySingleplayerMobHit(amount = 1) {
-            if (player.gamemode !== 'survival' || player.health <= 0 || player.invincibleTime > 0) return false;
-            player.health = Math.max(0, player.health - Math.max(1, Number(amount) || 1));
-            player.invincibleTime = 0.7;
-            player.timeSinceHit = 0;
-            updateHealthBar();
-            singleplayerDirty = true;
+        function relayStatus(elementId, message, isError=false) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            el.textContent = message;
+            el.style.color = isError ? '#ff6b6b' : '#aaa';
+        }
+
+        function parseRelayAddress(raw) {
+            let value = String(raw || '').trim() || '192.168.0.1:8000';
+            value = value.replace(/^wss?:\/\//i,'').replace(/^https?:\/\//i,'').split('/')[0];
+            let host=value, port=8000;
+            if (value.startsWith('[')) {
+                const close=value.indexOf(']');
+                if (close > 0) {
+                    host=value.slice(1,close);
+                    if (value.slice(close+1).startsWith(':')) port=Number(value.slice(close+2))||8000;
+                }
+            } else if ((value.match(/:/g)||[]).length === 1) {
+                const parts=value.split(':'); host=parts[0]||'192.168.0.1'; port=Number(parts[1])||8000;
+            }
+            return {host,port,url:`ws://${host.includes(':')?'['+host+']':host}:${port}`};
+        }
+
+        function relaySend(message) {
+            if (!relaySocket || relaySocket.readyState !== WebSocket.OPEN) return false;
+            relaySocket.send(JSON.stringify(message));
             return true;
+        }
+
+        function integratedPublicPlayer(state) {
+            return { id:state.id, username:state.username, skin:state.skin, x:state.x, y:state.y, z:state.z,
+                yaw:state.yaw, pitch:state.pitch, dimension:state.dimension, health:state.health,
+                gamemode:state.gamemode, heldItem:state.heldItem, isOperator:Boolean(state.isOperator) };
+        }
+
+        function integratedLocalState() {
+            const slot = player && player.inventory ? player.inventory[player.selectedSlot] : null;
+            return {
+                id:localClientId || 'singleplayer', username:localUsername || 'Player', skin:localSkin || 'steve',
+                x:Number(player?.x)||0.5, y:Number(player?.y)||50, z:Number(player?.z)||0.5,
+                yaw:Number(player?.yaw)||0, pitch:Number(player?.pitch)||0, dimension:currentDimension,
+                health:Number(player?.health)||10, gamemode:player?.gamemode||'survival', heldItem:slot?Number(slot.id)||0:0,
+                selectedSlot:Number(player?.selectedSlot)||0,
+                inventory:(player?.inventory||[]).map(item=>({id:Number(item?.id)||0,count:Number(item?.count)||0})),
+                originalSpawn:playerOriginalSpawn?{...playerOriginalSpawn}:null,
+                respawnPoint:playerRespawnPoint?{...playerRespawnPoint}:null,
+                isOperator:true, deviceClass:isMobilePlaying?'mobile':'desktop'
+            };
+        }
+
+        function integratedRememberProfile(state) {
+            if (!state || state.id === localClientId || !state.username) return;
+            singleplayerLanProfiles[String(state.username).toLowerCase()] = {
+                username:state.username, skin:state.skin, x:state.x, y:state.y, z:state.z, yaw:state.yaw, pitch:state.pitch,
+                dimension:state.dimension, health:state.health, gamemode:state.gamemode, heldItem:state.heldItem,
+                selectedSlot:state.selectedSlot, inventory:Array.isArray(state.inventory)?state.inventory.map(v=>({...v})):[],
+                originalSpawn:state.originalSpawn?{...state.originalSpawn}:null,
+                respawnPoint:state.respawnPoint?{...state.respawnPoint}:null
+            };
+            singleplayerDirty = true;
+        }
+
+        function integratedUniqueUsername(requested) {
+            const base=(String(requested||'Player').trim()||'Player').slice(0,20);
+            const used=new Set([...integratedPlayers.values()].map(p=>String(p.username).toLowerCase()));
+            if (!used.has(base.toLowerCase())) return base;
+            for (let n=2;n<1000;n++) {
+                const suffix='_'+n, candidate=base.slice(0,Math.max(1,20-suffix.length))+suffix;
+                if (!used.has(candidate.toLowerCase())) return candidate;
+            }
+            return 'Player_'+Math.random().toString(36).slice(2,8);
+        }
+
+        function integratedRecomputeMobHosts() {
+            const next={0:null,1:null,2:null};
+            for (const dim of [0,1,2]) {
+                const candidates=[...integratedPlayers.values()].filter(p=>p.dimension===dim && p.health>0);
+                candidates.sort((a,b)=>(a.deviceClass==='desktop'?0:1)-(b.deviceClass==='desktop'?0:1));
+                next[dim]=candidates.length?candidates[0].id:null;
+            }
+            const changed=[0,1,2].some(dim=>mobHosts[dim]!==next[dim]);
+            mobHosts=next;
+            if (changed) integratedBroadcast({type:'mob_hosts',hosts:{'0':next[0],'1':next[1],'2':next[2]}});
+            return changed;
+        }
+
+        function integratedSend(clientId, data) {
+            if (!data || !clientId) return;
+            if (clientId === localClientId && singleplayerNetworkMode !== 'lan-guest') {
+                handleNetworkMessage({data:JSON.stringify(data)});
+                return;
+            }
+            if (singleplayerNetworkMode === 'lan-host') relaySend({type:'host_send',guestId:clientId,payload:data});
+        }
+
+        function integratedBroadcast(data, excludeId=null) {
+            if (localClientId && localClientId !== excludeId && singleplayerNetworkMode !== 'lan-guest') integratedSend(localClientId,data);
+            if (singleplayerNetworkMode === 'lan-host') relaySend({type:'host_broadcast',excludeGuestId:excludeId===localClientId?'':excludeId||'',payload:data});
+        }
+
+        function integratedPlayerFor(clientId) {
+            if (clientId === localClientId && singleplayerNetworkMode !== 'lan-guest') {
+                const live=integratedLocalState();
+                const existing=integratedPlayers.get(clientId)||{};
+                const merged={...existing,...live}; integratedPlayers.set(clientId,merged); return merged;
+            }
+            return integratedPlayers.get(clientId)||null;
+        }
+
+        function integratedDamagePlayer(victim, damage, sourceName, dx, dz, vertical=4) {
+            if (!victim || victim.gamemode!=='survival' || victim.health<=0) return;
+            const now=performance.now()/1000;
+            if (now < (integratedDamageLocks.get(victim.id)||0)) return;
+            victim.health=Math.max(0,victim.health-Math.max(0,Number(damage)||0));
+            integratedDamageLocks.set(victim.id,now+0.45);
+            let horizontal=Math.hypot(dx,dz);
+            if (horizontal<0.01) { dx=0; dz=-1; horizontal=1; }
+            integratedSend(victim.id,{type:'player_hit',health:victim.health,attacker:sourceName,
+                knockback:{x:dx/horizontal*8,z:dz/horizontal*8,vertical,duration:0.35}});
+            integratedBroadcast({type:'player_damaged',playerId:victim.id,health:victim.health});
+            singleplayerDirty=true;
+        }
+
+        function integratedRemoveMob(mob, reason='despawn', killerId=null) {
+            if (!mob) return;
+            const type=mob.type || MOB_TYPES[mob.typeKey];
+            const x=mob.x,y=mob.y,z=mob.z,dimension=mob.dimension,typeKey=mob.typeKey;
+            removeMobLocal(mob.id);
+            integratedBroadcast({type:'mob_removed',mobId:mob.id,reason});
+            if (reason==='player_kill' && killerId && type && !type.isBoss && ['PIG','COW','CAMEL','BEAR'].includes(typeKey)) {
+                integratedSpawnItem(ITEMS.RAW_MEAT,1,x,y+0.4,z,dimension,0,0,0);
+            }
+            if (reason==='player_kill' && type && type.isBoss) {
+                bossDefeated=true;
+                integratedBroadcast({type:'system',message:'The Mellor Boss was defeated!'});
+                integratedBroadcast({type:'boss_defeated',bossDefeated:true});
+            }
+            singleplayerDirty=true;
+        }
+
+        function integratedSpawnItem(itemId,count,x,y,z,dimension,vx=0,vy=0,vz=0) {
+            const item={id:`sp_item_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`,
+                itemId:Number(itemId)||1,count:Math.max(1,Number(count)||1),x,y,z,dimension,vx,vy,vz,age:0,
+                targetX:x,targetY:y,targetZ:z};
+            upsertDroppedItem(item);
+            const stored=droppedItems.get(item.id); if(stored) Object.assign(stored,item);
+            integratedBroadcast({type:'item_spawned',item:{...item}});
+            singleplayerDirty=true;
+            return item;
+        }
+
+        function integratedSpawnMatches(point,dimension,x,y,z) {
+            return point && Math.floor(Number(point.dimension)||0)===dimension && Math.floor(Number(point.x))===x && Math.floor(Number(point.y))===y && Math.floor(Number(point.z))===z;
+        }
+
+        function integratedResetRespawnsForBrokenBlock(dimension,x,y,z) {
+            let changed=false;
+            for (const state of integratedPlayers.values()) {
+                if (!integratedSpawnMatches(state.respawnPoint,dimension,x,y,z)) continue;
+                state.respawnPoint=null; changed=true;
+                if (state.id===localClientId) playerRespawnPoint=null;
+                integratedSend(state.id,{type:'respawn_point_update',respawnPoint:null,originalSpawn:state.originalSpawn||null,message:'Your respawn block was broken. Respawn reset to your original world spawn.'});
+            }
+            for (const profile of Object.values(singleplayerLanProfiles)) {
+                if (profile && integratedSpawnMatches(profile.respawnPoint,dimension,x,y,z)) { profile.respawnPoint=null; changed=true; }
+            }
+            if (changed) singleplayerDirty=true;
+        }
+
+        function integratedFindPlayerByUsername(username) {
+            const wanted=String(username||'').trim().toLowerCase();
+            return [...integratedPlayers.values()].find(p=>String(p.username||'').toLowerCase()===wanted)||null;
+        }
+
+        function integratedSetOperator(username,enabled,requesterId) {
+            const cleaned=String(username||'').trim();
+            if(!cleaned){integratedSend(requesterId,{type:'system',message:`Usage: /${enabled?'op':'deop'} <username>`});return;}
+            const target=integratedFindPlayerByUsername(cleaned);
+            const canonical=(target?.username||cleaned).slice(0,20);
+            const key=canonical.toLowerCase();
+            if (!enabled && target?.id===localClientId) { integratedSend(requesterId,{type:'system',message:'The LAN world host cannot be deopped.'}); return; }
+            if(enabled)singleplayerOperators.add(key);else singleplayerOperators.delete(key);
+            if(target){
+                target.isOperator=enabled;
+                if(!enabled&&target.gamemode!=='survival'){target.gamemode='survival';target.health=10;integratedSend(target.id,{type:'gamemode_update',gamemode:'survival'});}
+                integratedSend(target.id,{type:'permission_update',isOperator:enabled});
+                integratedBroadcast({type:'system',message:`${target.username} ${enabled?'is now':'is no longer'} a server operator.`});
+            } else integratedSend(requesterId,{type:'system',message:`${enabled?'Added':'Removed'} offline operator entry for ${canonical}.`});
+            singleplayerDirty=true;
+        }
+
+        function integratedProcessServerCommand(actor,command) {
+            if(!actor || actor.id!==localClientId){integratedSend(actor?.id,{type:'error',message:'Only the LAN world host can run server-management commands.'});return;}
+            const parts=String(command||'').trim().split(/\s+/),name=(parts.shift()||'').toLowerCase(),arg=parts.join(' ');
+            if(name==='/op')return integratedSetOperator(arg,true,actor.id);
+            if(name==='/deop')return integratedSetOperator(arg,false,actor.id);
+            if(name==='/ops'){const ops=[...singleplayerOperators].sort();integratedSend(actor.id,{type:'system',message:`Operators: ${ops.length?ops.join(', '):'none'}`});return;}
+            if(name==='/list'){const names=[...integratedPlayers.values()].map(p=>`${p.username}${p.isOperator?' [OP]':''}`);integratedSend(actor.id,{type:'system',message:`Players (${names.length}): ${names.join(', ')}`});return;}
+            if(name==='/mobs'){const counts=[0,1,2].map(dim=>mobs.filter(m=>m.dimension===dim).length);integratedSend(actor.id,{type:'system',message:`Mobs: overworld=${counts[0]}, alternate=${counts[1]}, boss=${counts[2]}`});return;}
+            integratedSend(actor.id,{type:'system',message:'Server commands: /op <username>, /deop <username>, /ops, /list, /mobs'});
+        }
+
+        function integratedServerReceive(clientId,payload) {
+            if (!payload || typeof payload!=='object') return false;
+            const type=String(payload.type||'');
+            const actor=integratedPlayerFor(clientId);
+            if (!actor && type!=='player_update') return false;
+            const now=performance.now()/1000;
+
+            if (type==='player_update') {
+                const state=actor || {id:clientId,username:'Player',skin:'steve',health:10,gamemode:'survival',deviceClass:'desktop'};
+                state.x=Math.max(-2000000,Math.min(2000000,Number(payload.x)||0));
+                state.y=Math.max(-100,Math.min(1000,Number(payload.y)||0));
+                state.z=Math.max(-2000000,Math.min(2000000,Number(payload.z)||0));
+                state.yaw=Number(payload.yaw)||0; state.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,Number(payload.pitch)||0));
+                state.dimension=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0)));
+                if (now >= (integratedDamageLocks.get(clientId)||0)) state.health=Math.max(0,Math.min(10,Number(payload.health)||state.health||10));
+                state.heldItem=Math.max(0,Math.min(255,Math.floor(Number(payload.heldItem)||0)));
+                if (Array.isArray(payload.inventory)) state.inventory=payload.inventory.slice(0,30).map(v=>({id:Math.max(0,Math.min(255,Number(v?.id)||0)),count:Math.max(0,Math.min(100,Number(v?.count)||0))}));
+                state.selectedSlot=Math.max(0,Math.min(8,Math.floor(Number(payload.selectedSlot)||0)));
+                if (state.inventory && state.inventory[state.selectedSlot]) state.heldItem=state.inventory[state.selectedSlot].count>0?state.inventory[state.selectedSlot].id:0;
+                if(payload.originalSpawn&&typeof payload.originalSpawn==='object')state.originalSpawn={...payload.originalSpawn};
+                if(payload.respawnPoint!==undefined)state.respawnPoint=payload.respawnPoint?{...payload.respawnPoint}:null;
+                integratedPlayers.set(clientId,state); integratedRecomputeMobHosts(); singleplayerDirty=true; return true;
+            }
+            if (type==='block_change') {
+                const dim=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0))),x=Math.floor(Number(payload.x)),y=Math.floor(Number(payload.y)),z=Math.floor(Number(payload.z));
+                const previous=Number.isFinite(Number(payload.previousType))?Number(payload.previousType):getBlock(x,y,z,dim);
+                networkApplyingBlock=true; try { setBlock(x,y,z,payload.blockType,dim); } finally { networkApplyingBlock=false; }
+                if(previous===BLOCKS.RESPAWN_BLOCK&&Number(payload.blockType)!==BLOCKS.RESPAWN_BLOCK)integratedResetRespawnsForBrokenBlock(dim,x,y,z);
+                integratedBroadcast({type:'block_update',playerId:clientId,dimension:dim,x,y,z,blockType:Number(payload.blockType)||0});
+                return true;
+            }
+            if (type==='block_batch') {
+                const clean=[];
+                networkApplyingBlock=true;
+                try { for (const c of (Array.isArray(payload.changes)?payload.changes:[]).slice(0,256)) { const dim=Math.max(0,Math.min(2,Math.floor(Number(c.dimension)||0))),x=Math.floor(Number(c.x)),y=Math.floor(Number(c.y)),z=Math.floor(Number(c.z)),previous=getBlock(x,y,z,dim); setBlock(x,y,z,c.blockType,dim); if(previous===BLOCKS.RESPAWN_BLOCK&&Number(c.blockType)!==BLOCKS.RESPAWN_BLOCK)integratedResetRespawnsForBrokenBlock(dim,x,y,z); clean.push({dimension:dim,x,y,z,blockType:Number(c.blockType)||0}); } }
+                finally { networkApplyingBlock=false; }
+                if (clean.length) integratedBroadcast({type:'block_batch_update',playerId:clientId,changes:clean},clientId);
+                return true;
+            }
+            if (type==='attack_player') {
+                const victim=integratedPlayers.get(String(payload.targetId||''));
+                const key='player:'+clientId;
+                if (!victim || victim.id===clientId || now<(integratedAttackCooldowns.get(key)||0) || actor.gamemode==='spectator' || actor.dimension!==victim.dimension) return true;
+                integratedAttackCooldowns.set(key,now+0.4);
+                const dx=victim.x-actor.x,dy=victim.y-actor.y,dz=victim.z-actor.z;
+                if (Math.hypot(dx,dy,dz)<=4.5) integratedDamagePlayer(victim,SWORD_DAMAGE[actor.heldItem]||1,actor.username,dx,dz);
+                return true;
+            }
+            if (type==='attack_mob') {
+                const mob=mobById.get(String(payload.mobId||'')); const key='mob:'+clientId;
+                if (!mob || now<(integratedAttackCooldowns.get(key)||0) || actor.gamemode==='spectator' || actor.dimension!==mob.dimension) return true;
+                integratedAttackCooldowns.set(key,now+0.4);
+                const dx=mob.x-actor.x,dy=mob.y-actor.y,dz=mob.z-actor.z;
+                if (Math.hypot(dx,dy,dz)>4.5) return true;
+                const damage=SWORD_DAMAGE[actor.heldItem]||1; mob.health=Math.max(0,mob.health-damage);
+                const horizontal=Math.hypot(dx,dz)||1;
+                integratedBroadcast({type:'mob_damaged',mobId:mob.id,health:mob.health,
+                    knockback:{x:dx/horizontal*8,z:dz/horizontal*8,vertical:4,duration:0.3},attackerId:clientId});
+                if (mob.health<=0) integratedRemoveMob(mob,'player_kill',clientId);
+                singleplayerDirty=true; return true;
+            }
+            if (type==='mob_attack_player') {
+                const mob=mobById.get(String(payload.mobId||'')); const victim=integratedPlayers.get(String(payload.targetId||''));
+                if (!mob || !victim || mobHosts[mob.dimension]!==clientId || !mob.type?.hostile || victim.dimension!==mob.dimension) return true;
+                if (now<(integratedMobAttackCooldowns.get(mob.id)||0)) return true;
+                const dx=victim.x-mob.x,dy=victim.y-mob.y,dz=victim.z-mob.z;
+                if (Math.hypot(dx,dy,dz)>2.2) return true;
+                integratedMobAttackCooldowns.set(mob.id,now+1.25);
+                integratedDamagePlayer(victim,Number(mob.type.damage)||1,mob.type.name||mob.typeKey,dx,dz); return true;
+            }
+            if (type==='mob_spawn') {
+                const dim=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0)));
+                if (mobHosts[dim]!==clientId || !MOB_TYPES[payload.typeKey] || mobs.filter(m=>m.dimension===dim).length>=25) return true;
+                let id=String(payload.id||''); if(!/^[A-Za-z0-9_-]{1,64}$/.test(id)||mobById.has(id)) id=`m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
+                const typeObj=MOB_TYPES[payload.typeKey];
+                const mob=upsertSharedMob({id,typeKey:payload.typeKey,x:Number(payload.x)||0,y:Number(payload.y)||50,z:Number(payload.z)||0,dimension:dim,health:typeObj.health,bodyRotation:Number(payload.bodyRotation)||0,headRotation:Number(payload.headRotation)||0});
+                if(mob){mob.health=typeObj.health;integratedBroadcast({type:'mob_spawned',mob:{id:mob.id,typeKey:mob.typeKey,x:mob.x,y:mob.y,z:mob.z,dimension:mob.dimension,health:mob.health,maxHealth:typeObj.maxHealth||typeObj.health,bodyRotation:mob.bodyRotation,headRotation:mob.headRotation,vx:0,vy:0,vz:0}});singleplayerDirty=true;}
+                return true;
+            }
+            if (type==='mob_update') {
+                for(const u of (Array.isArray(payload.mobs)?payload.mobs:[]).slice(0,80)){
+                    const mob=mobById.get(String(u.id||'')); if(!mob||mobHosts[mob.dimension]!==clientId)continue;
+                    mob.x=Number.isFinite(Number(u.x))?Number(u.x):mob.x; mob.y=Number.isFinite(Number(u.y))?Number(u.y):mob.y; mob.z=Number.isFinite(Number(u.z))?Number(u.z):mob.z;
+                    mob.bodyRotation=Number.isFinite(Number(u.bodyRotation))?Number(u.bodyRotation):mob.bodyRotation; mob.headRotation=Number.isFinite(Number(u.headRotation))?Number(u.headRotation):mob.headRotation;
+                    mob.vx=Math.max(-30,Math.min(30,Number(u.vx)||0)); mob.vy=Math.max(-50,Math.min(50,Number(u.vy)||0)); mob.vz=Math.max(-30,Math.min(30,Number(u.vz)||0));
+                    mob.targetX=mob.x;mob.targetY=mob.y;mob.targetZ=mob.z;mob.targetBodyRotation=mob.bodyRotation;mob.targetHeadRotation=mob.headRotation;
+                }
+                singleplayerDirty=true; return true;
+            }
+            if (type==='mob_environment_damage') {
+                const mob=mobById.get(String(payload.mobId||'')); if(!mob||mobHosts[mob.dimension]!==clientId||now<(integratedMobEnvironmentCooldowns.get(mob.id)||0))return true;
+                integratedMobEnvironmentCooldowns.set(mob.id,now+0.2); const amount=Math.max(0,Math.min(10,Number(payload.amount)||0)); if(amount<=0)return true;
+                mob.health=Math.max(0,mob.health-amount); integratedBroadcast({type:'mob_damaged',mobId:mob.id,health:mob.health}); if(mob.health<=0)integratedRemoveMob(mob,'environment'); singleplayerDirty=true; return true;
+            }
+            if (type==='mob_remove') {
+                const mob=mobById.get(String(payload.mobId||'')); if(mob&&mobHosts[mob.dimension]===clientId)integratedRemoveMob(mob,['despawn','void','admin'].includes(payload.reason)?payload.reason:'despawn'); return true;
+            }
+            if (type==='drop_item') {
+                if(actor.gamemode==='spectator'||actor.health<=0)return true; const itemId=Math.max(1,Math.min(255,Math.floor(Number(payload.itemId)||1)));
+                const lx=-Math.sin(actor.yaw),lz=-Math.cos(actor.yaw); integratedSpawnItem(itemId,1,actor.x+lx*.8,actor.y+1.1,actor.z+lz*.8,actor.dimension,lx*3.5,1.2,lz*3.5); return true;
+            }
+            if (type==='request_boss_spawn') {
+                if(!bossDefeated&&actor.dimension===2&&!mobs.some(m=>m.typeKey==='MELLOR_BOSS'&&m.dimension===2)){
+                    const id=`boss_${Date.now().toString(36)}`; const t=MOB_TYPES.MELLOR_BOSS;
+                    const mob=upsertSharedMob({id,typeKey:'MELLOR_BOSS',x:0,y:52,z:10,dimension:2,health:t.health,bodyRotation:0,headRotation:0});
+                    integratedBroadcast({type:'mob_spawned',mob:{id:mob.id,typeKey:mob.typeKey,x:mob.x,y:mob.y,z:mob.z,dimension:2,health:mob.health,maxHealth:t.health,bodyRotation:0,headRotation:0,vx:0,vy:0,vz:0}});
+                } return true;
+            }
+            if (type==='set_original_spawn') {
+                const p=payload.point||{}; if([p.x,p.y,p.z].every(v=>Number.isFinite(Number(v)))){actor.originalSpawn={x:Number(p.x),y:Number(p.y),z:Number(p.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(p.dimension)||0)))};singleplayerDirty=true;} return true;
+            }
+            if (type==='set_respawn_point') {
+                const p=normalizePlayerSpawnPoint(payload.point); if(!p||getBlock(p.x,p.y,p.z,p.dimension)!==BLOCKS.RESPAWN_BLOCK){integratedSend(clientId,{type:'error',message:'That respawn block is no longer present.'});return true;}
+                actor.respawnPoint={...p}; if(actor.id===localClientId)playerRespawnPoint={...p}; integratedSend(clientId,{type:'respawn_point_update',respawnPoint:{...p},originalSpawn:actor.originalSpawn||null});singleplayerDirty=true;return true;
+            }
+            if (type==='server_command') { integratedProcessServerCommand(actor,payload.command); return true; }
+            if (type==='chat') { const message=String(payload.message||'').trim().slice(0,200); if(message)integratedBroadcast({type:'chat',username:actor.username,message}); return true; }
+            if (type==='request_gamemode') {
+                const mode=String(payload.gamemode||''); if(!actor.isOperator){integratedSend(clientId,{type:'error',message:'Only the LAN world host can switch gamemode.'});return true;}
+                if(['survival','creative','spectator'].includes(mode)){actor.gamemode=mode;if(mode!=='survival')actor.health=10;integratedSend(clientId,{type:'gamemode_update',gamemode:mode});integratedBroadcast({type:'system',message:`${actor.username} changed gamemode to ${mode}.`});}
+                return true;
+            }
+            if (type==='set_time') {
+                if(!actor.isOperator){integratedSend(clientId,{type:'error',message:'Only the LAN world host can set the world time.'});return true;}
+                const hour=Number(payload.hour); if(Number.isFinite(hour)&&hour>=0&&hour<=24){worldTime=Math.floor(worldTime)+hour/24;integratedBroadcast({type:'system',message:`${actor.username} set the time to ${hour}:00`});singleplayerDirty=true;} return true;
+            }
+            if (type==='respawn') {
+                let pos=null,p=normalizePlayerSpawnPoint(actor.respawnPoint);
+                if(p&&getBlock(p.x,p.y,p.z,p.dimension)===BLOCKS.RESPAWN_BLOCK)pos=spawnPositionFromPoint(p);else {actor.respawnPoint=null;const o=actor.originalSpawn;if(o&&[o.x,o.y,o.z].every(v=>Number.isFinite(Number(v))))pos={x:Number(o.x),y:Number(o.y),z:Number(o.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(o.dimension)||0)))};}
+                if(!pos)pos={x:Number(payload.x)||actor.x,y:Number(payload.y)||actor.y,z:Number(payload.z)||actor.z,dimension:Math.max(0,Math.min(2,Number(payload.dimension)||0))};
+                actor.x=pos.x;actor.y=pos.y;actor.z=pos.z;actor.dimension=pos.dimension;actor.health=10;integratedDamageLocks.set(actor.id,now+2);integratedSend(actor.id,{type:'respawn_position',position:pos});integratedRecomputeMobHosts();return true;
+            }
+            return true;
+        }
+
+        function integratedInitializeHost() {
+            integratedPlayers.clear(); integratedDamageLocks.clear(); integratedAttackCooldowns.clear(); integratedMobAttackCooldowns.clear(); integratedMobEnvironmentCooldowns.clear();
+            const state=integratedLocalState(); state.isOperator=true; integratedPlayers.set(localClientId,state); integratedRecomputeMobHosts();
+        }
+
+        function integratedGuestJoined(info) {
+            if (singleplayerNetworkMode!=='lan-host' || !info?.guestId) return;
+            const username=integratedUniqueUsername(info.username||'Player');
+            const profile=singleplayerLanProfiles[String(username).toLowerCase()];
+            const isOp=singleplayerOperators.has(String(username).toLowerCase());
+            const state={id:info.guestId,username,skin:PLAYER_SKINS[info.skin]?info.skin:'steve',x:0.5,y:50,z:0.5,yaw:0,pitch:0,dimension:0,health:10,gamemode:'survival',heldItem:0,selectedSlot:0,inventory:Array.from({length:30},()=>({id:0,count:0})),originalSpawn:null,respawnPoint:null,isOperator:isOp,deviceClass:info.deviceClass==='mobile'?'mobile':'desktop'};
+            if(profile)Object.assign(state,JSON.parse(JSON.stringify(profile)),{id:info.guestId,username,isOperator:isOp,deviceClass:state.deviceClass});
+            integratedPlayers.set(info.guestId,state); integratedRecomputeMobHosts();
+            const blocks=snapshotFromChunkEdits(serializeChunkEdits());
+            integratedSend(info.guestId,{type:'welcome',protocol:4,negotiatedProtocol:4,clientId:info.guestId,username,seed:WORLD_SEED,worldName:singleplayerWorldName,worldTime,dayLength:DAY_LENGTH,bossDefeated:Boolean(bossDefeated),isOperator:isOp,blocks,playerState:profile?{...profile}:null,players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
+            integratedBroadcast({type:'player_joined',player:integratedPublicPlayer(state)},info.guestId);
+            integratedBroadcast({type:'mob_hosts',hosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
+        }
+
+        function integratedGuestLeft(guestId) {
+            const state=integratedPlayers.get(guestId); if(!state)return; integratedRememberProfile(state); integratedPlayers.delete(guestId); integratedBroadcast({type:'player_left',playerId:guestId}); integratedRecomputeMobHosts();
+        }
+
+        function integratedTick(dt) {
+            if (singleplayerNetworkMode==='lan-guest') return;
+            const local=integratedLocalState(); integratedPlayers.set(localClientId,{...(integratedPlayers.get(localClientId)||{}),...local,isOperator:true});
+            for(const item of [...droppedItems.values()]){
+                item.age=(Number(item.age)||0)+dt; item.vx=Number(item.vx)||0;item.vy=Number(item.vy)||0;item.vz=Number(item.vz)||0;
+                item.x+=item.vx*dt;item.y+=item.vy*dt;item.z+=item.vz*dt;item.vx*=Math.max(0,1-dt*3);item.vz*=Math.max(0,1-dt*3);item.vy*=Math.max(0,1-dt*4);item.targetX=item.x;item.targetY=item.y;item.targetZ=item.z;
+                let remove=false;
+                if(item.age>300)remove=true;
+                else if(item.age>=.75){for(const p of integratedPlayers.values()){if(p.dimension!==item.dimension||p.health<=0||p.gamemode==='spectator')continue;const dx=p.x-item.x,dy=(p.y+.8)-item.y,dz=p.z-item.z;if(dx*dx+dy*dy+dz*dz<=2.25){integratedSend(p.id,{type:'give_item',itemId:item.itemId,count:item.count});remove=true;break;}}}
+                if(remove){droppedItems.delete(item.id);integratedBroadcast({type:'item_removed',itemId:item.id});singleplayerDirty=true;}
+            }
+            integratedStateBroadcastTimer+=dt;
+            if(integratedStateBroadcastTimer>=.1){integratedStateBroadcastTimer=0;integratedRecomputeMobHosts();integratedBroadcast({type:'world_state',worldTime,bossDefeated:Boolean(bossDefeated),players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});}
+        }
+
+        function openWorldToLan() {
+            if (!gameStarted || singleplayerNetworkMode==='lan-guest') return;
+            if (relaySocket) { try{relaySocket.close();}catch(_){} relaySocket=null; }
+            const address=parseRelayAddress(document.getElementById('relayHostAddress').value);
+            safeStorageSet('mellorcraftRelayAddress',`${address.host}:${address.port}`);
+            relayStatus('relayHostStatus',`Connecting to ${address.host}:${address.port}...`);
+            const ws=new WebSocket(address.url); relaySocket=ws;
+            ws.addEventListener('open',()=>{ if(relaySocket!==ws)return; relaySend({type:'host_world',worldName:singleplayerWorldName,seed:WORLD_SEED,protocol:1}); });
+            ws.addEventListener('message',event=>{
+                let msg;try{msg=JSON.parse(event.data)}catch(_){return;}
+                if(msg.type==='hosted'){relayWorldId=msg.worldId||'';relayHostConnected=true;singleplayerNetworkMode='lan-host';setConnectionBadge(true);document.getElementById('openLanBtn').style.display='none';document.getElementById('closeLanBtn').style.display='block';relayStatus('relayHostStatus',`Open to LAN as “${singleplayerWorldName}” on ${address.host}:${address.port}.`);return;}
+                if(msg.type==='guest_joined'){integratedGuestJoined(msg);return;}
+                if(msg.type==='guest_left'){integratedGuestLeft(msg.guestId);return;}
+                if(msg.type==='guest_message'){integratedServerReceive(msg.guestId,msg.payload||{});return;}
+                if(msg.type==='error')relayStatus('relayHostStatus',msg.message||'Relay error',true);
+            });
+            ws.addEventListener('close',()=>{if(relaySocket!==ws)return;relayHostConnected=false;relayWorldId=''; if(singleplayerNetworkMode==='lan-host'){for(const id of [...integratedPlayers.keys()])if(id!==localClientId)integratedGuestLeft(id);singleplayerNetworkMode='local';setConnectionBadge(true);}document.getElementById('openLanBtn').style.display='block';document.getElementById('closeLanBtn').style.display='none';relayStatus('relayHostStatus','LAN world closed.');});
+            ws.addEventListener('error',()=>relayStatus('relayHostStatus',`Could not connect to ${address.url}.`,true));
+        }
+
+        function closeWorldToLan() {
+            if(relaySocket){try{relaySocket.close(1000,'Host closed LAN world');}catch(_){}relaySocket=null;}
+            relayHostConnected=false;relayWorldId='';
+            if(singleplayerNetworkMode==='lan-host'){for(const id of [...integratedPlayers.keys()])if(id!==localClientId)integratedGuestLeft(id);singleplayerNetworkMode='local';setConnectionBadge(true);integratedRecomputeMobHosts();}
+            document.getElementById('openLanBtn').style.display='block';document.getElementById('closeLanBtn').style.display='none';relayStatus('relayHostStatus','Private until opened to a relay.');
+        }
+
+        function connectRelayForWorldList(joinAfter=false) {
+            if (relaySocket) { try{relaySocket.close();}catch(_){} relaySocket=null; }
+            const address=parseRelayAddress(document.getElementById('relayJoinAddress').value);
+            safeStorageSet('mellorcraftRelayAddress',`${address.host}:${address.port}`);
+            relayStatus('relayJoinStatus',`Connecting to ${address.host}:${address.port}...`);
+            const ws=new WebSocket(address.url); relaySocket=ws;
+            ws.addEventListener('open',()=>{ if(relaySocket===ws) relaySend({type:'list_worlds'}); });
+            ws.addEventListener('message',event=>{
+                let msg;try{msg=JSON.parse(event.data)}catch(_){return;}
+                if(msg.type==='worlds'){
+                    const select=document.getElementById('relayWorldSelect'), worlds=Array.isArray(msg.worlds)?msg.worlds:[];
+                    select.innerHTML=worlds.length?worlds.map(w=>`<option value="${String(w.worldId).replace(/"/g,'&quot;')}">${w.worldName} — ${w.players||1} player${(w.players||1)===1?'':'s'}</option>`).join(''):'<option value="">No open worlds on this relay</option>';
+                    relayStatus('relayJoinStatus',worlds.length?`Found ${worlds.length} open world${worlds.length===1?'':'s'}.`:'No worlds are currently open on this relay.');
+                    if(joinAfter&&worlds.length)joinSelectedRelayWorld(); return;
+                }
+                if(msg.type==='join_pending'){relayGuestId=msg.guestId||'';relayStatus('relayJoinStatus','Connected to relay. Waiting for world host...');return;}
+                if(msg.type==='server_message'){handleNetworkMessage({data:JSON.stringify(msg.payload||{})});return;}
+                if(msg.type==='world_closed'){exitLanGuestToMenu(msg.message||'The LAN world host disconnected.');return;}
+                if(msg.type==='error'){relayStatus('relayJoinStatus',msg.message||'Relay error',true);return;}
+            });
+            ws.addEventListener('close',()=>{if(relaySocket!==ws)return;if(!gameStarted)relayStatus('relayJoinStatus','Disconnected from relay.',true);else if(singleplayerNetworkMode==='lan-guest'){exitLanGuestToMenu('Disconnected from the LAN relay.');}});
+            ws.addEventListener('error',()=>relayStatus('relayJoinStatus',`Could not connect to ${address.url}.`,true));
+        }
+
+        function joinSelectedRelayWorld() {
+            const worldId=document.getElementById('relayWorldSelect').value; if(!worldId){relayStatus('relayJoinStatus','Select an open world first.',true);return;}
+            if(!relaySocket||relaySocket.readyState!==WebSocket.OPEN){connectRelayForWorldList(true);return;}
+            const username=(document.getElementById('lanUsernameInput').value||'Player').trim();
+            if(!/^[A-Za-z0-9_ -]{1,20}$/.test(username)){relayStatus('relayJoinStatus','Use 1-20 letters, numbers, spaces, _ or -.',true);return;}
+            localUsername=username;localSkin=document.getElementById('lanSkinInput').value||'steve';singleplayerNetworkMode='lan-guest';singleplayerWorldName='';activeJoinProtocol=4;localIsOperator=false;
+            relaySend({type:'join_world',worldId,username,skin:localSkin,deviceClass:isMobilePlaying?'mobile':'desktop'});
+            relayStatus('relayJoinStatus','Joining selected world...');
         }
 
         function sendNetwork(payload) {
             if (!payload || typeof payload !== 'object') return false;
-            const type = payload.type;
-            if (type === 'chat') {
-                addChatMessage(`<${localUsername || 'Player'}> ${String(payload.message || '')}`);
-            } else if (type === 'request_gamemode') {
-                if (['survival','creative','spectator'].includes(payload.gamemode)) {
-                    player.gamemode = payload.gamemode;
-                    document.getElementById('setGamemode').value = player.gamemode;
-                    updateMobileCreativeButton();
-                }
-            } else if (type === 'set_time') {
-                const hour = Math.max(0, Math.min(23, Number(payload.hour) || 0));
-                worldTime = Math.floor(worldTime) + hour / 24;
-            } else if (type === 'drop_item') {
-                const angle = player.yaw;
-                const id = `sp_item_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
-                upsertDroppedItem({
-                    id, itemId: Number(payload.itemId) || 1, count: 1,
-                    x: player.x - Math.sin(angle) * 1.4,
-                    y: player.y + 1.0,
-                    z: player.z - Math.cos(angle) * 1.4,
-                    dimension: currentDimension, age: 0
-                });
-            } else if (type === 'attack_mob' || type === 'mob_environment_damage') {
-                const mob = mobById.get(payload.mobId);
-                if (mob) {
-                    const amount = type === 'attack_mob' ? 3 : Math.max(1, Number(payload.amount) || 1);
-                    mob.health -= amount;
-                    if (mob.health <= 0) {
-                        const dropX=mob.x, dropY=mob.y+0.4, dropZ=mob.z, dim=mob.dimension;
-                        const defeatedBoss = Boolean(mob.type.isBoss && type === 'attack_mob');
-                        removeMobLocal(mob.id);
-                        if (defeatedBoss) bossDefeated = true;
-                        if (!mob.type.isBoss) {
-                            const id=`sp_drop_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
-                            upsertDroppedItem({id,itemId:ITEMS.RAW_MEAT,count:1,x:dropX,y:dropY,z:dropZ,dimension:dim,age:0});
-                        }
-                    }
-                }
-            } else if (type === 'mob_attack_player') {
-                applySingleplayerMobHit(1);
-            } else if (type === 'request_boss_spawn') {
-                if (!bossDefeated && !mobs.some(m => m.dimension === 2 && m.type.isBoss)) spawnSharedMob('MELLOR_BOSS', 0.5, 50, 0.5, 2);
-            }
-            singleplayerDirty = true;
-            return true;
+            if (singleplayerNetworkMode === 'lan-guest') return relaySend({type:'client_message',payload});
+            return integratedServerReceive(localClientId,payload);
         }
 
         function normalizeAngle(angle) {
@@ -1045,7 +1557,7 @@
                 localClientId = data.clientId;
                 localUsername = data.username || localUsername;
                 WORLD_SEED = Number(data.seed) || 0;
-                if (data.worldName) document.title = `MellorCraft v1.4.0 - ${data.worldName}`;
+                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.4.1 Singleplayer - ${data.worldName}`; }
                 worldTime = Number(data.worldTime) || 0.25;
                 pendingBlockSnapshot = Array.isArray(data.blocks) ? data.blocks : [];
                 pendingMobSnapshot = Array.isArray(data.mobs) ? data.mobs : [];
@@ -1062,6 +1574,7 @@
                 return;
             }
             if (data.type === 'world_state') {
+                if (typeof data.bossDefeated === 'boolean') bossDefeated = data.bossDefeated;
                 if (Number.isFinite(data.worldTime)) {
                     const drift = data.worldTime - worldTime;
                     worldTime += Math.abs(drift) > 0.03 ? drift : drift * 0.35;
@@ -1094,6 +1607,21 @@
                 networkApplyingBlock = true;
                 try { setBlock(data.x, data.y, data.z, data.blockType, data.dimension); }
                 finally { networkApplyingBlock = false; }
+                return;
+            }
+            if (data.type === 'respawn_point_update') {
+                playerRespawnPoint=normalizePlayerSpawnPoint(data.respawnPoint);
+                if (data.originalSpawn && typeof data.originalSpawn==='object') playerOriginalSpawn={...data.originalSpawn};
+                if (data.message) addChatMessage(String(data.message),'chatSystem');
+                return;
+            }
+            if (data.type === 'respawn_position') {
+                const p=data.position||{};
+                if ([p.x,p.y,p.z].every(v=>Number.isFinite(Number(v)))) {
+                    currentDimension=Math.max(0,Math.min(2,Math.floor(Number(p.dimension)||0)));
+                    player.x=Number(p.x);player.y=Number(p.y);player.z=Number(p.z);player.health=player.maxHealth;
+                    player.invincibleTime=3;player.vx=player.vy=player.vz=0;updateHealthBar();resetChunkStreamingForDimension(currentDimension,player.x,player.z);
+                }
                 return;
             }
             if (data.type === 'permission_update') {
@@ -1137,6 +1665,12 @@
             }
             if (data.type === 'mob_removed') {
                 removeMobLocal(data.mobId);
+                return;
+            }
+            if (data.type === 'boss_defeated') {
+                bossDefeated = true;
+                singleplayerDirty = true;
+                if (currentDimension === 2) returnPlayerToWorldSpawnAfterBoss();
                 return;
             }
             if (data.type === 'mob_damaged') {
@@ -1280,7 +1814,7 @@
                 if (!key || !key.startsWith(SINGLEPLAYER_PREFIX)) continue;
                 try {
                     const data=JSON.parse(localStorage.getItem(key));
-                    if (data && data.name) worlds.push({key,name:data.name,updated:data.updatedAt||0,seed:data.seed});
+                    if (data && (data.name||data.worldName)) worlds.push({key,name:data.name||data.worldName,updated:data.updatedAt||Math.floor((Number(data.savedAtUnix)||0)*1000),seed:data.seed});
                 } catch (_) {}
             }
             worlds.sort((a,b)=>b.updated-a.updated || a.name.localeCompare(b.name));
@@ -1311,63 +1845,113 @@
             for (const [key,map] of sharedChunkEdits) result[key]=Array.from(map.entries());
             return result;
         }
+        function serializeBlocksDict() {
+            const result={};
+            for(const b of snapshotFromChunkEdits(serializeChunkEdits())) result[`${b.dimension},${b.x},${b.y},${b.z}`]=Number(b.blockType)||0;
+            return result;
+        }
+        function snapshotFromBlocksDict(blocks) {
+            const out=[]; if(!blocks||typeof blocks!=='object')return out;
+            for(const [key,value] of Object.entries(blocks)){
+                const parts=String(key).split(',').map(Number); if(parts.length!==4||!parts.every(Number.isFinite))continue;
+                out.push({dimension:parts[0],x:parts[1],y:parts[2],z:parts[3],blockType:Number(value)||0});
+            }
+            return out;
+        }
         function currentPlayerSnapshot() {
+            const slot=player.inventory[player.selectedSlot]||{id:0,count:0};
             return {
-                x:player.x,y:player.y,z:player.z,yaw:player.yaw,pitch:player.pitch,
-                dimension:currentDimension,health:player.health,gamemode:player.gamemode,
+                username:localUsername||'Player',skin:localSkin||'steve',x:player.x,y:player.y,z:player.z,yaw:player.yaw,pitch:player.pitch,
+                dimension:currentDimension,health:player.health,gamemode:player.gamemode,heldItem:slot.count>0?slot.id:0,
                 selectedSlot:player.selectedSlot,
-                inventory:player.inventory.map(item=>({id:Number(item&&item.id)||0,count:Number(item&&item.count)||0}))
+                inventory:player.inventory.map(item=>({id:Number(item&&item.id)||0,count:Number(item&&item.count)||0})),
+                originalSpawn:playerOriginalSpawn?{...playerOriginalSpawn}:null,respawnPoint:playerRespawnPoint?{...playerRespawnPoint}:null
             };
+        }
+        function normalizeWorldSaveData(data) {
+            if(!data||typeof data!=='object')throw new Error('Not a MellorCraft world JSON file');
+            const name=String(data.name||data.worldName||'').trim().slice(0,48); if(!name)throw new Error('World name is missing');
+            let blocks=(data.blocks&&typeof data.blocks==='object'&&!Array.isArray(data.blocks))?{...data.blocks}:null;
+            if(!blocks&&data.chunkEdits&&typeof data.chunkEdits==='object'){blocks={};for(const b of snapshotFromChunkEdits(data.chunkEdits))blocks[`${b.dimension},${b.x},${b.y},${b.z}`]=Number(b.blockType)||0;}
+            blocks=blocks||{};
+            const profiles=(data.playerProfiles&&typeof data.playerProfiles==='object'&&!Array.isArray(data.playerProfiles))?JSON.parse(JSON.stringify(data.playerProfiles)):{};
+            if(data.lanPlayerProfiles&&typeof data.lanPlayerProfiles==='object')for(const [k,v] of Object.entries(data.lanPlayerProfiles))if(v&&typeof v==='object')profiles[String(k).toLowerCase()]={...v};
+            if(data.playerState&&typeof data.playerState==='object'&&!profiles.player)profiles.player={username:'Player',skin:'steve',...data.playerState};
+            const operators=Array.isArray(data.operators)?data.operators.map(v=>String(v).trim().toLowerCase()).filter(Boolean):['player'];
+            if(!operators.includes('player'))operators.push('player');
+            return {format:'MellorCraftWorld',formatVersion:7,version:'1.4.1',name,seed:Number(data.seed)||0,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,bossDefeated:Boolean(data.bossDefeated),blocks,operators:[...new Set(operators)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
+        }
+        function canonicalPlayerProfilesForSave() {
+            const profiles=JSON.parse(JSON.stringify(singleplayerLanProfiles||{}));
+            for(const state of integratedPlayers.values())if(state.id!==localClientId&&state.username)profiles[String(state.username).toLowerCase()]={username:state.username,skin:state.skin,x:state.x,y:state.y,z:state.z,yaw:state.yaw,pitch:state.pitch,dimension:state.dimension,health:state.health,gamemode:state.gamemode,heldItem:state.heldItem,selectedSlot:state.selectedSlot,inventory:Array.isArray(state.inventory)?state.inventory.map(v=>({...v})):[],originalSpawn:state.originalSpawn?{...state.originalSpawn}:null,respawnPoint:state.respawnPoint?{...state.respawnPoint}:null};
+            profiles.player=currentPlayerSnapshot();
+            return profiles;
         }
         function saveSingleplayerWorld(force=false) {
-            if (!singleplayerWorldName || !gameStarted) return false;
+            if (!singleplayerWorldName || !gameStarted || singleplayerNetworkMode === 'lan-guest') return false;
             if (!force && !singleplayerDirty) return true;
-            const data={
-                format:'MellorCraftWorld',version:'1.4.0',name:singleplayerWorldName,seed:WORLD_SEED,
-                worldTime,updatedAt:Date.now(),bossDefeated:Boolean(bossDefeated),chunkEdits:serializeChunkEdits(),
-                playerState:currentPlayerSnapshot(),
-                mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation})),
-                items:Array.from(droppedItems.values()).map(item=>({...item}))
-            };
-            try {
-                localStorage.setItem(singleplayerStorageKey(singleplayerWorldName),JSON.stringify(data));
-                singleplayerDirty=false;
-                listSingleplayerWorlds();
-                return true;
-            } catch (error) {
-                addChatMessage(`Autosave failed: ${error.message}`, 'chatError');
-                return false;
-            }
+            const data={format:'MellorCraftWorld',formatVersion:7,version:'1.4.1',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,bossDefeated:Boolean(bossDefeated),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),updatedAt:Date.now()};
+            try {localStorage.setItem(singleplayerStorageKey(singleplayerWorldName),JSON.stringify(data));singleplayerDirty=false;listSingleplayerWorlds();return true;}catch(error){addChatMessage(`Autosave failed: ${error.message}`,'chatError');return false;}
         }
-        function launchSingleplayerWorld(data) {
-            if (!data || !data.name) return;
-            singleplayerWorldName=String(data.name);
-            WORLD_SEED=Number(data.seed)||0;
-            worldTime=Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25;
-            bossDefeated=Boolean(data.bossDefeated);
-            pendingBlockSnapshot=snapshotFromChunkEdits(data.chunkEdits);
-            pendingMobSnapshot=(Array.isArray(data.mobs)?data.mobs:[]).filter(m => !(bossDefeated && m && m.typeKey === 'MELLOR_BOSS'));
-            pendingItemSnapshot=Array.isArray(data.items)?data.items:[];
-            pendingPlayerState=data.playerState&&typeof data.playerState==='object'?data.playerState:null;
-            localClientId='singleplayer';
-            localUsername='Player';
-            localSkin='steve';
-            activeJoinProtocol=4;
-            multiplayerConnected=true;
-            mobHosts={0:localClientId,1:localClientId,2:localClientId};
-            localIsOperator=true;
-            setConnectionBadge(true);
-            document.title=`MellorCraft v1.4.0 Singleplayer - ${singleplayerWorldName}`;
-            singleplayerDirty=false;
-            startGame();
+        function launchSingleplayerWorld(rawData) {
+            let data;try{data=normalizeWorldSaveData(rawData);}catch(error){setJoinStatus(`Could not load world: ${error.message}`,true);return;}
+            singleplayerWorldName=String(data.name);WORLD_SEED=Number(data.seed)||0;worldTime=Number(data.worldTime)||0.25;bossDefeated=Boolean(data.bossDefeated);
+            singleplayerOperators=new Set((data.operators||[]).map(v=>String(v).toLowerCase()));singleplayerOperators.add('player');
+            const profiles=(data.playerProfiles&&typeof data.playerProfiles==='object')?data.playerProfiles:{};singleplayerLanProfiles={};for(const [key,value] of Object.entries(profiles))if(String(key).toLowerCase()!=='player'&&value&&typeof value==='object')singleplayerLanProfiles[String(key).toLowerCase()]={...value};
+            pendingBlockSnapshot=snapshotFromBlocksDict(data.blocks);pendingMobSnapshot=(Array.isArray(data.mobs)?data.mobs:[]).filter(m=>!(bossDefeated&&m&&m.typeKey==='MELLOR_BOSS'));pendingItemSnapshot=Array.isArray(data.items)?data.items:[];pendingPlayerState=profiles.player&&typeof profiles.player==='object'?profiles.player:null;
+            playerOriginalSpawn=pendingPlayerState?.originalSpawn?{...pendingPlayerState.originalSpawn}:null;playerRespawnPoint=normalizePlayerSpawnPoint(pendingPlayerState?.respawnPoint);
+            localClientId='singleplayer';localUsername='Player';localSkin='steve';activeJoinProtocol=4;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;setConnectionBadge(true);document.title=`MellorCraft v1.4.1 Singleplayer - ${singleplayerWorldName}`;singleplayerDirty=false;singleplayerNetworkMode='local';startGame();integratedInitializeHost();
         }
-        function createSingleplayerWorld() {
+        let gameConfirmResolver = null;
+        function showGameConfirm(message, options={}) {
+            const overlay=document.getElementById('gameConfirmOverlay');
+            const title=document.getElementById('gameConfirmTitle');
+            const messageEl=document.getElementById('gameConfirmMessage');
+            const okBtn=document.getElementById('gameConfirmOkBtn');
+            const cancelBtn=document.getElementById('gameConfirmCancelBtn');
+            if(gameConfirmResolver){ gameConfirmResolver(false); gameConfirmResolver=null; }
+            title.textContent=String(options.title||'Confirm');
+            messageEl.textContent=String(message||'Are you sure?');
+            okBtn.textContent=String(options.confirmText||'Confirm');
+            cancelBtn.textContent=String(options.cancelText||'Cancel');
+            overlay.classList.add('visible');
+            // Avoid a gameplay touch being reused by the dialog on mobile.
+            try { resetMobileTouchState(); } catch (_) {}
+            return new Promise(resolve=>{
+                gameConfirmResolver=resolve;
+                requestAnimationFrame(()=>cancelBtn.focus({preventScroll:true}));
+            });
+        }
+        function closeGameConfirm(result) {
+            const overlay=document.getElementById('gameConfirmOverlay');
+            overlay.classList.remove('visible');
+            const resolve=gameConfirmResolver;
+            gameConfirmResolver=null;
+            if(resolve) resolve(Boolean(result));
+        }
+        document.getElementById('gameConfirmCancelBtn').addEventListener('click',()=>closeGameConfirm(false));
+        document.getElementById('gameConfirmOkBtn').addEventListener('click',()=>closeGameConfirm(true));
+        document.getElementById('gameConfirmOverlay').addEventListener('click',e=>{
+            if(e.target===e.currentTarget) closeGameConfirm(false);
+        });
+        document.addEventListener('keydown',e=>{
+            if(!document.getElementById('gameConfirmOverlay').classList.contains('visible')) return;
+            if(e.key==='Escape'){ e.preventDefault(); closeGameConfirm(false); }
+            else if(e.key==='Enter'){ e.preventDefault(); closeGameConfirm(true); }
+        });
+
+        async function createSingleplayerWorld() {
             const name=(document.getElementById('worldNameInput').value||'New World').trim().slice(0,40);
             const seedText=(document.getElementById('seedInput').value||'').trim();
             const numeric=Number(seedText);
             const seed=seedText===''?Math.floor(Math.random()*2147483647):(Number.isFinite(numeric)?Math.trunc(numeric):hashString(seedText));
             const key=singleplayerStorageKey(name);
-            if (localStorage.getItem(key) && !confirm(`Replace the saved world "${name}"?`)) return;
+            if (localStorage.getItem(key)) {
+                const replace=await showGameConfirm(`Replace the saved world "${name}"?\n\nThe existing saved world will be overwritten.`, {
+                    title:'Replace World?', confirmText:'Replace World'
+                });
+                if(!replace) return;
+            }
             launchSingleplayerWorld({name,seed,worldTime:0.25,bossDefeated:false,chunkEdits:{},playerState:null,mobs:[],items:[]});
             singleplayerDirty=true;
             setTimeout(()=>saveSingleplayerWorld(true),100);
@@ -1378,12 +1962,24 @@
             try { launchSingleplayerWorld(JSON.parse(localStorage.getItem(key))); }
             catch(error){ setJoinStatus(`Could not load world: ${error.message}`,true); }
         }
+        async function deleteSelectedSingleplayerWorld() {
+            const select=document.getElementById('worldSelect');
+            const key=select.value;
+            if(!key){setJoinStatus('Select a saved world to delete.',true);return;}
+            let name='this world';
+            try{name=JSON.parse(localStorage.getItem(key))?.name||name;}catch(_){}
+            const approved=await showGameConfirm(`Delete world "${name}"?\n\nThis cannot be undone.`, {
+                title:'Delete World?', confirmText:'Delete World'
+            });
+            if(!approved)return;
+            try{localStorage.removeItem(key);listSingleplayerWorlds();setJoinStatus(`Deleted "${name}".`);}catch(error){setJoinStatus(`Could not delete world: ${error.message}`,true);}
+        }
         function exportSelectedSingleplayerWorld() {
-            if (gameStarted) saveSingleplayerWorld(true);
+            if (gameStarted) if (singleplayerNetworkMode !== 'lan-guest') saveSingleplayerWorld(true);
             const key=gameStarted?singleplayerStorageKey(singleplayerWorldName):document.getElementById('worldSelect').value;
             if (!key) { setJoinStatus('Select a saved world to export.',true); return; }
             const raw=localStorage.getItem(key); if(!raw)return;
-            const data=JSON.parse(raw);
+            const data=normalizeWorldSaveData(JSON.parse(raw));
             const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
             const a=document.createElement('a');a.href=URL.createObjectURL(blob);
             a.download=`${String(data.name||'MellorCraft World').replace(/[^A-Za-z0-9 _-]/g,'_')}.json`;
@@ -1391,32 +1987,37 @@
         }
         async function importSingleplayerWorld(file) {
             try {
-                const data=JSON.parse(await file.text());
-                if(!data||data.format!=='MellorCraftWorld'||!data.name)throw new Error('Not a MellorCraft world JSON file');
-                localStorage.setItem(singleplayerStorageKey(data.name),JSON.stringify({...data,updatedAt:Date.now()}));
+                const data=normalizeWorldSaveData(JSON.parse(await file.text()));
+                data.updatedAt=Date.now();
+                localStorage.setItem(singleplayerStorageKey(data.name),JSON.stringify(data));
                 listSingleplayerWorlds();
                 setJoinStatus(`Imported "${data.name}".`);
             } catch(error){setJoinStatus(`Import failed: ${error.message}`,true);}
         }
         function singleplayerTick(dt) {
-            singleplayerAutosaveTimer+=dt;
-            for (const [id,item] of [...droppedItems]) {
-                item.age=(item.age||0)+dt;
-                if(item.dimension===currentDimension&&item.age>0.5&&Math.hypot(item.x-player.x,item.y-player.y,item.z-player.z)<1.6){
-                    if(addToInventory(item.itemId,item.count||1)){
-                        droppedItems.delete(id);updateInventoryUI();singleplayerDirty=true;
-                    }
-                }
+            integratedTick(dt);
+            if(singleplayerNetworkMode!=='lan-guest'){
+                singleplayerAutosaveTimer+=dt;
+                if(singleplayerAutosaveTimer>=4){singleplayerAutosaveTimer=0;saveSingleplayerWorld();}
             }
-            if(singleplayerAutosaveTimer>=4){singleplayerAutosaveTimer=0;saveSingleplayerWorld();}
         }
 
         listSingleplayerWorlds();
+        const lanExitNotice=safeStorageGet('mellorcraftLanExitNotice');if(lanExitNotice){safeStorageRemove('mellorcraftLanExitNotice');setJoinStatus(lanExitNotice,true);document.getElementById('lanJoinPanel').classList.add('visible');}
         document.getElementById('createWorldBtn').addEventListener('click',createSingleplayerWorld);
         document.getElementById('loadWorldBtn').addEventListener('click',loadSelectedSingleplayerWorld);
+        document.getElementById('deleteWorldBtn').addEventListener('click',deleteSelectedSingleplayerWorld);
         document.getElementById('exportWorldBtn').addEventListener('click',exportSelectedSingleplayerWorld);
         document.getElementById('importWorldBtn').addEventListener('click',()=>document.getElementById('importWorldFile').click());
         document.getElementById('importWorldFile').addEventListener('change',e=>{if(e.target.files[0])importSingleplayerWorld(e.target.files[0]);e.target.value='';});
+        const savedRelayAddress=safeStorageGet('mellorcraftRelayAddress')||'192.168.0.1:8000';
+        document.getElementById('relayJoinAddress').value=savedRelayAddress;
+        document.getElementById('relayHostAddress').value=savedRelayAddress;
+        document.getElementById('showLanJoinBtn').addEventListener('click',()=>document.getElementById('lanJoinPanel').classList.toggle('visible'));
+        document.getElementById('refreshRelayWorldsBtn').addEventListener('click',()=>connectRelayForWorldList(false));
+        document.getElementById('joinRelayWorldBtn').addEventListener('click',joinSelectedRelayWorld);
+        document.getElementById('openLanBtn').addEventListener('click',openWorldToLan);
+        document.getElementById('closeLanBtn').addEventListener('click',closeWorldToLan);
         // Start-screen controls use native Safari focus and tap behavior.
         document.getElementById('seedInput').addEventListener('keypress',e=>{if(e.key==='Enter')createSingleplayerWorld();});
 
@@ -1498,7 +2099,7 @@
             BOSS_PORTAL_FRAME: 35, ACTIVE_BOSS_PORTAL: 36, JUKEBOX: 37,
             WATER_SOURCE: 38, WATER_FLOW_1: 39, WATER_FLOW_2: 40, WATER_FLOW_3: 41,
             LAVA_SOURCE: 42, LAVA_FLOW_1: 43, LAVA_FLOW_2: 44, LAVA_FLOW_3: 45,
-            ZOMBIE_SPAWNER: 46, MELLORITE_CRYSTAL: 47
+            ZOMBIE_SPAWNER: 46, MELLORITE_CRYSTAL: 47, RESPAWN_BLOCK: 48
         };
 
         const ITEMS = {
@@ -1540,7 +2141,7 @@
             BLOCKS.RED_SAND, BLOCKS.TERRACOTTA, BLOCKS.PACKED_ICE,
             BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE,
             BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX,
-            BLOCKS.ZOMBIE_SPAWNER, BLOCKS.MELLORITE_CRYSTAL
+            BLOCKS.ZOMBIE_SPAWNER, BLOCKS.MELLORITE_CRYSTAL, BLOCKS.RESPAWN_BLOCK
         ]);
 
         const BLOCK_COLORS = {
@@ -1586,7 +2187,8 @@
             [BLOCKS.LAVA_FLOW_2]: { top: [1.00, 0.55, 0.10], side: [1.00, 0.34, 0.04], bottom: [0.65, 0.08, 0.01] },
             [BLOCKS.LAVA_FLOW_3]: { top: [1.00, 0.60, 0.12], side: [1.00, 0.38, 0.05], bottom: [0.65, 0.08, 0.01] },
             [BLOCKS.ZOMBIE_SPAWNER]: { top: [0.18, 0.22, 0.18], side: [0.12, 0.17, 0.12], bottom: [0.08, 0.10, 0.08] },
-            [BLOCKS.MELLORITE_CRYSTAL]: { top: [0.88, 0.38, 1.00], side: [0.76, 0.20, 0.96], bottom: [0.56, 0.10, 0.78] }
+            [BLOCKS.MELLORITE_CRYSTAL]: { top: [0.88, 0.38, 1.00], side: [0.76, 0.20, 0.96], bottom: [0.56, 0.10, 0.78] },
+            [BLOCKS.RESPAWN_BLOCK]: { top: [1.00, 0.78, 0.18], side: [0.72, 0.18, 0.16], bottom: [0.42, 0.12, 0.10] }
         };
 
         const BLOCK_NAMES = {
@@ -1607,7 +2209,7 @@
             [BLOCKS.JUKEBOX]: 'Jukebox', [BLOCKS.BOSS_PORTAL_FRAME]: 'Boss Frame', [BLOCKS.ACTIVE_BOSS_PORTAL]: 'Active Boss Portal',
             [BLOCKS.WATER_SOURCE]: 'Water', [BLOCKS.WATER_FLOW_1]: 'Flowing Water', [BLOCKS.WATER_FLOW_2]: 'Flowing Water', [BLOCKS.WATER_FLOW_3]: 'Flowing Water',
             [BLOCKS.LAVA_SOURCE]: 'Lava', [BLOCKS.LAVA_FLOW_1]: 'Flowing Lava', [BLOCKS.LAVA_FLOW_2]: 'Flowing Lava', [BLOCKS.LAVA_FLOW_3]: 'Flowing Lava',
-            [BLOCKS.ZOMBIE_SPAWNER]: 'Zombie Spawner', [BLOCKS.MELLORITE_CRYSTAL]: 'Mellorite'
+            [BLOCKS.ZOMBIE_SPAWNER]: 'Zombie Spawner', [BLOCKS.MELLORITE_CRYSTAL]: 'Mellorite', [BLOCKS.RESPAWN_BLOCK]: 'Respawn Block'
         };
 
         const ITEM_NAMES = {
@@ -1667,7 +2269,7 @@
             [BLOCKS.BOSS_PORTAL_FRAME]: 5.0, [BLOCKS.ACTIVE_BOSS_PORTAL]: 999999,
             [BLOCKS.WATER_SOURCE]: 0.15, [BLOCKS.WATER_FLOW_1]: 0.15, [BLOCKS.WATER_FLOW_2]: 0.15, [BLOCKS.WATER_FLOW_3]: 0.15,
             [BLOCKS.LAVA_SOURCE]: 0.25, [BLOCKS.LAVA_FLOW_1]: 0.25, [BLOCKS.LAVA_FLOW_2]: 0.25, [BLOCKS.LAVA_FLOW_3]: 0.25,
-            [BLOCKS.ZOMBIE_SPAWNER]: 5.0, [BLOCKS.MELLORITE_CRYSTAL]: 1.0
+            [BLOCKS.ZOMBIE_SPAWNER]: 5.0, [BLOCKS.MELLORITE_CRYSTAL]: 1.0, [BLOCKS.RESPAWN_BLOCK]: 2.5
         };
 
         const TOOL_SPEEDS = {
@@ -1738,6 +2340,7 @@
             { category: 'Basic', name: 'Planks', result: BLOCKS.PLANKS, count: 4, ingredients: { [BLOCKS.WOOD]: 1 }, icon: '🪵' },
             { category: 'Basic', name: 'Sticks', result: ITEMS.STICK, count: 4, ingredients: { [BLOCKS.PLANKS]: 2 }, icon: '🥢' },
             { category: 'Basic', name: 'Torch', result: BLOCKS.TORCH, count: 4, ingredients: { [ITEMS.COAL]: 1, [ITEMS.STICK]: 1 }, icon: '🔦' },
+            { category: 'Basic', name: 'Respawn Block', result: BLOCKS.RESPAWN_BLOCK, count: 1, ingredients: { [ITEMS.GOLD_INGOT]: 5 }, icon: '🛏️' },
             { category: 'Smelting', name: 'Iron Ingot', result: ITEMS.IRON_INGOT, count: 1, ingredients: { [BLOCKS.IRON_ORE]: 1, [ITEMS.COAL]: 1 }, icon: '🔩' },
             { category: 'Smelting', name: 'Gold Ingot', result: ITEMS.GOLD_INGOT, count: 1, ingredients: { [BLOCKS.GOLD_ORE]: 1, [ITEMS.COAL]: 1 }, icon: '🥇' },
             { category: 'Smelting', name: 'Glass', result: BLOCKS.GLASS, count: 1, ingredients: { [BLOCKS.SAND]: 1, [ITEMS.COAL]: 1 }, icon: '🪟' },
@@ -2243,22 +2846,28 @@
                     const region = getMountainRegion(baseCellX + ox, baseCellZ + oz);
                     if (!region) continue;
 
+                    // v1.4.1 keeps the exact pre-existing mountain outline, but samples
+                    // that outline through an affine X/Z compression around the range center.
+                    // Scaling both horizontal axes by sqrt(1/2) halves land area and makes
+                    // the unchanged vertical rise substantially steeper.
+                    const sampleX = region.cx + (x - region.cx) / MOUNTAIN_XZ_SCALE;
+                    const sampleZ = region.cz + (z - region.cz) / MOUNTAIN_XZ_SCALE;
                     // Offset, rotated ellipses produce lopsided peaks. Low-frequency
                     // noise changes their outline so the same height contour is never
                     // a perfect circle or a repeated man-made ring.
                     for (let i = 0; i < region.peaks.length; i++) {
                         const peak = region.peaks[i];
-                        const dx = x - peak.x, dz = z - peak.z;
+                        const dx = sampleX - peak.x, dz = sampleZ - peak.z;
                         const c = Math.cos(peak.angle), s = Math.sin(peak.angle);
                         const along = dx * c + dz * s;
                         const cross = -dx * s + dz * c;
-                        const warpedAlong = along + noise.octave((x + peak.phaseX) * 0.0032, (z - peak.phaseZ) * 0.0032, 2, 0.5) * 34;
-                        const warpedCross = cross + noise.octave((x - peak.phaseZ) * 0.0041, (z + peak.phaseX) * 0.0041, 2, 0.5) * 27;
+                        const warpedAlong = along + noise.octave((sampleX + peak.phaseX) * 0.0032, (sampleZ - peak.phaseZ) * 0.0032, 2, 0.5) * 34;
+                        const warpedCross = cross + noise.octave((sampleX - peak.phaseZ) * 0.0041, (sampleZ + peak.phaseX) * 0.0041, 2, 0.5) * 27;
                         const q2 = (warpedAlong * warpedAlong) / (peak.spreadLong * peak.spreadLong) +
                                    (warpedCross * warpedCross) / (peak.spreadCross * peak.spreadCross);
                         if (q2 > 8.4) continue;
                         let profile = Math.exp(-0.5 * q2);
-                        const outline = 1 + noise.octave((x + peak.phaseX) * 0.007, (z + peak.phaseZ) * 0.007, 3, 0.52) * 0.16;
+                        const outline = 1 + noise.octave((sampleX + peak.phaseX) * 0.007, (sampleZ + peak.phaseZ) * 0.007, 3, 0.52) * 0.16;
                         profile = clamp(profile * outline, 0, 1);
                         const broadProfile = Math.pow(profile, 0.72);
                         const crownProfile = Math.pow(profile, 3.6);
@@ -2276,12 +2885,12 @@
                         const vx = b.x - a.x, vz = b.z - a.z;
                         const len2 = vx * vx + vz * vz;
                         if (len2 < 1) continue;
-                        const t = clamp(((x - a.x) * vx + (z - a.z) * vz) / len2, 0, 1);
-                        const bend = Math.sin(t * Math.PI) * noise.octave((x + region.cx) * 0.0045, (z - region.cz) * 0.0045, 2, 0.5) * 42;
+                        const t = clamp(((sampleX - a.x) * vx + (sampleZ - a.z) * vz) / len2, 0, 1);
+                        const bend = Math.sin(t * Math.PI) * noise.octave((sampleX + region.cx) * 0.0045, (sampleZ - region.cz) * 0.0045, 2, 0.5) * 42;
                         const px = a.x + vx * t - (vz / Math.sqrt(len2)) * bend;
                         const pz = a.z + vz * t + (vx / Math.sqrt(len2)) * bend;
                         const width = 66 + (a.spreadCross + b.spreadCross) * 0.19;
-                        const dist = Math.hypot(x - px, z - pz);
+                        const dist = Math.hypot(sampleX - px, sampleZ - pz);
                         const profile = Math.exp(-0.5 * (dist * dist) / (width * width)) * Math.pow(Math.sin(Math.PI * (0.08 + t * 0.84)), 0.55);
                         const ridgeTop = Math.min(a.height, b.height) - 10;
                         const target = 90 + (ridgeTop - 90) * clamp(profile, 0, 1) * 0.78;
@@ -2632,7 +3241,7 @@
             const melloriteCenter = oreNoise.noise3D(x * 0.3 + 200, y * 0.3, z * 0.3 + 200);
 
             // Rare ores keep their existing rarity, but their maximum underground
-            // spawn heights are doubled for v1.4.0.
+            // spawn heights are doubled for v1.4.1.
             if (y < 16 && melloriteCenter > 0.97) return BLOCKS.MELLORITE_ORE;
             if (y < 24 && diamondCenter > 0.92) return BLOCKS.DIAMOND_ORE;
             if (y < 30 && goldCenter > 0.88 && oreNoise.noise3D(x * 0.5 + 100, y * 0.5, z * 0.5 + 100) > 0.3) return BLOCKS.GOLD_ORE;
@@ -3250,6 +3859,7 @@
                 `const BIOMES=${JSON.stringify(BIOMES)};`,
                 `const ALT_BIOMES=${JSON.stringify(ALT_BIOMES)};`,
                 `const CHUNK_SIZE=${CHUNK_SIZE},WORLD_HEIGHT=${WORLD_HEIGHT},ALT_WORLD_HEIGHT=${ALT_WORLD_HEIGHT},WATER_LEVEL=${WATER_LEVEL};`,
+                `const MOUNTAIN_XZ_SCALE=${MOUNTAIN_XZ_SCALE};`,
                 'let currentDimension=0,WORLD_SEED=0,noise,biomeNoise,treeNoise,caveNoise,oreNoise,ravineNoise,structNoise,continentalNoise,lavaNoise;',
                 'const mountainRegionCache=new Map(),mountainInfoCache=new Map(),megaCaveCache=new Map(),lavaPoolCache=new Map(),plainsTreeSpotCache=new Map(),knownDungeonSpawners=new Set();',
                 ...workerFunctions.map(fn => fn.toString()),
@@ -3626,7 +4236,72 @@
             return true;
         }
 
-        function spawnPlayer() {
+        function normalizePlayerSpawnPoint(value) {
+            if (!value || typeof value !== 'object') return null;
+            const x=Math.floor(Number(value.x)), y=Math.floor(Number(value.y)), z=Math.floor(Number(value.z));
+            const dimension=Math.max(0,Math.min(2,Math.floor(Number(value.dimension)||0)));
+            if (![x,y,z].every(Number.isFinite) || y < 0 || y >= getDimensionHeight(dimension)) return null;
+            return {x,y,z,dimension};
+        }
+
+        function spawnPositionFromPoint(point) {
+            const p=normalizePlayerSpawnPoint(point);
+            if (!p) return null;
+            return {x:p.x+0.5,y:p.y+1.01,z:p.z+0.5,dimension:p.dimension};
+        }
+
+        function rememberOriginalSpawnFromCurrent(force=false) {
+            if (playerOriginalSpawn && !force) return;
+            playerOriginalSpawn={x:player.x,y:player.y,z:player.z,dimension:currentDimension};
+            if (multiplayerConnected) sendNetwork({type:'set_original_spawn',point:{...playerOriginalSpawn}});
+        }
+
+        function activeRespawnSpawnPosition() {
+            const point=normalizePlayerSpawnPoint(playerRespawnPoint);
+            if (point && getBlock(point.x,point.y,point.z,point.dimension) === BLOCKS.RESPAWN_BLOCK) return spawnPositionFromPoint(point);
+            if (point) playerRespawnPoint=null;
+            if (playerOriginalSpawn && typeof playerOriginalSpawn==='object') {
+                const o=playerOriginalSpawn;
+                if ([o.x,o.y,o.z].every(v=>Number.isFinite(Number(v)))) return {x:Number(o.x),y:Number(o.y),z:Number(o.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(o.dimension)||0)))};
+            }
+            return null;
+        }
+
+        function placePlayerAtSavedRespawn({preserveHealth=false}={}) {
+            const oldHealth=player.health;
+            const saved=activeRespawnSpawnPosition();
+            if (!saved) {
+                currentDimension=0;
+                spawnPlayer();
+            } else {
+                currentDimension=saved.dimension;
+                player.x=saved.x;player.y=saved.y;player.z=saved.z;
+                player.highestY=player.y;player.health=player.maxHealth;
+                player.kbTime=0;player.vx=0;player.vz=0;player.vy=0;
+                player.invincibleTime=3;player.timeSinceHit=0;player.onGround=false;player.lavaTimer=0;
+                updateHealthBar();
+            }
+            if (preserveHealth) { player.health=Math.max(1,Math.min(player.maxHealth,oldHealth)); updateHealthBar(); }
+            resetChunkStreamingForDimension(currentDimension,player.x,player.z);
+        }
+
+        function activateRespawnBlock(hit) {
+            if (!hit || getBlock(hit.x,hit.y,hit.z,currentDimension)!==BLOCKS.RESPAWN_BLOCK) return false;
+            const point={x:Math.floor(hit.x),y:Math.floor(hit.y),z:Math.floor(hit.z),dimension:currentDimension};
+            // The player stands in the two blocks above the respawn block. Clear both
+            // through the normal shared-block path so every connected client agrees.
+            for (const y of [point.y+1,point.y+2]) {
+                if (y < getDimensionHeight(point.dimension) && getBlock(point.x,y,point.z,point.dimension)!==BLOCKS.AIR) {
+                    setBlock(point.x,y,point.z,BLOCKS.AIR,point.dimension);
+                }
+            }
+            playerRespawnPoint=point;
+            sendNetwork({type:'set_respawn_point',point});
+            addChatMessage(`Respawn point set at ${point.x}, ${point.y+1}, ${point.z}.`,'chatSuccess');
+            return true;
+        }
+
+        function calculateWorldSpawnPosition() {
             const spawnBiomes = [
                 BIOMES.PLAINS, BIOMES.DESERT_BARREN, BIOMES.DESERT_CACTUS,
                 BIOMES.FOREST, BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID,
@@ -3635,9 +4310,6 @@
             ];
             const desiredBiome = spawnBiomes[Math.floor(coordHash(WORLD_SEED, 17, 31, 1100) * spawnBiomes.length) % spawnBiomes.length];
             let best = null;
-            // Search deterministic positions across a wide area instead of spiraling
-            // out from 0,0. This removes the former coastline/hill bias and gives
-            // every remaining biome a genuine chance to be selected.
             for (let i = 0; i < 6200 && !best; i++) {
                 const x = Math.floor((coordHash(WORLD_SEED, i, 53, 1103) - 0.5) * 18000);
                 const z = Math.floor((coordHash(WORLD_SEED, i, 59, 1104) - 0.5) * 18000);
@@ -3645,10 +4317,7 @@
                 if (biome !== desiredBiome) continue;
                 const h = getHeight(x, z, biome);
                 if (h < 3 || h > 191 || isRavine(x, h, z)) continue;
-                const nearby = [
-                    getHeight(x + 3, z, getBiome(x + 3, z)), getHeight(x - 3, z, getBiome(x - 3, z)),
-                    getHeight(x, z + 3, getBiome(x, z + 3)), getHeight(x, z - 3, getBiome(x, z - 3))
-                ];
+                const nearby = [getHeight(x + 3, z, getBiome(x + 3, z)), getHeight(x - 3, z, getBiome(x - 3, z)), getHeight(x, z + 3, getBiome(x, z + 3)), getHeight(x, z - 3, getBiome(x, z - 3))];
                 const maxDelta = Math.max(...nearby.map(v => Math.abs(v - h)));
                 const mountainBiome = [BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID, BIOMES.MOUNTAINS_HIGH].includes(biome);
                 if (maxDelta > (mountainBiome ? 8 : 4)) continue;
@@ -3664,11 +4333,17 @@
                 }
             }
             const spawn = best || { x: 0, z: 0, h: getHeight(0, 0, getBiome(0, 0)) };
-            player.x = spawn.x + 0.5; player.z = spawn.z + 0.5; player.y = spawn.h + 3;
+            return {x:spawn.x+0.5,y:spawn.h+3,z:spawn.z+0.5,dimension:0};
+        }
+
+        function spawnPlayer() {
+            const spawn=calculateWorldSpawnPosition();
+            player.x=spawn.x;player.y=spawn.y;player.z=spawn.z;
             player.highestY = player.y; player.health = player.maxHealth;
             player.kbTime = 0; player.vx = 0; player.vz = 0; player.vy = 0;
             player.invincibleTime = 3; player.timeSinceHit = 0; player.onGround = false; player.lavaTimer = 0;
             updateHealthBar();
+            rememberOriginalSpawnFromCurrent();
         }
 
         function returnPlayerToWorldSpawnAfterBoss() {
@@ -3676,12 +4351,11 @@
             addChatMessage('You defeated the Mellor Boss!', 'chatSuccess');
             document.getElementById('bossBarContainer').style.display = 'none';
             const survivingHealth = Math.max(1, player.health);
-            currentDimension = 0;
-            spawnPlayer();
+            placePlayerAtSavedRespawn();
             player.health = Math.min(player.maxHealth, survivingHealth);
             player.invincibleTime = 5;
             updateHealthBar();
-            resetChunkStreamingForDimension(0, player.x, player.z);
+            sendNetwork({type:'respawn',x:player.x,y:player.y,z:player.z,dimension:currentDimension});
             stopMusicPlayback();
             singleplayerDirty = true;
             saveSingleplayerWorld(true);
@@ -3699,6 +4373,12 @@
             player.health = Math.max(0, Math.min(player.maxHealth, finite(state.health, player.maxHealth)));
             player.gamemode = ['survival', 'creative', 'spectator'].includes(state.gamemode) ? state.gamemode : 'survival';
             player.selectedSlot = Math.max(0, Math.min(8, Math.trunc(finite(state.selectedSlot, 0))));
+            if (state.originalSpawn && typeof state.originalSpawn==='object') {
+                const o=state.originalSpawn;
+                if ([o.x,o.y,o.z].every(v=>Number.isFinite(Number(v)))) playerOriginalSpawn={x:Number(o.x),y:Number(o.y),z:Number(o.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(o.dimension)||0)))};
+            }
+            playerRespawnPoint=normalizePlayerSpawnPoint(state.respawnPoint);
+            if (!playerOriginalSpawn) { playerOriginalSpawn=calculateWorldSpawnPosition(); if(multiplayerConnected)sendNetwork({type:'set_original_spawn',point:{...playerOriginalSpawn}}); }
 
             if (Array.isArray(state.inventory)) {
                 player.inventory = [];
@@ -3835,8 +4515,7 @@
                         } else {
                             this.vx = 0; this.vz = 0;
                             if (this.attackCooldown <= 0 && Math.abs(target.y - this.y) < 2.5) {
-                                if (target.id === localClientId) applySingleplayerMobHit(1);
-                                else sendNetwork({ type: 'mob_attack_player', mobId: this.id, targetId: target.id });
+                                sendNetwork({ type: 'mob_attack_player', mobId: this.id, targetId: target.id });
                                 this.attackCooldown = 1.25;
                             }
                         }
@@ -4337,6 +5016,7 @@
             if (slot && [ITEMS.BUCKET, ITEMS.WATER_BUCKET, ITEMS.LAVA_BUCKET].includes(slot.id)) { addChatMessage('Water, lava, and buckets were removed from world generation.', 'chatSystem'); return; }
             const hit = raycast(false); if (!hit) return;
             const target = getBlock(hit.x,hit.y,hit.z);
+            if (target === BLOCKS.RESPAWN_BLOCK) { activateRespawnBlock(hit); return; }
             if (target === BLOCKS.JUKEBOX) {
                 if (slot && slot.count > 0 && MUSIC_DISC_TRACK[slot.id] !== undefined) {
                     if (useDiscOnJukebox(slot.id) && player.gamemode === 'survival') { slot.count--; if (!slot.count) slot.id=0; updateInventoryUI(); }
@@ -4512,6 +5192,11 @@
                 return;
             }
 
+            if (['op','deop','ops','list','mobs'].includes(cmd)) {
+                sendNetwork({type:'server_command',command:cmdStr});
+                return;
+            }
+
             switch(cmd) {
                 case 'help':
                     addChatMessage("--- Help Menu ---", "chatSystem");
@@ -4526,6 +5211,7 @@
                     addChatMessage("/esp - Toggle mob X-Ray", "chatSystem");
                     addChatMessage("/killall - Kill loaded mobs", "chatSystem");
                     addChatMessage("/mobcap [value] - Set max mob limit", "chatSystem");
+                    addChatMessage("/op <username>, /deop <username>, /ops, /list, /mobs - Server commands", "chatSystem");
                     break;
                 case 'gamemode':
                 case 'gm':
@@ -5138,7 +5824,7 @@
 
         function updateCreativeInventoryUI() {
             const container = document.getElementById('creativeItems'); container.innerHTML = '';
-            const allBlocks = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.RED_SAND, BLOCKS.SNOW, BLOCKS.PACKED_ICE, BLOCKS.CACTUS, BLOCKS.PLANKS, BLOCKS.COBBLESTONE, BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK, BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX, BLOCKS.ZOMBIE_SPAWNER, BLOCKS.MELLORITE_CRYSTAL];
+            const allBlocks = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.RED_SAND, BLOCKS.SNOW, BLOCKS.PACKED_ICE, BLOCKS.CACTUS, BLOCKS.PLANKS, BLOCKS.COBBLESTONE, BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK, BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX, BLOCKS.ZOMBIE_SPAWNER, BLOCKS.MELLORITE_CRYSTAL, BLOCKS.RESPAWN_BLOCK];
             const allMats = [ITEMS.COAL, ITEMS.IRON_INGOT, ITEMS.GOLD_INGOT, ITEMS.DIAMOND, ITEMS.MELLORITE, ITEMS.STICK, ITEMS.RAW_MEAT, ITEMS.PINEWOOD_SPRINT_DISC, ITEMS.LAST_CAMP_STANDING_DISC];
             const allTools = [ITEMS.WOOD_PICKAXE, ITEMS.WOOD_AXE, ITEMS.WOOD_SWORD, ITEMS.WOOD_SHOVEL, ITEMS.STONE_PICKAXE, ITEMS.STONE_AXE, ITEMS.STONE_SWORD, ITEMS.STONE_SHOVEL, ITEMS.IRON_PICKAXE, ITEMS.IRON_AXE, ITEMS.IRON_SWORD, ITEMS.IRON_SHOVEL, ITEMS.GOLD_PICKAXE, ITEMS.GOLD_AXE, ITEMS.GOLD_SWORD, ITEMS.GOLD_SHOVEL, ITEMS.DIAMOND_PICKAXE, ITEMS.DIAMOND_AXE, ITEMS.DIAMOND_SWORD, ITEMS.DIAMOND_SHOVEL, ITEMS.MELLORITE_PICKAXE, ITEMS.MELLORITE_AXE, ITEMS.MELLORITE_SWORD, ITEMS.MELLORITE_SHOVEL];
             
@@ -5210,7 +5896,7 @@
         
         document.getElementById('respawnBtn').addEventListener('click', () => {
             document.getElementById('deathScreen').style.display = 'none'; deathScreenOpen = false;
-            currentDimension = 0; spawnPlayer();
+            placePlayerAtSavedRespawn();
             sendNetwork({ type: 'respawn', x: player.x, y: player.y, z: player.z, dimension: currentDimension });
             if (!isMobilePlaying) canvas.requestPointerLock();
             updateMobileControlsVisibility();
@@ -5222,6 +5908,10 @@
             if (settingsOpen) {
                 for (const code of Object.keys(keys)) keys[code] = false;
                 isMoving = false; moveDx = 0; moveDy = 0;
+                /* Release any gameplay-owned touches before the settings overlay starts receiving taps/pans. */
+                leftTouchId = null; rightTouchId = null;
+                const joyBaseEl = document.getElementById('joyBase');
+                if (joyBaseEl) joyBaseEl.style.display = 'none';
                 isMouseDown = false; breakingBlock = null; breakProgress = 0;
                 document.getElementById('breakProgress').style.display = 'none';
                 if (!isMobilePlaying) document.exitPointerLock();

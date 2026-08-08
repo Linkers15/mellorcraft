@@ -40,6 +40,7 @@ PROTOCOL_VERSION = 4
 SUPPORTED_PROTOCOLS = (4, 3, 2)
 WORLD_HEIGHT = 200
 PORTAL_BLOCK = 31
+RESPAWN_BLOCK = 48
 AIR_BLOCK = 0
 RAW_MEAT_ITEM = 106
 MOB_CAP_PER_DIMENSION = 25
@@ -86,6 +87,8 @@ class PlayerState:
         default_factory=lambda: [{"id": 0, "count": 0} for _ in range(MAX_INVENTORY_SLOTS)]
     )
     isOperator: bool = False
+    originalSpawn: dict[str, Any] | None = None
+    respawnPoint: dict[str, Any] | None = None
 
 
 @dataclass
@@ -206,6 +209,8 @@ class MellorCraftWorld:
             "health": player.health, "gamemode": player.gamemode,
             "heldItem": player.heldItem, "selectedSlot": player.selectedSlot,
             "inventory": [{"id": slot["id"], "count": slot["count"]} for slot in player.inventory],
+            "originalSpawn": dict(player.originalSpawn) if isinstance(player.originalSpawn, dict) else None,
+            "respawnPoint": dict(player.respawnPoint) if isinstance(player.respawnPoint, dict) else None,
         }
 
     def remember_player(self, player: PlayerState) -> None:
@@ -235,24 +240,74 @@ class MellorCraftWorld:
             player.inventory = inventory
             selected = player.inventory[player.selectedSlot]
             player.heldItem = selected["id"] if selected["count"] > 0 else 0
+        original = profile.get("originalSpawn")
+        if isinstance(original, dict):
+            player.originalSpawn = {
+                "x": finite_number(original.get("x"), player.x), "y": finite_number(original.get("y"), player.y),
+                "z": finite_number(original.get("z"), player.z), "dimension": bounded_int(original.get("dimension"), 0, 2),
+            }
+        respawn = profile.get("respawnPoint")
+        if isinstance(respawn, dict):
+            player.respawnPoint = {
+                "x": bounded_int(respawn.get("x"), -2_000_000, 2_000_000), "y": bounded_int(respawn.get("y"), 0, WORLD_HEIGHT - 1),
+                "z": bounded_int(respawn.get("z"), -2_000_000, 2_000_000), "dimension": bounded_int(respawn.get("dimension"), 0, 2),
+            }
         return player, True
+
+    @staticmethod
+    def legacy_chunk_edits_to_blocks(edits: Any) -> dict[str, int]:
+        result: dict[str, int] = {}
+        if not isinstance(edits, dict):
+            return result
+        chunk_size = 16
+        for chunk_key, entries in edits.items():
+            try:
+                dimension, cx, cz = (int(part) for part in str(chunk_key).split(",", 2))
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(entries, list):
+                continue
+            for pair in entries:
+                if not isinstance(pair, list) or len(pair) < 2:
+                    continue
+                try:
+                    index, block_type = int(pair[0]), int(pair[1])
+                    lz = index // (chunk_size * WORLD_HEIGHT)
+                    rem = index - lz * chunk_size * WORLD_HEIGHT
+                    y = rem // chunk_size
+                    lx = rem - y * chunk_size
+                    x, z = cx * chunk_size + lx, cz * chunk_size + lz
+                    result[f"{dimension},{x},{y},{z}"] = block_type
+                except (TypeError, ValueError):
+                    continue
+        return result
 
     def load(self) -> None:
         if not self.save_path.exists():
             return
         try:
             raw = json.loads(self.save_path.read_text(encoding="utf-8"))
-            self.world_name = str(raw.get("worldName", self.world_name)).strip()[:48] or self.world_name
+            self.world_name = str(raw.get("name", raw.get("worldName", self.world_name))).strip()[:48] or self.world_name
             self.seed = int(raw.get("seed", self.seed)) % 2_147_483_647
             self.world_time = float(raw.get("worldTime", self.world_time))
             self.boss_defeated = bool(raw.get("bossDefeated", False))
-            blocks = raw.get("blocks", {})
+            blocks = raw.get("blocks")
+            if not isinstance(blocks, dict):
+                blocks = self.legacy_chunk_edits_to_blocks(raw.get("chunkEdits"))
             if isinstance(blocks, dict):
                 self.blocks = {str(k): int(v) for k, v in blocks.items()}
             operators = raw.get("operators", [])
             if isinstance(operators, list):
                 self.operators = {str(name).strip().casefold() for name in operators if str(name).strip()}
             profiles = raw.get("playerProfiles", {})
+            if not isinstance(profiles, dict):
+                profiles = {}
+            legacy_profiles = raw.get("lanPlayerProfiles", {})
+            if isinstance(legacy_profiles, dict):
+                profiles = {**legacy_profiles, **profiles}
+            legacy_player = raw.get("playerState")
+            if isinstance(legacy_player, dict) and "player" not in profiles:
+                profiles["player"] = {"username": "Player", "skin": "steve", **legacy_player}
             if isinstance(profiles, dict):
                 for key, entry in profiles.items():
                     if not isinstance(entry, dict):
@@ -272,21 +327,27 @@ class MellorCraftWorld:
                         continue
                     definition = MOB_DEFINITIONS[type_key]
                     mob = MobState(
-                        id=str(entry["id"]), typeKey=type_key,
-                        x=float(entry["x"]), y=float(entry["y"]), z=float(entry["z"]),
+                        id=str(entry["id"]), typeKey=type_key, x=float(entry["x"]), y=float(entry["y"]), z=float(entry["z"]),
                         dimension=max(0, min(2, int(entry.get("dimension", 0)))),
                         health=max(0.1, min(float(definition["health"]), float(entry.get("health", definition["health"])))),
-                        maxHealth=float(definition["health"]),
-                        bodyRotation=float(entry.get("bodyRotation", 0.0)),
-                        headRotation=float(entry.get("headRotation", 0.0)),
+                        maxHealth=float(definition["health"]), bodyRotation=float(entry.get("bodyRotation", 0.0)),
+                        headRotation=float(entry.get("headRotation", 0.0)), vx=float(entry.get("vx", 0.0)), vy=float(entry.get("vy", 0.0)), vz=float(entry.get("vz", 0.0)),
                     )
                     self.mobs[mob.id] = mob
                 except (KeyError, TypeError, ValueError):
                     continue
-            print(
-                f"Loaded world '{self.world_name}': seed={self.seed}, edits={len(self.blocks)}, "
-                f"operators={len(self.operators)}, players={len(self.player_profiles)}, mobs={len(self.mobs)}"
-            )
+            for entry in raw.get("items", []):
+                try:
+                    item = DroppedItemState(
+                        id=str(entry["id"]), itemId=bounded_int(entry.get("itemId"), 1, 255, 1), count=bounded_int(entry.get("count"), 1, 100, 1),
+                        x=finite_number(entry.get("x")), y=finite_number(entry.get("y")), z=finite_number(entry.get("z")),
+                        dimension=bounded_int(entry.get("dimension"), 0, 2), vx=finite_number(entry.get("vx")), vy=finite_number(entry.get("vy")),
+                        vz=finite_number(entry.get("vz")), age=max(0.0, finite_number(entry.get("age"))),
+                    )
+                    self.items[item.id] = item
+                except (KeyError, TypeError, ValueError):
+                    continue
+            print(f"Loaded world '{self.world_name}': seed={self.seed}, edits={len(self.blocks)}, operators={len(self.operators)}, players={len(self.player_profiles)}, mobs={len(self.mobs)}")
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             print(f"Warning: could not load {self.save_path.name}: {exc}")
 
@@ -296,29 +357,21 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "formatVersion": 6,
-            "worldName": self.world_name,
-            "seed": self.seed,
-            "worldTime": self.world_time,
-            "bossDefeated": self.boss_defeated,
-            "blocks": self.blocks,
-            "operators": sorted(self.operators),
-            "playerProfiles": profiles,
-            "mobs": [asdict(mob) for mob in self.mobs.values()],
-            "savedAtUnix": time.time(),
+            "format": "MellorCraftWorld", "formatVersion": 7, "version": "1.4.1", "name": self.world_name,
+            "seed": self.seed, "worldTime": self.world_time, "bossDefeated": self.boss_defeated,
+            "blocks": self.blocks, "operators": sorted(self.operators), "playerProfiles": profiles,
+            "mobs": [asdict(mob) for mob in self.mobs.values()], "items": [asdict(item) for item in self.items.values()],
+            "updatedAt": int(time.time() * 1000),
         }
         self.save_path.parent.mkdir(parents=True, exist_ok=True)
         fd, temp_name = tempfile.mkstemp(prefix=self.save_path.name + ".", suffix=".tmp", dir=self.save_path.parent)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 json.dump(payload, handle, separators=(",", ":"), sort_keys=True)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temp_name, self.save_path)
-            self.dirty = False
+                handle.flush(); os.fsync(handle.fileno())
+            os.replace(temp_name, self.save_path); self.dirty = False
         finally:
-            if os.path.exists(temp_name):
-                os.unlink(temp_name)
+            if os.path.exists(temp_name): os.unlink(temp_name)
 
     def block_snapshot(self) -> list[dict[str, int]]:
         return [
@@ -440,19 +493,62 @@ async def broadcast_mob_hosts() -> None:
     )
 
 
+def respawn_point_matches(point: Any, dimension: int, x: int, y: int, z: int) -> bool:
+    return isinstance(point, dict) and bounded_int(point.get("dimension"), 0, 2) == dimension and bounded_int(point.get("x"), -2_000_000, 2_000_000) == x and bounded_int(point.get("y"), 0, WORLD_HEIGHT - 1) == y and bounded_int(point.get("z"), -2_000_000, 2_000_000) == z
+
+
+async def reset_respawns_for_broken_block(dimension: int, x: int, y: int, z: int) -> None:
+    changed = False
+    for player in world.players.values():
+        if not respawn_point_matches(player.respawnPoint, dimension, x, y, z):
+            continue
+        player.respawnPoint = None; changed = True
+        ws = world.connections.get(player.id)
+        if ws is not None:
+            await send_json(ws, {"type": "respawn_point_update", "respawnPoint": None, "originalSpawn": player.originalSpawn, "message": "Your respawn block was broken. Respawn reset to your original world spawn."})
+    for profile in world.player_profiles.values():
+        if respawn_point_matches(profile.get("respawnPoint"), dimension, x, y, z):
+            profile["respawnPoint"] = None; changed = True
+    if changed:
+        world.dirty = True
+
+
+def valid_respawn_block(point: Any) -> dict[str, int] | None:
+    if not isinstance(point, dict):
+        return None
+    p = {"x": bounded_int(point.get("x"), -2_000_000, 2_000_000), "y": bounded_int(point.get("y"), 0, WORLD_HEIGHT - 1), "z": bounded_int(point.get("z"), -2_000_000, 2_000_000), "dimension": bounded_int(point.get("dimension"), 0, 2)}
+    if world.blocks.get(world.block_key(p["dimension"], p["x"], p["y"], p["z"])) == RESPAWN_BLOCK:
+        return p
+    return None
+
+
+def player_respawn_position(player: PlayerState) -> dict[str, float | int]:
+    p = valid_respawn_block(player.respawnPoint)
+    if p is not None:
+        return {"x": p["x"] + 0.5, "y": p["y"] + 1.01, "z": p["z"] + 0.5, "dimension": p["dimension"]}
+    player.respawnPoint = None
+    o = player.originalSpawn
+    if isinstance(o, dict):
+        return {"x": finite_number(o.get("x"), player.x), "y": finite_number(o.get("y"), player.y), "z": finite_number(o.get("z"), player.z), "dimension": bounded_int(o.get("dimension"), 0, 2)}
+    return {"x": player.x, "y": player.y, "z": player.z, "dimension": player.dimension}
+
+
 async def handle_block_change(player_id: str, data: dict[str, Any]) -> None:
     x = bounded_int(data.get("x"), -2_000_000, 2_000_000)
     y = bounded_int(data.get("y"), 0, WORLD_HEIGHT - 1)
     z = bounded_int(data.get("z"), -2_000_000, 2_000_000)
     dimension = bounded_int(data.get("dimension"), 0, 2)
     block_type = bounded_int(data.get("blockType"), 0, 255)
-    previous_type = bounded_int(data.get("previousType"), 0, 255)
+    key = world.block_key(dimension, x, y, z)
+    previous_type = world.blocks.get(key, bounded_int(data.get("previousType"), 0, 255))
 
     # Dimensions now have different vertical layouts. Mirroring a portal at the
     # same Y coordinate placed the Alt Y=30 portal underground in the Overworld,
     # corrupting terrain and causing repeated teleport loops. Portal changes are
     # therefore stored only in the explicitly requested dimension.
-    world.blocks[world.block_key(dimension, x, y, z)] = block_type
+    world.blocks[key] = block_type
+    if previous_type == RESPAWN_BLOCK and block_type != RESPAWN_BLOCK:
+        await reset_respawns_for_broken_block(dimension, x, y, z)
     await broadcast({
         "type": "block_update", "playerId": player_id, "dimension": dimension,
         "x": x, "y": y, "z": z, "blockType": block_type,
@@ -473,7 +569,10 @@ async def handle_block_batch(player_id: str, data: dict[str, Any]) -> None:
         z = bounded_int(entry.get("z"), -2_000_000, 2_000_000)
         dimension = bounded_int(entry.get("dimension"), 0, 2)
         block_type = bounded_int(entry.get("blockType"), 0, 255)
-        world.blocks[world.block_key(dimension, x, y, z)] = block_type
+        key = world.block_key(dimension, x, y, z); previous_type = world.blocks.get(key, AIR_BLOCK)
+        world.blocks[key] = block_type
+        if previous_type == RESPAWN_BLOCK and block_type != RESPAWN_BLOCK:
+            await reset_respawns_for_broken_block(dimension, x, y, z)
         sanitized.append({"dimension": dimension, "x": x, "y": y, "z": z, "blockType": block_type})
     if not sanitized:
         return
@@ -751,6 +850,26 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             world.mobs[mob.id] = mob
             world.dirty = True
             await broadcast({"type": "mob_spawned", "mob": asdict(mob)}, minimum_protocol=3)
+    elif message_type == "set_original_spawn":
+        point = data.get("point")
+        if isinstance(point, dict):
+            player.originalSpawn = {"x": finite_number(point.get("x"), player.x), "y": finite_number(point.get("y"), player.y), "z": finite_number(point.get("z"), player.z), "dimension": bounded_int(point.get("dimension"), 0, 2)}
+            world.dirty = True
+    elif message_type == "set_respawn_point":
+        point = valid_respawn_block(data.get("point"))
+        if point is None:
+            await send_json(world.connections[player_id], {"type": "error", "message": "That respawn block is no longer present."})
+        else:
+            player.respawnPoint = point; world.dirty = True
+            await send_json(world.connections[player_id], {"type": "respawn_point_update", "respawnPoint": point, "originalSpawn": player.originalSpawn})
+    elif message_type == "server_command":
+        command = str(data.get("command", "")).strip()
+        if not player.isOperator:
+            await send_json(world.connections[player_id], {"type": "error", "message": "Only server operators can run server-management commands."})
+        else:
+            result = await process_console_command(command)
+            if result:
+                await send_json(world.connections[player_id], {"type": "system", "message": result})
     elif message_type == "chat":
         message = str(data.get("message", "")).strip()[:200]
         if message:
@@ -776,12 +895,10 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             world.dirty = True
             await broadcast({"type": "system", "message": f"{player.username} set the time to {hour:g}:00"})
     elif message_type == "respawn":
-        player.x = finite_number(data.get("x"), player.x)
-        player.y = finite_number(data.get("y"), player.y)
-        player.z = finite_number(data.get("z"), player.z)
-        player.dimension = bounded_int(data.get("dimension"), 0, 2)
-        player.health = 10.0
-        world.damage_locks[player.id] = time.monotonic() + 2.0
+        position = player_respawn_position(player)
+        player.x = float(position["x"]); player.y = float(position["y"]); player.z = float(position["z"]); player.dimension = int(position["dimension"])
+        player.health = 10.0; world.damage_locks[player.id] = time.monotonic() + 2.0; world.dirty = True
+        await send_json(world.connections[player_id], {"type": "respawn_position", "position": position})
 
 
 async def websocket_handler(websocket: Any, *_args: Any) -> None:
@@ -1066,7 +1183,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
         display_name = path.stem.replace("_", " ")
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-            display_name = str(raw.get("worldName", display_name)).strip() or display_name
+            display_name = str(raw.get("name", raw.get("worldName", display_name))).strip() or display_name
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             pass
         result.append((display_name, path))
@@ -1075,7 +1192,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.4.0 World Selection")
+    print("\nMellorCraft v1.4.1 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -1166,7 +1283,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.4.0 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.4.1 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -1190,7 +1307,7 @@ def main() -> None:
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.4.0 multiplayer server is running")
+    print("\nMellorCraft v1.4.1 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")

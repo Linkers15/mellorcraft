@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MellorCraft v1.4.0 Multiplayer - Mobile Login Hotfix</title>
+    <title>MellorCraft v1.4.1 Multiplayer - Mobile Login Hotfix</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Courier New', monospace; background: #000; }
@@ -507,7 +507,7 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2 id="versionSubtitle">v1.4.0 - Mobile Input, Mob & Mountain Fix</h2>
+        <h2 id="versionSubtitle">v1.4.1 - Mobile Input, Mob & Mountain Fix</h2>
         <div class="seedLabel">Choose your multiplayer identity</div>
         <input class="joinField" type="text" id="usernameInput" maxlength="20" placeholder="Username" autocomplete="nickname">
         <select class="joinField" id="skinInput" aria-label="Shirt color">
@@ -691,7 +691,7 @@
         const isIPhonePlaying = /iPhone|iPod/i.test(navigator.userAgent);
         document.documentElement.classList.toggle('mobile-mode', isMobilePlaying);
         if (isMobilePlaying) {
-            document.getElementById('versionSubtitle').textContent = 'v1.4.0 Mobile Input, Mob & Mountain Fix';
+            document.getElementById('versionSubtitle').textContent = 'v1.4.1 Mobile Input, Mob & Mountain Fix';
             document.getElementById('positionLabel').textContent = 'Pos:';
             document.getElementById('gamemodeLabel').textContent = 'Mode:';
             const mobileDefaultDistance = isIOSDevice ? 2 : 4;
@@ -716,11 +716,14 @@
         let bossDimensionEnteredAt = 0;
         let lastBossSpawnRequest = 0;
         let bossDefeated = false;
+        let playerOriginalSpawn = null;
+        let playerRespawnPoint = null;
 
         // Config
         const CHUNK_SIZE = 16;
         const WORLD_HEIGHT = 200;
         const WATER_LEVEL = 32; // retained only for legacy-save compatibility
+        const MOUNTAIN_XZ_SCALE = Math.SQRT1_2; // v1.4.1: same range shape at 50% X/Z land area
         const ALT_WORLD_HEIGHT = 50;
         function getDimensionHeight(dim = currentDimension) { return dim === 1 ? ALT_WORLD_HEIGHT : WORLD_HEIGHT; }
         let RENDER_DISTANCE = isIOSDevice ? 2 : (isMobilePlaying ? 4 : 6);
@@ -792,6 +795,13 @@
         function safeStorageSet(key, value) {
             try { if (window.localStorage) window.localStorage.setItem(key, value); }
             catch (_) {}
+        }
+        function safeStorageRemove(key) { try { if(window.localStorage) window.localStorage.removeItem(key); } catch(_){} }
+        function exitMultiplayerToMenu(reason='The multiplayer server went offline.') {
+            safeStorageSet('mellorcraftServerExitNotice',String(reason));
+            multiplayerConnected=false;setConnectionBadge(false);
+            try{if(socket)socket.close();}catch(_){}
+            window.location.reload();
         }
 
         function defaultServerHost() {
@@ -1012,7 +1022,7 @@
                 localClientId = data.clientId;
                 localUsername = data.username || localUsername;
                 WORLD_SEED = Number(data.seed) || 0;
-                if (data.worldName) document.title = `MellorCraft v1.4.0 - ${data.worldName}`;
+                if (data.worldName) document.title = `MellorCraft v1.4.1 - ${data.worldName}`;
                 worldTime = Number(data.worldTime) || 0.25;
                 bossDefeated = Boolean(data.bossDefeated);
                 pendingBlockSnapshot = Array.isArray(data.blocks) ? data.blocks : [];
@@ -1071,6 +1081,21 @@
                     applySharedBlockWithoutGenerating(change.x, change.y, change.z, change.blockType, change.dimension, dirtyKeys);
                 }
                 rebuildDirtyChunkMeshes(dirtyKeys);
+                return;
+            }
+            if (data.type === 'respawn_point_update') {
+                playerRespawnPoint=normalizePlayerSpawnPoint(data.respawnPoint);
+                if (data.originalSpawn && typeof data.originalSpawn==='object') playerOriginalSpawn={...data.originalSpawn};
+                if (data.message) addChatMessage(String(data.message),'chatSystem');
+                return;
+            }
+            if (data.type === 'respawn_position') {
+                const p=data.position||{};
+                if ([p.x,p.y,p.z].every(v=>Number.isFinite(Number(v)))) {
+                    currentDimension=Math.max(0,Math.min(2,Math.floor(Number(p.dimension)||0)));
+                    player.x=Number(p.x);player.y=Number(p.y);player.z=Number(p.z);player.health=player.maxHealth;
+                    player.invincibleTime=3;player.vx=player.vy=player.vz=0;updateHealthBar();resetChunkStreamingForDimension(currentDimension,player.x,player.z);
+                }
                 return;
             }
             if (data.type === 'permission_update') {
@@ -1230,7 +1255,8 @@
                 setConnectionBadge(false);
                 remotePlayers.clear();
                 if (gameStarted) {
-                    addChatMessage(`Disconnected from the multiplayer server${event.reason ? `: ${event.reason}` : '.'}`, 'chatError');
+                    exitMultiplayerToMenu(`The multiplayer server went offline${event.reason ? `: ${event.reason}` : '.'}`);
+                    return;
                 } else {
                     joinBtn.disabled = false;
                     const detail = lastJoinError || event.reason || `Could not reach ${getWebSocketUrl()}`;
@@ -1256,6 +1282,7 @@
 
         const serverHostInput = document.getElementById('serverHostInput');
         serverHostInput.value = defaultServerHost();
+        const serverExitNotice=safeStorageGet('mellorcraftServerExitNotice');if(serverExitNotice){safeStorageRemove('mellorcraftServerExitNotice');setJoinStatus(serverExitNotice,true);}
         if (window.location.protocol === 'file:' && serverHostInput.value === '127.0.0.1') {
             setJoinStatus('On another device, replace 127.0.0.1 with the Host PC IP printed by the server.', false);
         }
@@ -1347,7 +1374,7 @@
             BOSS_PORTAL_FRAME: 35, ACTIVE_BOSS_PORTAL: 36, JUKEBOX: 37,
             WATER_SOURCE: 38, WATER_FLOW_1: 39, WATER_FLOW_2: 40, WATER_FLOW_3: 41,
             LAVA_SOURCE: 42, LAVA_FLOW_1: 43, LAVA_FLOW_2: 44, LAVA_FLOW_3: 45,
-            ZOMBIE_SPAWNER: 46, MELLORITE_CRYSTAL: 47
+            ZOMBIE_SPAWNER: 46, MELLORITE_CRYSTAL: 47, RESPAWN_BLOCK: 48
         };
 
         const ITEMS = {
@@ -1389,7 +1416,7 @@
             BLOCKS.RED_SAND, BLOCKS.TERRACOTTA, BLOCKS.PACKED_ICE,
             BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE,
             BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX,
-            BLOCKS.ZOMBIE_SPAWNER, BLOCKS.MELLORITE_CRYSTAL
+            BLOCKS.ZOMBIE_SPAWNER, BLOCKS.MELLORITE_CRYSTAL, BLOCKS.RESPAWN_BLOCK
         ]);
 
         const BLOCK_COLORS = {
@@ -1435,7 +1462,8 @@
             [BLOCKS.LAVA_FLOW_2]: { top: [1.00, 0.55, 0.10], side: [1.00, 0.34, 0.04], bottom: [0.65, 0.08, 0.01] },
             [BLOCKS.LAVA_FLOW_3]: { top: [1.00, 0.60, 0.12], side: [1.00, 0.38, 0.05], bottom: [0.65, 0.08, 0.01] },
             [BLOCKS.ZOMBIE_SPAWNER]: { top: [0.18, 0.22, 0.18], side: [0.12, 0.17, 0.12], bottom: [0.08, 0.10, 0.08] },
-            [BLOCKS.MELLORITE_CRYSTAL]: { top: [0.88, 0.38, 1.00], side: [0.76, 0.20, 0.96], bottom: [0.56, 0.10, 0.78] }
+            [BLOCKS.MELLORITE_CRYSTAL]: { top: [0.88, 0.38, 1.00], side: [0.76, 0.20, 0.96], bottom: [0.56, 0.10, 0.78] },
+            [BLOCKS.RESPAWN_BLOCK]: { top: [1.00, 0.78, 0.18], side: [0.72, 0.18, 0.16], bottom: [0.42, 0.12, 0.10] }
         };
 
         const BLOCK_NAMES = {
@@ -1456,7 +1484,7 @@
             [BLOCKS.JUKEBOX]: 'Jukebox', [BLOCKS.BOSS_PORTAL_FRAME]: 'Boss Frame', [BLOCKS.ACTIVE_BOSS_PORTAL]: 'Active Boss Portal',
             [BLOCKS.WATER_SOURCE]: 'Water', [BLOCKS.WATER_FLOW_1]: 'Flowing Water', [BLOCKS.WATER_FLOW_2]: 'Flowing Water', [BLOCKS.WATER_FLOW_3]: 'Flowing Water',
             [BLOCKS.LAVA_SOURCE]: 'Lava', [BLOCKS.LAVA_FLOW_1]: 'Flowing Lava', [BLOCKS.LAVA_FLOW_2]: 'Flowing Lava', [BLOCKS.LAVA_FLOW_3]: 'Flowing Lava',
-            [BLOCKS.ZOMBIE_SPAWNER]: 'Zombie Spawner', [BLOCKS.MELLORITE_CRYSTAL]: 'Mellorite'
+            [BLOCKS.ZOMBIE_SPAWNER]: 'Zombie Spawner', [BLOCKS.MELLORITE_CRYSTAL]: 'Mellorite', [BLOCKS.RESPAWN_BLOCK]: 'Respawn Block'
         };
 
         const ITEM_NAMES = {
@@ -1516,7 +1544,7 @@
             [BLOCKS.BOSS_PORTAL_FRAME]: 5.0, [BLOCKS.ACTIVE_BOSS_PORTAL]: 999999,
             [BLOCKS.WATER_SOURCE]: 0.15, [BLOCKS.WATER_FLOW_1]: 0.15, [BLOCKS.WATER_FLOW_2]: 0.15, [BLOCKS.WATER_FLOW_3]: 0.15,
             [BLOCKS.LAVA_SOURCE]: 0.25, [BLOCKS.LAVA_FLOW_1]: 0.25, [BLOCKS.LAVA_FLOW_2]: 0.25, [BLOCKS.LAVA_FLOW_3]: 0.25,
-            [BLOCKS.ZOMBIE_SPAWNER]: 5.0, [BLOCKS.MELLORITE_CRYSTAL]: 1.0
+            [BLOCKS.ZOMBIE_SPAWNER]: 5.0, [BLOCKS.MELLORITE_CRYSTAL]: 1.0, [BLOCKS.RESPAWN_BLOCK]: 2.5
         };
 
         const TOOL_SPEEDS = {
@@ -1587,6 +1615,7 @@
             { category: 'Basic', name: 'Planks', result: BLOCKS.PLANKS, count: 4, ingredients: { [BLOCKS.WOOD]: 1 }, icon: '🪵' },
             { category: 'Basic', name: 'Sticks', result: ITEMS.STICK, count: 4, ingredients: { [BLOCKS.PLANKS]: 2 }, icon: '🥢' },
             { category: 'Basic', name: 'Torch', result: BLOCKS.TORCH, count: 4, ingredients: { [ITEMS.COAL]: 1, [ITEMS.STICK]: 1 }, icon: '🔦' },
+            { category: 'Basic', name: 'Respawn Block', result: BLOCKS.RESPAWN_BLOCK, count: 1, ingredients: { [ITEMS.GOLD_INGOT]: 5 }, icon: '🛏️' },
             { category: 'Smelting', name: 'Iron Ingot', result: ITEMS.IRON_INGOT, count: 1, ingredients: { [BLOCKS.IRON_ORE]: 1, [ITEMS.COAL]: 1 }, icon: '🔩' },
             { category: 'Smelting', name: 'Gold Ingot', result: ITEMS.GOLD_INGOT, count: 1, ingredients: { [BLOCKS.GOLD_ORE]: 1, [ITEMS.COAL]: 1 }, icon: '🥇' },
             { category: 'Smelting', name: 'Glass', result: BLOCKS.GLASS, count: 1, ingredients: { [BLOCKS.SAND]: 1, [ITEMS.COAL]: 1 }, icon: '🪟' },
@@ -2092,22 +2121,28 @@
                     const region = getMountainRegion(baseCellX + ox, baseCellZ + oz);
                     if (!region) continue;
 
+                    // v1.4.1 keeps the exact pre-existing mountain outline, but samples
+                    // that outline through an affine X/Z compression around the range center.
+                    // Scaling both horizontal axes by sqrt(1/2) halves land area and makes
+                    // the unchanged vertical rise substantially steeper.
+                    const sampleX = region.cx + (x - region.cx) / MOUNTAIN_XZ_SCALE;
+                    const sampleZ = region.cz + (z - region.cz) / MOUNTAIN_XZ_SCALE;
                     // Offset, rotated ellipses produce lopsided peaks. Low-frequency
                     // noise changes their outline so the same height contour is never
                     // a perfect circle or a repeated man-made ring.
                     for (let i = 0; i < region.peaks.length; i++) {
                         const peak = region.peaks[i];
-                        const dx = x - peak.x, dz = z - peak.z;
+                        const dx = sampleX - peak.x, dz = sampleZ - peak.z;
                         const c = Math.cos(peak.angle), s = Math.sin(peak.angle);
                         const along = dx * c + dz * s;
                         const cross = -dx * s + dz * c;
-                        const warpedAlong = along + noise.octave((x + peak.phaseX) * 0.0032, (z - peak.phaseZ) * 0.0032, 2, 0.5) * 34;
-                        const warpedCross = cross + noise.octave((x - peak.phaseZ) * 0.0041, (z + peak.phaseX) * 0.0041, 2, 0.5) * 27;
+                        const warpedAlong = along + noise.octave((sampleX + peak.phaseX) * 0.0032, (sampleZ - peak.phaseZ) * 0.0032, 2, 0.5) * 34;
+                        const warpedCross = cross + noise.octave((sampleX - peak.phaseZ) * 0.0041, (sampleZ + peak.phaseX) * 0.0041, 2, 0.5) * 27;
                         const q2 = (warpedAlong * warpedAlong) / (peak.spreadLong * peak.spreadLong) +
                                    (warpedCross * warpedCross) / (peak.spreadCross * peak.spreadCross);
                         if (q2 > 8.4) continue;
                         let profile = Math.exp(-0.5 * q2);
-                        const outline = 1 + noise.octave((x + peak.phaseX) * 0.007, (z + peak.phaseZ) * 0.007, 3, 0.52) * 0.16;
+                        const outline = 1 + noise.octave((sampleX + peak.phaseX) * 0.007, (sampleZ + peak.phaseZ) * 0.007, 3, 0.52) * 0.16;
                         profile = clamp(profile * outline, 0, 1);
                         const broadProfile = Math.pow(profile, 0.72);
                         const crownProfile = Math.pow(profile, 3.6);
@@ -2125,12 +2160,12 @@
                         const vx = b.x - a.x, vz = b.z - a.z;
                         const len2 = vx * vx + vz * vz;
                         if (len2 < 1) continue;
-                        const t = clamp(((x - a.x) * vx + (z - a.z) * vz) / len2, 0, 1);
-                        const bend = Math.sin(t * Math.PI) * noise.octave((x + region.cx) * 0.0045, (z - region.cz) * 0.0045, 2, 0.5) * 42;
+                        const t = clamp(((sampleX - a.x) * vx + (sampleZ - a.z) * vz) / len2, 0, 1);
+                        const bend = Math.sin(t * Math.PI) * noise.octave((sampleX + region.cx) * 0.0045, (sampleZ - region.cz) * 0.0045, 2, 0.5) * 42;
                         const px = a.x + vx * t - (vz / Math.sqrt(len2)) * bend;
                         const pz = a.z + vz * t + (vx / Math.sqrt(len2)) * bend;
                         const width = 66 + (a.spreadCross + b.spreadCross) * 0.19;
-                        const dist = Math.hypot(x - px, z - pz);
+                        const dist = Math.hypot(sampleX - px, sampleZ - pz);
                         const profile = Math.exp(-0.5 * (dist * dist) / (width * width)) * Math.pow(Math.sin(Math.PI * (0.08 + t * 0.84)), 0.55);
                         const ridgeTop = Math.min(a.height, b.height) - 10;
                         const target = 90 + (ridgeTop - 90) * clamp(profile, 0, 1) * 0.78;
@@ -2481,7 +2516,7 @@
             const melloriteCenter = oreNoise.noise3D(x * 0.3 + 200, y * 0.3, z * 0.3 + 200);
 
             // Rare ores keep their existing rarity, but their maximum underground
-            // spawn heights are doubled for v1.4.0.
+            // spawn heights are doubled for v1.4.1.
             if (y < 16 && melloriteCenter > 0.97) return BLOCKS.MELLORITE_ORE;
             if (y < 24 && diamondCenter > 0.92) return BLOCKS.DIAMOND_ORE;
             if (y < 30 && goldCenter > 0.88 && oreNoise.noise3D(x * 0.5 + 100, y * 0.5, z * 0.5 + 100) > 0.3) return BLOCKS.GOLD_ORE;
@@ -3099,6 +3134,7 @@
                 `const BIOMES=${JSON.stringify(BIOMES)};`,
                 `const ALT_BIOMES=${JSON.stringify(ALT_BIOMES)};`,
                 `const CHUNK_SIZE=${CHUNK_SIZE},WORLD_HEIGHT=${WORLD_HEIGHT},ALT_WORLD_HEIGHT=${ALT_WORLD_HEIGHT},WATER_LEVEL=${WATER_LEVEL};`,
+                `const MOUNTAIN_XZ_SCALE=${MOUNTAIN_XZ_SCALE};`,
                 'let currentDimension=0,WORLD_SEED=0,noise,biomeNoise,treeNoise,caveNoise,oreNoise,ravineNoise,structNoise,continentalNoise,lavaNoise;',
                 'const mountainRegionCache=new Map(),mountainInfoCache=new Map(),megaCaveCache=new Map(),lavaPoolCache=new Map(),plainsTreeSpotCache=new Map(),knownDungeonSpawners=new Set();',
                 ...workerFunctions.map(fn => fn.toString()),
@@ -3474,7 +3510,72 @@
             return true;
         }
 
-        function spawnPlayer() {
+        function normalizePlayerSpawnPoint(value) {
+            if (!value || typeof value !== 'object') return null;
+            const x=Math.floor(Number(value.x)), y=Math.floor(Number(value.y)), z=Math.floor(Number(value.z));
+            const dimension=Math.max(0,Math.min(2,Math.floor(Number(value.dimension)||0)));
+            if (![x,y,z].every(Number.isFinite) || y < 0 || y >= getDimensionHeight(dimension)) return null;
+            return {x,y,z,dimension};
+        }
+
+        function spawnPositionFromPoint(point) {
+            const p=normalizePlayerSpawnPoint(point);
+            if (!p) return null;
+            return {x:p.x+0.5,y:p.y+1.01,z:p.z+0.5,dimension:p.dimension};
+        }
+
+        function rememberOriginalSpawnFromCurrent(force=false) {
+            if (playerOriginalSpawn && !force) return;
+            playerOriginalSpawn={x:player.x,y:player.y,z:player.z,dimension:currentDimension};
+            if (multiplayerConnected) sendNetwork({type:'set_original_spawn',point:{...playerOriginalSpawn}});
+        }
+
+        function activeRespawnSpawnPosition() {
+            const point=normalizePlayerSpawnPoint(playerRespawnPoint);
+            if (point && getBlock(point.x,point.y,point.z,point.dimension) === BLOCKS.RESPAWN_BLOCK) return spawnPositionFromPoint(point);
+            if (point) playerRespawnPoint=null;
+            if (playerOriginalSpawn && typeof playerOriginalSpawn==='object') {
+                const o=playerOriginalSpawn;
+                if ([o.x,o.y,o.z].every(v=>Number.isFinite(Number(v)))) return {x:Number(o.x),y:Number(o.y),z:Number(o.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(o.dimension)||0)))};
+            }
+            return null;
+        }
+
+        function placePlayerAtSavedRespawn({preserveHealth=false}={}) {
+            const oldHealth=player.health;
+            const saved=activeRespawnSpawnPosition();
+            if (!saved) {
+                currentDimension=0;
+                spawnPlayer();
+            } else {
+                currentDimension=saved.dimension;
+                player.x=saved.x;player.y=saved.y;player.z=saved.z;
+                player.highestY=player.y;player.health=player.maxHealth;
+                player.kbTime=0;player.vx=0;player.vz=0;player.vy=0;
+                player.invincibleTime=3;player.timeSinceHit=0;player.onGround=false;player.lavaTimer=0;
+                updateHealthBar();
+            }
+            if (preserveHealth) { player.health=Math.max(1,Math.min(player.maxHealth,oldHealth)); updateHealthBar(); }
+            resetChunkStreamingForDimension(currentDimension,player.x,player.z);
+        }
+
+        function activateRespawnBlock(hit) {
+            if (!hit || getBlock(hit.x,hit.y,hit.z,currentDimension)!==BLOCKS.RESPAWN_BLOCK) return false;
+            const point={x:Math.floor(hit.x),y:Math.floor(hit.y),z:Math.floor(hit.z),dimension:currentDimension};
+            // The player stands in the two blocks above the respawn block. Clear both
+            // through the normal shared-block path so every connected client agrees.
+            for (const y of [point.y+1,point.y+2]) {
+                if (y < getDimensionHeight(point.dimension) && getBlock(point.x,y,point.z,point.dimension)!==BLOCKS.AIR) {
+                    setBlock(point.x,y,point.z,BLOCKS.AIR,point.dimension);
+                }
+            }
+            playerRespawnPoint=point;
+            sendNetwork({type:'set_respawn_point',point});
+            addChatMessage(`Respawn point set at ${point.x}, ${point.y+1}, ${point.z}.`,'chatSuccess');
+            return true;
+        }
+
+        function calculateWorldSpawnPosition() {
             const spawnBiomes = [
                 BIOMES.PLAINS, BIOMES.DESERT_BARREN, BIOMES.DESERT_CACTUS,
                 BIOMES.FOREST, BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID,
@@ -3483,9 +3584,6 @@
             ];
             const desiredBiome = spawnBiomes[Math.floor(coordHash(WORLD_SEED, 17, 31, 1100) * spawnBiomes.length) % spawnBiomes.length];
             let best = null;
-            // Search deterministic positions across a wide area instead of spiraling
-            // out from 0,0. This removes the former coastline/hill bias and gives
-            // every remaining biome a genuine chance to be selected.
             for (let i = 0; i < 6200 && !best; i++) {
                 const x = Math.floor((coordHash(WORLD_SEED, i, 53, 1103) - 0.5) * 18000);
                 const z = Math.floor((coordHash(WORLD_SEED, i, 59, 1104) - 0.5) * 18000);
@@ -3493,10 +3591,7 @@
                 if (biome !== desiredBiome) continue;
                 const h = getHeight(x, z, biome);
                 if (h < 3 || h > 191 || isRavine(x, h, z)) continue;
-                const nearby = [
-                    getHeight(x + 3, z, getBiome(x + 3, z)), getHeight(x - 3, z, getBiome(x - 3, z)),
-                    getHeight(x, z + 3, getBiome(x, z + 3)), getHeight(x, z - 3, getBiome(x, z - 3))
-                ];
+                const nearby = [getHeight(x + 3, z, getBiome(x + 3, z)), getHeight(x - 3, z, getBiome(x - 3, z)), getHeight(x, z + 3, getBiome(x, z + 3)), getHeight(x, z - 3, getBiome(x, z - 3))];
                 const maxDelta = Math.max(...nearby.map(v => Math.abs(v - h)));
                 const mountainBiome = [BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID, BIOMES.MOUNTAINS_HIGH].includes(biome);
                 if (maxDelta > (mountainBiome ? 8 : 4)) continue;
@@ -3512,11 +3607,17 @@
                 }
             }
             const spawn = best || { x: 0, z: 0, h: getHeight(0, 0, getBiome(0, 0)) };
-            player.x = spawn.x + 0.5; player.z = spawn.z + 0.5; player.y = spawn.h + 3;
+            return {x:spawn.x+0.5,y:spawn.h+3,z:spawn.z+0.5,dimension:0};
+        }
+
+        function spawnPlayer() {
+            const spawn=calculateWorldSpawnPosition();
+            player.x=spawn.x;player.y=spawn.y;player.z=spawn.z;
             player.highestY = player.y; player.health = player.maxHealth;
             player.kbTime = 0; player.vx = 0; player.vz = 0; player.vy = 0;
             player.invincibleTime = 3; player.timeSinceHit = 0; player.onGround = false; player.lavaTimer = 0;
             updateHealthBar();
+            rememberOriginalSpawnFromCurrent();
         }
 
         function returnPlayerToWorldSpawnAfterBoss() {
@@ -3524,12 +3625,11 @@
             addChatMessage('You defeated the Mellor Boss!', 'chatSuccess');
             document.getElementById('bossBarContainer').style.display = 'none';
             const survivingHealth = Math.max(1, player.health);
-            currentDimension = 0;
-            spawnPlayer();
+            placePlayerAtSavedRespawn();
             player.health = Math.min(player.maxHealth, survivingHealth);
             player.invincibleTime = 5;
             updateHealthBar();
-            resetChunkStreamingForDimension(0, player.x, player.z);
+            sendNetwork({type:'respawn',x:player.x,y:player.y,z:player.z,dimension:currentDimension});
             stopMusicPlayback();
         }
 
@@ -3545,6 +3645,12 @@
             player.health = Math.max(0, Math.min(player.maxHealth, finite(state.health, player.maxHealth)));
             player.gamemode = ['survival', 'creative', 'spectator'].includes(state.gamemode) ? state.gamemode : 'survival';
             player.selectedSlot = Math.max(0, Math.min(8, Math.trunc(finite(state.selectedSlot, 0))));
+            if (state.originalSpawn && typeof state.originalSpawn==='object') {
+                const o=state.originalSpawn;
+                if ([o.x,o.y,o.z].every(v=>Number.isFinite(Number(v)))) playerOriginalSpawn={x:Number(o.x),y:Number(o.y),z:Number(o.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(o.dimension)||0)))};
+            }
+            playerRespawnPoint=normalizePlayerSpawnPoint(state.respawnPoint);
+            if (!playerOriginalSpawn) { playerOriginalSpawn=calculateWorldSpawnPosition(); if(multiplayerConnected)sendNetwork({type:'set_original_spawn',point:{...playerOriginalSpawn}}); }
 
             if (Array.isArray(state.inventory)) {
                 player.inventory = [];
@@ -4189,6 +4295,7 @@
             if (slot && [ITEMS.BUCKET, ITEMS.WATER_BUCKET, ITEMS.LAVA_BUCKET].includes(slot.id)) { addChatMessage('Water, lava, and buckets were removed from world generation.', 'chatSystem'); return; }
             const hit = raycast(false); if (!hit) return;
             const target = getBlock(hit.x,hit.y,hit.z);
+            if (target === BLOCKS.RESPAWN_BLOCK) { activateRespawnBlock(hit); return; }
             if (target === BLOCKS.JUKEBOX) {
                 if (slot && slot.count > 0 && MUSIC_DISC_TRACK[slot.id] !== undefined) {
                     if (useDiscOnJukebox(slot.id) && player.gamemode === 'survival') { slot.count--; if (!slot.count) slot.id=0; updateInventoryUI(); }
@@ -4364,6 +4471,11 @@
                 return;
             }
 
+            if (['op','deop','ops','list','mobs'].includes(cmd)) {
+                sendNetwork({type:'server_command',command:cmdStr});
+                return;
+            }
+
             switch(cmd) {
                 case 'help':
                     addChatMessage("--- Help Menu ---", "chatSystem");
@@ -4378,6 +4490,7 @@
                     addChatMessage("/esp - Toggle mob X-Ray", "chatSystem");
                     addChatMessage("/killall - Kill loaded mobs", "chatSystem");
                     addChatMessage("/mobcap [value] - Set max mob limit", "chatSystem");
+                    addChatMessage("/op <username>, /deop <username>, /ops, /list, /mobs - Server commands", "chatSystem");
                     break;
                 case 'gamemode':
                 case 'gm':
@@ -4993,7 +5106,7 @@
 
         function updateCreativeInventoryUI() {
             const container = document.getElementById('creativeItems'); container.innerHTML = '';
-            const allBlocks = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.RED_SAND, BLOCKS.SNOW, BLOCKS.PACKED_ICE, BLOCKS.CACTUS, BLOCKS.PLANKS, BLOCKS.COBBLESTONE, BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK, BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX, BLOCKS.ZOMBIE_SPAWNER, BLOCKS.MELLORITE_CRYSTAL];
+            const allBlocks = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.RED_SAND, BLOCKS.SNOW, BLOCKS.PACKED_ICE, BLOCKS.CACTUS, BLOCKS.PLANKS, BLOCKS.COBBLESTONE, BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK, BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX, BLOCKS.ZOMBIE_SPAWNER, BLOCKS.MELLORITE_CRYSTAL, BLOCKS.RESPAWN_BLOCK];
             const allMats = [ITEMS.COAL, ITEMS.IRON_INGOT, ITEMS.GOLD_INGOT, ITEMS.DIAMOND, ITEMS.MELLORITE, ITEMS.STICK, ITEMS.RAW_MEAT, ITEMS.PINEWOOD_SPRINT_DISC, ITEMS.LAST_CAMP_STANDING_DISC];
             const allTools = [ITEMS.WOOD_PICKAXE, ITEMS.WOOD_AXE, ITEMS.WOOD_SWORD, ITEMS.WOOD_SHOVEL, ITEMS.STONE_PICKAXE, ITEMS.STONE_AXE, ITEMS.STONE_SWORD, ITEMS.STONE_SHOVEL, ITEMS.IRON_PICKAXE, ITEMS.IRON_AXE, ITEMS.IRON_SWORD, ITEMS.IRON_SHOVEL, ITEMS.GOLD_PICKAXE, ITEMS.GOLD_AXE, ITEMS.GOLD_SWORD, ITEMS.GOLD_SHOVEL, ITEMS.DIAMOND_PICKAXE, ITEMS.DIAMOND_AXE, ITEMS.DIAMOND_SWORD, ITEMS.DIAMOND_SHOVEL, ITEMS.MELLORITE_PICKAXE, ITEMS.MELLORITE_AXE, ITEMS.MELLORITE_SWORD, ITEMS.MELLORITE_SHOVEL];
             
@@ -5065,7 +5178,7 @@
         
         document.getElementById('respawnBtn').addEventListener('click', () => {
             document.getElementById('deathScreen').style.display = 'none'; deathScreenOpen = false;
-            currentDimension = 0; spawnPlayer();
+            placePlayerAtSavedRespawn();
             sendNetwork({ type: 'respawn', x: player.x, y: player.y, z: player.z, dimension: currentDimension });
             if (!isMobilePlaying) canvas.requestPointerLock();
             updateMobileControlsVisibility();
