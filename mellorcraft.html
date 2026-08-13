@@ -4774,7 +4774,7 @@
                             for (let f=0; f<6; f++) {
                                 const d=dirs[f];
                                 const neighbor=voxel(x+d[0],y+d[1],z+d[2]);
-                                const visible = neighbor !== BLOCKS.GLASS && (neighbor === BLOCKS.AIR || isLiquidBlock(neighbor) || neighbor === BLOCKS.LEAVES || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL);
+                                const visible = neighbor !== BLOCKS.GLASS && (neighbor === BLOCKS.AIR || isLiquidBlock(neighbor) || neighbor === BLOCKS.LEAVES || neighbor === BLOCKS.TORCH || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL);
                                 if (!visible) continue;
                                 const faceColor = f===0 ? [0.86,0.96,1.0] : f===1 ? [0.62,0.76,0.82] : [0.70,0.88,0.95];
                                 pushFace(glassPos, glassCol, glassNor, faces[f], faceColor, norms[f], wx, y, wz);
@@ -4787,7 +4787,10 @@
                             const neighbor = voxel(x + d[0], y + d[1], z + d[2]);
                             const visible = neighbor === BLOCKS.AIR || isLiquidBlock(neighbor) ||
                                 (neighbor === BLOCKS.LEAVES && block !== BLOCKS.LEAVES) ||
-                                neighbor === BLOCKS.GLASS || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL;
+                                // A torch occupies only a narrow custom cuboid. Keep the
+                                // supporting wall/floor face behind it instead of cutting
+                                // a full-block hole that exposes the terrain interior.
+                                neighbor === BLOCKS.TORCH || neighbor === BLOCKS.GLASS || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL;
                             if (!visible) continue;
                             const faceColor = f === 0 ? colors.top : f === 1 ? colors.bottom : colors.side;
                             pushFace(pos, col, nor, faces[f], faceColor, norms[f], wx, y, wz);
