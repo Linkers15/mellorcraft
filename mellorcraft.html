@@ -379,7 +379,7 @@
         .lan-panel h3 { color: #4ecca3; margin: 0 0 8px; font-size: 15px; }
         .lan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .lan-grid .full { grid-column: 1 / -1; }
-        .lan-panel input, .lan-panel select, .menu-section input, .menu-section select {
+        .lan-panel input, .lan-panel select, .menu-section input, .menu-section select, .setting-group .lan-grid input {
             width: 100%; padding: 9px; font-family: 'Courier New', monospace;
             background: rgba(0,0,0,.45); color: white; border: 1px solid #666; border-radius: 5px;
         }
@@ -695,7 +695,8 @@
                 <h3>Join a Relay World</h3>
                 <p>Discover browser worlds opened through a MellorCraft relay.</p>
                 <div class="lan-grid">
-                    <input class="full" id="relayJoinAddress" value="192.168.0.1:8000" placeholder="Relay IP (host:port)">
+                    <input id="relayJoinAddress" value="192.168.0.1" placeholder="Relay IP" aria-label="Relay IP" spellcheck="false">
+                    <input id="relayJoinPort" type="number" min="1" max="65535" value="8000" placeholder="Port" aria-label="Relay port" inputmode="numeric">
                     <button class="menuBtn blueBtn full" id="refreshRelayWorldsBtn" style="margin:0;">Find Worlds on Relay</button>
                     <select class="full" id="relayWorldSelect"><option value="">Connect to a relay first</option></select>
                     <button class="menuBtn greenBtn full" id="joinRelayWorldBtn" style="margin:0;">Join Selected Relay World</button>
@@ -705,9 +706,12 @@
 
             <section class="menu-section">
                 <h3>Join a Multiplayer Server</h3>
-                <p>Enter the server's WebSocket IP or full ws:// / wss:// address.</p>
-                <input class="joinField" type="text" id="serverHostInput" value="" placeholder="ws://192.168.1.50:8765" spellcheck="false">
-                <div class="btnContainer"><button class="menuBtn greenBtn" id="joinBtn">Join Multiplayer Server</button></div>
+                <p>Enter the server IP and port. MellorCraft handles the WebSocket address automatically.</p>
+                <div class="lan-grid">
+                    <input id="serverHostInput" type="text" value="" placeholder="Server IP" aria-label="Multiplayer server IP" spellcheck="false">
+                    <input id="serverPortInput" type="number" min="1" max="65535" value="8765" placeholder="Port" aria-label="Multiplayer server port" inputmode="numeric">
+                    <button class="menuBtn greenBtn full" id="joinBtn" style="margin:0;">Join Multiplayer Server</button>
+                </div>
             </section>
         </div>
         <div id="joinStatus">Worlds autosave to this browser. Export JSON for backups or another device.</div>
@@ -777,8 +781,11 @@
         </div>
         <div class="lan-section-title">Open Browser World to Relay</div>
         <div class="setting-group">
-            <label>Relay Server IP:</label>
-            <input type="text" id="relayHostAddress" value="192.168.0.1:8000" placeholder="192.168.0.1:8000">
+            <label>Relay Server IP and Port:</label>
+            <div class="lan-grid">
+                <input type="text" id="relayHostAddress" value="192.168.0.1" placeholder="Relay IP" aria-label="Host relay IP" spellcheck="false">
+                <input type="number" id="relayHostPort" min="1" max="65535" value="8000" placeholder="Port" aria-label="Host relay port" inputmode="numeric">
+            </div>
         </div>
         <button class="menuBtn blueBtn" id="openLanBtn" style="width:100%; margin:0;">Open World to LAN</button>
         <button class="menuBtn redBtn" id="closeLanBtn" style="width:100%; margin:0; display:none;">Close LAN World</button>
@@ -1096,33 +1103,51 @@
             window.location.reload();
         }
 
-        function defaultServerAddress() {
-            const saved = safeStorageGet('mellorcraftServerAddress') || safeStorageGet('mellorcraftServerHost');
-            if (saved) {
-                if (/^wss?:\/\//i.test(saved)) return saved;
-                const hasPort = /^\[[^\]]+\]:\d+$/.test(saved) || /^[^:]+:\d+$/.test(saved);
-                return `ws://${saved}${hasPort ? '' : ':8765'}`;
+        function parseSocketEndpoint(rawHost, rawPort, fallbackHost, fallbackPort) {
+            let value = String(rawHost || '').trim();
+            const explicitSecure = /^(wss|https):\/\//i.test(value);
+            value = value.replace(/^wss?:\/\//i,'').replace(/^https?:\/\//i,'').split('/')[0];
+            let host = value || fallbackHost;
+            let embeddedPort = 0;
+            if (host.startsWith('[')) {
+                const close = host.indexOf(']');
+                if (close > 0) {
+                    const remainder = host.slice(close + 1);
+                    embeddedPort = remainder.startsWith(':') ? Number(remainder.slice(1)) : 0;
+                    host = host.slice(1, close);
+                }
+            } else if ((host.match(/:/g) || []).length === 1) {
+                const parts = host.split(':');
+                if (/^\d+$/.test(parts[1] || '')) { host = parts[0]; embeddedPort = Number(parts[1]); }
             }
-            const pageHost = window.location.hostname;
-            const host = pageHost && pageHost !== '0.0.0.0' && pageHost !== '::' ? pageHost : '127.0.0.1';
-            return `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${host.includes(':') ? '['+host+']' : host}:8765`;
+            if (!host || host === '0.0.0.0' || host === '::') host = fallbackHost;
+            const requestedPort = String(rawPort || '').trim();
+            const port = requestedPort ? Number(requestedPort) : (embeddedPort || fallbackPort);
+            if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Enter a port from 1 to 65535.');
+            const secure = explicitSecure || window.location.protocol === 'https:';
+            const bracketedHost = host.includes(':') ? `[${host}]` : host;
+            return { host, port, url: `${secure ? 'wss' : 'ws'}://${bracketedHost}:${port}` };
         }
 
-        function normalizedServerAddress() {
-            const input = document.getElementById('serverHostInput');
-            let value = (input ? input.value : '').trim();
-            if (!value) value = defaultServerAddress();
-            value = value.replace(/^http:/i,'ws:').replace(/^https:/i,'wss:');
-            if (!/^wss?:\/\//i.test(value)) value = `ws://${value}`;
-            const parsed = new URL(value);
-            if (!['ws:','wss:'].includes(parsed.protocol)) throw new Error('Use a ws:// or wss:// WebSocket address.');
-            if (!parsed.hostname || parsed.hostname === '0.0.0.0' || parsed.hostname === '::') parsed.hostname = '127.0.0.1';
-            if (!parsed.port) parsed.port = '8765';
-            return parsed.toString().replace(/\/$/,'');
+        function defaultServerEndpoint() {
+            const saved = safeStorageGet('mellorcraftServerAddress') || safeStorageGet('mellorcraftServerHost');
+            const pageHost = window.location.hostname;
+            const host = pageHost && pageHost !== '0.0.0.0' && pageHost !== '::' ? pageHost : '127.0.0.1';
+            return parseSocketEndpoint(saved || host, safeStorageGet('mellorcraftServerPort') || '', host, 8765);
+        }
+
+        function currentServerEndpoint() {
+            const defaults = defaultServerEndpoint();
+            return parseSocketEndpoint(
+                document.getElementById('serverHostInput').value,
+                document.getElementById('serverPortInput').value,
+                defaults.host,
+                8765
+            );
         }
 
         function getWebSocketUrl() {
-            return normalizedServerAddress();
+            return currentServerEndpoint().url;
         }
 
         function setJoinStatus(message, isError = false) {
@@ -1150,20 +1175,8 @@
             el.style.color = isError ? '#ff6b6b' : '#aaa';
         }
 
-        function parseRelayAddress(raw) {
-            let value = String(raw || '').trim() || '192.168.0.1:8000';
-            value = value.replace(/^wss?:\/\//i,'').replace(/^https?:\/\//i,'').split('/')[0];
-            let host=value, port=8000;
-            if (value.startsWith('[')) {
-                const close=value.indexOf(']');
-                if (close > 0) {
-                    host=value.slice(1,close);
-                    if (value.slice(close+1).startsWith(':')) port=Number(value.slice(close+2))||8000;
-                }
-            } else if ((value.match(/:/g)||[]).length === 1) {
-                const parts=value.split(':'); host=parts[0]||'192.168.0.1'; port=Number(parts[1])||8000;
-            }
-            return {host,port,url:`ws://${host.includes(':')?'['+host+']':host}:${port}`};
+        function parseRelayAddress(rawHost, rawPort) {
+            return parseSocketEndpoint(rawHost, rawPort, '192.168.0.1', 8000);
         }
 
         function relaySend(message) {
@@ -1524,8 +1537,11 @@
                 return;
             }
             if (relaySocket) { try{relaySocket.close();}catch(_){} relaySocket=null; }
-            const address=parseRelayAddress(document.getElementById('relayHostAddress').value);
+            let address;
+            try { address=parseRelayAddress(document.getElementById('relayHostAddress').value,document.getElementById('relayHostPort').value); }
+            catch(error) { relayStatus('relayHostStatus',error.message||'Invalid relay address.',true); return; }
             safeStorageSet('mellorcraftRelayAddress',`${address.host}:${address.port}`);
+            safeStorageSet('mellorcraftRelayPort',String(address.port));
             relayStatus('relayHostStatus',`Connecting to ${address.host}:${address.port}...`);
             const ws=new WebSocket(address.url); relaySocket=ws;
             ws.addEventListener('open',()=>{ if(relaySocket!==ws)return; relaySend({type:'host_world',worldName:singleplayerWorldName,seed:WORLD_SEED,protocol:1}); });
@@ -1550,8 +1566,11 @@
 
         function connectRelayForWorldList(joinAfter=false) {
             if (relaySocket) { try{relaySocket.close();}catch(_){} relaySocket=null; }
-            const address=parseRelayAddress(document.getElementById('relayJoinAddress').value);
+            let address;
+            try { address=parseRelayAddress(document.getElementById('relayJoinAddress').value,document.getElementById('relayJoinPort').value); }
+            catch(error) { relayStatus('relayJoinStatus',error.message||'Invalid relay address.',true); return; }
             safeStorageSet('mellorcraftRelayAddress',`${address.host}:${address.port}`);
+            safeStorageSet('mellorcraftRelayPort',String(address.port));
             relayStatus('relayJoinStatus',`Connecting to ${address.host}:${address.port}...`);
             const ws=new WebSocket(address.url); relaySocket=ws;
             ws.addEventListener('open',()=>{ if(relaySocket===ws) relaySend({type:'list_worlds'}); });
@@ -1919,11 +1938,13 @@
             applySingleplayerIdentity(identity,true);
             localUsername = identity.username;
             localSkin = identity.skin;
-            let serverAddress;
-            try { serverAddress = getWebSocketUrl(); }
+            let serverAddress, serverEndpoint;
+            try { serverEndpoint = currentServerEndpoint(); serverAddress = serverEndpoint.url; }
             catch (error) { setJoinStatus(error.message || 'Invalid WebSocket address.', true); return; }
-            document.getElementById('serverHostInput').value = serverAddress;
-            safeStorageSet('mellorcraftServerAddress', serverAddress);
+            document.getElementById('serverHostInput').value = serverEndpoint.host;
+            document.getElementById('serverPortInput').value = String(serverEndpoint.port);
+            safeStorageSet('mellorcraftServerAddress', serverEndpoint.host);
+            safeStorageSet('mellorcraftServerPort', String(serverEndpoint.port));
             const joinBtn = document.getElementById('joinBtn');
             joinBtn.disabled = true;
             lastJoinError = '';
@@ -2217,15 +2238,23 @@
         document.getElementById('importWorldBtn').addEventListener('click',()=>document.getElementById('importWorldFile').click());
         document.getElementById('importWorldFile').addEventListener('change',e=>{if(e.target.files[0])importSingleplayerWorld(e.target.files[0]);e.target.value='';});
         const savedRelayAddress=safeStorageGet('mellorcraftRelayAddress')||'192.168.0.1:8000';
-        document.getElementById('relayJoinAddress').value=savedRelayAddress;
-        document.getElementById('relayHostAddress').value=savedRelayAddress;
-        document.getElementById('serverHostInput').value=defaultServerAddress();
+        const savedRelayEndpoint=parseRelayAddress(savedRelayAddress,safeStorageGet('mellorcraftRelayPort')||'');
+        document.getElementById('relayJoinAddress').value=savedRelayEndpoint.host;
+        document.getElementById('relayJoinPort').value=String(savedRelayEndpoint.port);
+        document.getElementById('relayHostAddress').value=savedRelayEndpoint.host;
+        document.getElementById('relayHostPort').value=String(savedRelayEndpoint.port);
+        const savedServerEndpoint=defaultServerEndpoint();
+        document.getElementById('serverHostInput').value=savedServerEndpoint.host;
+        document.getElementById('serverPortInput').value=String(savedServerEndpoint.port);
         document.getElementById('refreshRelayWorldsBtn').addEventListener('click',()=>connectRelayForWorldList(false));
+        document.getElementById('relayJoinAddress').addEventListener('keypress',e=>{if(e.key==='Enter')connectRelayForWorldList(false);});
+        document.getElementById('relayJoinPort').addEventListener('keypress',e=>{if(e.key==='Enter')connectRelayForWorldList(false);});
         document.getElementById('joinRelayWorldBtn').addEventListener('click',joinSelectedRelayWorld);
         document.getElementById('openLanBtn').addEventListener('click',openWorldToLan);
         document.getElementById('closeLanBtn').addEventListener('click',closeWorldToLan);
         document.getElementById('joinBtn').addEventListener('click',connectToServer);
         document.getElementById('serverHostInput').addEventListener('keypress',e=>{if(e.key==='Enter')connectToServer();});
+        document.getElementById('serverPortInput').addEventListener('keypress',e=>{if(e.key==='Enter')connectToServer();});
         // Start-screen controls use native Safari focus and tap behavior.
         document.getElementById('seedInput').addEventListener('keypress',e=>{if(e.key==='Enter')createSingleplayerWorld();});
 
