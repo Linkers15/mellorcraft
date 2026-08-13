@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MellorCraft v1.4.1 singleplayer LAN relay.
+"""MellorCraft v1.5.0 singleplayer LAN relay.
 
 The relay is intentionally world-agnostic. A browser that owns a singleplayer save
 registers as the authoritative host. Other singleplayer clients discover that world
@@ -167,10 +167,10 @@ async def handler(ws: Any, *_args: Any) -> None:
                     pass
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="MellorCraft v1.4.1 singleplayer LAN relay")
+    parser = argparse.ArgumentParser(description="MellorCraft v1.5.0 singleplayer LAN relay")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="WebSocket relay port (default: 8000)")
     args = parser.parse_args()
-    print("MellorCraft v1.4.1 Singleplayer LAN Relay")
+    print("MellorCraft v1.5.0 Singleplayer LAN Relay")
     print(f"Relay: ws://127.0.0.1:{args.port}")
     print(f"LAN:   ws://{lan_ip()}:{args.port}")
     print("Keep this window open while singleplayer worlds are shared to LAN.")

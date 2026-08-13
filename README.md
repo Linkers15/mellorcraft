@@ -1,5 +1,27 @@
-MellorCraft v1.4.1
+MellorCraft v1.5.0
 =========================================================
+
+
+v1.5.0 update
+-------------
+- The separate singleplayer and multiplayer pages are now one `mellorcraft.html` client. Its start menu can create a browser world, join a saved browser world, discover and join a relay world, or connect directly to a multiplayer server using a WebSocket address.
+- The mobile Creative inventory now uses the full safe-area viewport with native vertical touch scrolling, so every block, material, tool, weapon, and hotbar slot remains reachable on small screens.
+- Portal arrivals no longer generate the destination chunk synchronously on the gameplay thread. The destination is requested through the existing terrain worker while player simulation is briefly held, preventing portal-entry freezes without increasing per-frame work.
+- Terrain generation now keeps only one worker request in flight and dynamically chooses the nearest current need for each next request. Mesh work is reprioritized around the player's latest chunk, stale far-away requests are discarded, and movement waits at an unready chunk edge instead of forcing synchronous generation.
+- Mob navigation now looks slightly ahead of the body when crossing a ledge, allowing valid one-block ascents and configured safe descents instead of stopping where the mob's collision box first meets the height change.
+- Forest, taiga, and jungle chunks retain the same 64 candidate planting columns and tree probabilities, but their planting windows shift independently in seeded X/Z positions so aligned chunk-by-chunk tree grids are no longer visible.
+- Performance overhaul: player/network block edits now use a high-priority remesh lane that is processed before the next frame is drawn, so mined blocks no longer remain visibly stuck while normal terrain work is queued.
+- Terrain generation now uses a Web Worker on all supported browsers, not only iOS, preventing new-chunk generation from blocking movement/look/rendering on desktop and Android.
+- Chunk meshing no longer synchronously generates missing neighbor chunks and scans voxel memory in cache-friendly order; mobile background mesh builds use smaller frame budgets.
+- Mob navigation/threat decisions are staggered and cached while collision/physics remain smooth every frame, substantially reducing the CPU cost of v1.5.0 pathfinding.
+- Shader lighting caches nearby torches, reuses its shadow upload buffer, throttles heightfield uploads, and uses a smaller mobile shadow field. World rendering now uploads the static terrain model matrix once per frame instead of once per chunk.
+- Fixed the mobile chat/command UI so long chat history can no longer push the text-entry controls out of reach. While chat is open on a phone, the history becomes its own scrollable region and the input stays anchored above the on-screen keyboard.
+- Mobs now use bounded pathfinding when direct movement is blocked, avoid unsafe cliffs and configured hazards, slide around walls, and search for a nearby safe position if embedded or repeatedly stuck. Passive mobs also flee nearby hostile mobs.
+- Glass is now rendered in a separate translucent pass: it is genuinely see-through, keeps a subtle blue tint, and suppresses hidden faces between adjacent glass blocks.
+- Torches now render as slim wooden sticks with a visible flame instead of full cubes, and nearby surfaces receive warm point-light illumination.
+- Added an optional extremely lightweight shader toggle in Game Settings. It draws a visible moving sun, applies a lightweight loaded-chunk heightfield (64x64 desktop / 40x40 mobile) for three-sample directional terrain shadows, strengthens sun contrast, and extends torch glow. The shader defaults off on mobile and on for desktop unless the player has saved a preference.
+- Corrected the shader daylight path so its sun/shadow timing matches the existing 0.25 sunrise through 0.80 sunset clock. Shader mode now lowers the legacy full-day ambient term enough for directional sunlight and terrain shadows to actually be visible.
+- The shader reuses the restored v1.3.2 exposed-face renderer: no greedy remeshing, full shadow maps, framebuffer passes, or texture packs were added.
 
 
 Mobile menu scrolling hotfix
@@ -11,26 +33,13 @@ Mobile menu scrolling hotfix
 
 Files
 -----
-mellorcraft_multiplayer.html   Multiplayer HTML client
-mellorcraft_singleplayer.html  Browser-only singleplayer edition
+mellorcraft.html               Unified browser, relay, and multiplayer client
 mellorcraft_seed_map.html      Interactive seed and structure map
 mellorcraft_server.py          HTTP + WebSocket multiplayer host
 mellorcraft_relay.py           Singleplayer LAN relay (WebSocket, default port 8000)
 requirements.txt               Python dependency
 worlds/                        One JSON save per named multiplayer world
 
-
-v1.4.1 respawn / shared-save / disconnect update
------------------------------------------------
-- Added the **Respawn Block**, a placeable block crafted from 5 Gold Ingots. Right-click/tap Place while targeting it to set your personal respawn point one block above it.
-- Activating a Respawn Block clears the two blocks directly above it so the player cannot respawn inside terrain.
-- Death and defeating the Mellorite Entity now return each player to their active Respawn Block. If that block is broken, the player's respawn is reset to that player's original deterministic world-spawn coordinates.
-- Respawn points and original spawn coordinates are persisted per player in singleplayer, relay-hosted LAN worlds, and Python-server worlds.
-- Relay world hosts can use the server-management commands `/op`, `/deop`, `/ops`, `/list`, and `/mobs` from in-game chat. Operator state is saved with the world.
-- Browser-hosted worlds and Python-server worlds now write the same canonical `MellorCraftWorld` JSON schema (`formatVersion` 7): name, seed, time, boss state, block edits, operators, player profiles, mobs, dropped items, and timestamps. Both loaders retain compatibility with the older browser and server save layouts.
-- A browser-exported world JSON can therefore be imported into singleplayer or placed in the Python server's `worlds` folder; Python-server JSON can likewise be imported into singleplayer.
-- LAN guests are forced back to the world-selection screen when the world host or relay disappears. Multiplayer clients similarly return to the join screen when the Python server goes offline, preventing disconnected clients from continuing an unsaved phantom session.
-- The relay now uses WebSocket keepalive timeouts so dead host connections are detected and closed more promptly.
 
 v1.4.1 update
 -------------
@@ -44,8 +53,8 @@ Singleplayer LAN relay
 ----------------------
 1. On a PC reachable by the players, install the existing dependency with `python -m pip install -r requirements.txt`.
 2. Start `python mellorcraft_relay.py`. It listens on WebSocket port 8000 by default.
-3. In the world-owning singleplayer client, open Game Settings, scroll to **Open Singleplayer World to LAN**, enter the relay IP/port, and choose **Open World to LAN**.
-4. On another singleplayer client, choose **Join World**, enter the same relay IP/port, choose **Find Worlds on Relay**, select the world, and join it.
+3. In the world-owning client, open Game Settings, scroll to **Open Browser World to Relay**, enter the relay IP/port, and choose **Open World to LAN**.
+4. On another client, use **Join a Relay World**, enter the same relay IP/port, choose **Find Worlds on Relay**, select the world, and join it.
 
 The relay is intended for a trusted local network and has no accounts, TLS, or Internet hardening. If the singleplayer page is loaded from an HTTPS site, the browser may block an insecure `ws://` LAN relay as mixed content; use the local HTML file or serve the page over HTTP on the LAN.
 
@@ -131,14 +140,14 @@ Alt Dimension
 - Boss Shrines occupy base Y-5 through base Y+4 and are constrained to Y=2–44.
 - Structures therefore cannot be cut off by the floor or ceiling.
 
-Singleplayer edition
---------------------
-Open mellorcraft_singleplayer.html in a modern browser. It uses the complete game
-engine without the Python server. Named worlds autosave to browser storage and
-include the seed, block edits, time, player state, inventory, mobs, and dropped
-items.
+Unified client
+--------------
+Open `mellorcraft.html` in a modern browser. Browser worlds use the complete game
+engine without the Python server and autosave the seed, block edits, time, player
+state, inventory, mobs, and dropped items. The same start menu can also join relay
+worlds or a dedicated server using its `ws://` or `wss://` address.
 
-You can also open the singleplayer edition online by opening linkers15.github.io/mellorcraft
+You can also open the unified client online by opening linkers15.github.io/mellorcraft
 
 Export World downloads the selected save as JSON. Import JSON World restores a
 save or transfers it to another browser. Browser storage is tied to the page
@@ -168,7 +177,7 @@ Mouse       Look
 Space       Jump / fly upward
 Shift       Fly downward
 Left click  Break / attack
-Right click Place / use jukebox / set Respawn Block
+Right click Place / use jukebox
 Q           Drop selected item
 G           Eat raw meat
 T           Chat
@@ -180,8 +189,8 @@ Esc         Settings / pause
 Multiplayer persistence
 -----------------------
 Each named multiplayer world has its own JSON save. The server preserves block
-edits, time, operators, mobs, dropped items, and player profiles including position, view angle,
-dimension, health, gamemode, inventory, selected hotbar slot, original spawn, and Respawn Block location. Player physics
+edits, time, operators, mobs, and player profiles including position, view angle,
+dimension, health, gamemode, inventory, and selected hotbar slot. Player physics
 and position updates continue while the settings menu is open.
 
 Network notes
@@ -190,8 +199,10 @@ Allow Python through the host firewall on private networks. TCP ports 8000 and
 8765 must be reachable. The server is intended for a trusted local network and
 does not provide accounts, TLS encryption, or Internet hardening.
 
-Both the multiplayer HTML client and Python server use protocol 4. Replace both
-files together when updating an older installation.
+The v1.5 multiplayer HTML client and Python server use protocol 5 for mod-aware joins.
+An unmodded server also accepts supported older protocols; a modded server requires
+protocol 5 plus the exact mod-set signature. Replace client and server together when
+updating a modded installation.
 
 Mountain and Alt Dimension revision
 -----------------------------------
@@ -314,3 +325,37 @@ Relay skin labels
 -----------------
 - The singleplayer LAN relay join screen now uses the same shirt-color labels as the multiplayer client: Blue, Green, Purple, Red, Light Blue, and Dark Green.
 - The underlying skin IDs are unchanged for protocol compatibility.
+
+Singleplayer host identity hotfix
+---------------------------------
+- The singleplayer start screen now asks for a player name and shirt color before creating or loading a local world.
+- The six shirt-color choices exactly match the multiplayer client: Blue, Green, Purple, Red, Light Blue, and Dark Green.
+- The selected identity is remembered in browser storage and is also used as the default identity when joining a relay world.
+- When a local world is opened to LAN, the host advertises and synchronizes using the selected username and skin instead of always appearing as `Player` with the blue shirt.
+- Browser-world player profiles are saved under the actual lower-cased username, matching the Python server's canonical `playerProfiles` behavior. The active singleplayer host is always added to the world's operator set under that username.
+
+v1.5.0 sun LOS + mob AI revision
+--------------------------------
+- The shader sun disc now performs a cached line-of-sight test against already-rendered terrain height columns. Hills, mountains, roofs, trees, and other opaque loaded terrain hide the sun instead of allowing the DOM sun disc to draw through them. The test never generates chunks and is throttled for mobile performance.
+- Mob navigation now prefers same-level ground before climbing, treats one block as the maximum upward step independently from safe-drop distance, and clamps long A* goals to the local search radius.
+- Hostile chase logic is explicitly separate from passive flee logic. Bears and other hostile mobs clear stale wander paths when acquiring a player and use chase-biased local steering when a pathfinder detour would otherwise begin by moving strongly away.
+
+
+v1.5.0 shader lighting revision
+------------------------------
+- Lightweight shader settings now expose independent controls for shadow strength, shadow softness, torch brightness, torch range, night darkness, and cave darkness. Settings persist in browser storage.
+- Terrain shadows use additional near/far height probes plus two lateral penumbra probes, producing stronger contact shadows and softer edges without a heavyweight framebuffer shadow map.
+- Cave lighting uses cached overhead/nearby sky-exposure samples from already-loaded chunk height data. Deep overburden darkens naturally, while cave mouths and sparse overhead cover admit more ambient light. No extra chunks are generated for lighting.
+- Night ambient light is independently configurable and transitions smoothly through dawn/dusk.
+- Torch light has a smoother warm falloff, configurable brightness/range, and remains additive so torches restore useful visibility in dark caves and at night.
+- Mobile keeps the system lightweight: cave exposure is throttled/cached, shadow height uploads remain throttled, and only the three nearest torches are used (four on desktop).
+
+
+v1.5.0 stronger sun/shadow + multiplayer administration update
+--------------------------------------------------------------
+- Shader Shadow Strength now defaults to 105% and is adjustable from 0-125%.
+- New Sunray Strength setting (0-200%, default 125%) controls the LOS-aware sun rays/glow. Sun and rays remain hidden behind terrain.
+- Dedicated multiplayer: `/gamemode <player> <survival|creative|spectator>` changes a named connected player's mode. `/gm` is an alias.
+- Dedicated multiplayer: `/tp <player> <targetPlayer>` teleports a player directly to another player, including across dimensions.
+- Dedicated multiplayer coordinate teleport: `/tp <player> <x> <y> <z> <dimension>`, where dimension is 1=Overworld, 2=Timeless Void, 3=Boss Dimension.
+- Usernames containing spaces may be quoted in server commands, e.g. `/tp "Player One" "Player Two"`.

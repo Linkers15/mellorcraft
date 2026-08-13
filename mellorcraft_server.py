@@ -15,6 +15,7 @@ import math
 import os
 import random
 import re
+import shlex
 import socket
 import tempfile
 import threading
@@ -61,7 +62,7 @@ MOB_DEFINITIONS: dict[str, dict[str, Any]] = {
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_ -]{1,20}$")
 ENTITY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 SCRIPT_DIR = Path(__file__).resolve().parent
-CLIENT_FILENAME = "mellorcraft_multiplayer.html"
+CLIENT_FILENAME = "mellorcraft.html"
 LEGACY_SAVE_FILENAME = "mellorcraft_world.json"
 WORLDS_DIRNAME = "worlds"
 DEFAULT_WORLD_NAME = "World"
@@ -142,6 +143,7 @@ class MellorCraftWorld:
         self.items: dict[str, DroppedItemState] = {}
         self.mob_hosts: dict[int, str | None] = {0: None, 1: None, 2: None}
         self.damage_locks: dict[str, float] = {}
+        self.teleport_locks: dict[str, float] = {}
         self.attack_cooldowns: dict[str, float] = {}
         self.mob_attack_cooldowns: dict[str, float] = {}
         self.mob_environment_cooldowns: dict[str, float] = {}
@@ -357,7 +359,7 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 7, "version": "1.4.1", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 7, "version": "1.5.0", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "bossDefeated": self.boss_defeated,
             "blocks": self.blocks, "operators": sorted(self.operators), "playerProfiles": profiles,
             "mobs": [asdict(mob) for mob in self.mobs.values()], "items": [asdict(item) for item in self.items.values()],
@@ -798,12 +800,14 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
 
     if message_type == "player_update":
         world.client_last_updates[player_id] = time.monotonic()
-        player.x = max(-2_000_000.0, min(2_000_000.0, finite_number(data.get("x"), player.x)))
-        player.y = max(-100.0, min(1000.0, finite_number(data.get("y"), player.y)))
-        player.z = max(-2_000_000.0, min(2_000_000.0, finite_number(data.get("z"), player.z)))
+        teleport_locked = time.monotonic() < world.teleport_locks.get(player.id, 0.0)
+        if not teleport_locked:
+            player.x = max(-2_000_000.0, min(2_000_000.0, finite_number(data.get("x"), player.x)))
+            player.y = max(-100.0, min(1000.0, finite_number(data.get("y"), player.y)))
+            player.z = max(-2_000_000.0, min(2_000_000.0, finite_number(data.get("z"), player.z)))
+            player.dimension = bounded_int(data.get("dimension"), 0, 2, player.dimension)
         player.yaw = finite_number(data.get("yaw"), player.yaw)
         player.pitch = max(-math.pi / 2, min(math.pi / 2, finite_number(data.get("pitch"), player.pitch)))
-        player.dimension = bounded_int(data.get("dimension"), 0, 2, player.dimension)
         if time.monotonic() >= world.damage_locks.get(player.id, 0.0):
             player.health = max(0.0, min(10.0, finite_number(data.get("health"), player.health)))
         player.heldItem = bounded_int(data.get("heldItem"), 0, 255)
@@ -991,6 +995,7 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
             world.client_device_classes.pop(player_id, None)
             world.client_last_updates.pop(player_id, None)
             world.damage_locks.pop(player_id, None)
+            world.teleport_locks.pop(player_id, None)
             world.attack_cooldowns.pop(player_id, None)
             hosts_changed = world.recompute_mob_hosts()
             if player is not None:
@@ -1109,13 +1114,97 @@ async def set_operator(username: str, enabled: bool) -> str:
     return f"{'Added' if enabled else 'Removed'} offline operator entry for {canonical}."
 
 
+DIMENSION_COMMAND_NAMES = {0: "Overworld", 1: "Timeless Void", 2: "Boss Dimension"}
+
+
+async def set_player_gamemode(username: str, mode: str) -> str:
+    player = find_player_by_username(username)
+    if player is None:
+        return f"Player not found: {username}"
+    normalized = mode.strip().lower()
+    if normalized not in {"survival", "creative", "spectator"}:
+        return "Usage: /gamemode <player> <survival|creative|spectator>"
+    player.gamemode = normalized
+    if normalized != "survival":
+        player.health = 10.0
+    world.dirty = True
+    websocket = world.connections.get(player.id)
+    if websocket is not None:
+        await send_json(websocket, {"type": "gamemode_update", "gamemode": normalized})
+    await broadcast({"type": "system", "message": f"{player.username}'s gamemode was set to {normalized}."})
+    return f"Set {player.username}'s gamemode to {normalized}."
+
+
+async def teleport_player_to_position(player: PlayerState, x: float, y: float, z: float, dimension: int, description: str) -> str:
+    player.x = max(-2_000_000.0, min(2_000_000.0, x))
+    player.y = max(-100.0, min(1000.0, y))
+    player.z = max(-2_000_000.0, min(2_000_000.0, z))
+    player.dimension = max(0, min(2, int(dimension)))
+    world.teleport_locks[player.id] = time.monotonic() + 0.75
+    world.damage_locks[player.id] = max(world.damage_locks.get(player.id, 0.0), time.monotonic() + 0.5)
+    world.dirty = True
+    websocket = world.connections.get(player.id)
+    message = f"Teleported to {description}."
+    if websocket is not None:
+        await send_json(websocket, {
+            "type": "teleport_position",
+            "position": {"x": player.x, "y": player.y, "z": player.z, "dimension": player.dimension},
+            "message": message,
+        })
+    if world.recompute_mob_hosts():
+        await broadcast_mob_hosts()
+    return message
+
+
+async def process_teleport_command(args: list[str]) -> str:
+    if len(args) == 2:
+        source = find_player_by_username(args[0])
+        destination = find_player_by_username(args[1])
+        if source is None:
+            return f"Player not found: {args[0]}"
+        if destination is None:
+            return f"Player not found: {args[1]}"
+        dim_name = DIMENSION_COMMAND_NAMES.get(destination.dimension, f"dimension {destination.dimension + 1}")
+        result = await teleport_player_to_position(
+            source, destination.x, destination.y, destination.z, destination.dimension,
+            f"{destination.username} in {dim_name}",
+        )
+        await broadcast({"type": "system", "message": f"{source.username} was teleported to {destination.username} ({dim_name})."})
+        return result
+
+    if len(args) == 5:
+        source = find_player_by_username(args[0])
+        if source is None:
+            return f"Player not found: {args[0]}"
+        try:
+            x, y, z = (float(args[i]) for i in (1, 2, 3))
+            command_dimension = int(args[4])
+        except (TypeError, ValueError):
+            return "Usage: /tp <player> <x> <y> <z> <dimension 1|2|3>"
+        if not all(math.isfinite(v) for v in (x, y, z)) or command_dimension not in {1, 2, 3}:
+            return "Usage: /tp <player> <x> <y> <z> <dimension 1|2|3>"
+        internal_dimension = command_dimension - 1
+        dim_name = DIMENSION_COMMAND_NAMES[internal_dimension]
+        result = await teleport_player_to_position(source, x, y, z, internal_dimension, f"{x:g}, {y:g}, {z:g} in {dim_name}")
+        await broadcast({"type": "system", "message": f"{source.username} was teleported to {x:g}, {y:g}, {z:g} ({dim_name})."})
+        return result
+
+    return "Usage: /tp <player> <targetPlayer> OR /tp <player> <x> <y> <z> <dimension 1|2|3>"
+
+
 async def process_console_command(line: str) -> str:
     command = line.strip()
     if not command:
         return ""
-    parts = command.split(maxsplit=1)
-    name = parts[0].lower()
-    argument = parts[1] if len(parts) > 1 else ""
+    try:
+        tokens = shlex.split(command)
+    except ValueError as exc:
+        return f"Invalid command syntax: {exc}"
+    if not tokens:
+        return ""
+    name = tokens[0].lower()
+    args = tokens[1:]
+    argument = " ".join(args)
     if name == "/op":
         return await set_operator(argument, True)
     if name == "/deop":
@@ -1127,9 +1216,17 @@ async def process_console_command(line: str) -> str:
         return f"Players ({len(names)}): " + (", ".join(names) if names else "none")
     if name == "/mobs":
         counts = {dim: sum(1 for mob in world.mobs.values() if mob.dimension == dim) for dim in (0, 1, 2)}
-        return f"Mobs: overworld={counts[0]}, alternate={counts[1]}, boss={counts[2]}"
+        return f"Mobs: overworld={counts[0]}, timeless_void={counts[1]}, boss={counts[2]}"
+    if name in {"/gamemode", "/gm"}:
+        if len(args) != 2:
+            return "Usage: /gamemode <player> <survival|creative|spectator>"
+        return await set_player_gamemode(args[0], args[1])
+    if name == "/tp":
+        return await process_teleport_command(args)
     if name in {"/help", "help"}:
-        return "Console commands: /op <username>, /deop <username>, /ops, /list, /mobs, /help"
+        return ("Console commands: /op <username>, /deop <username>, /ops, /list, /mobs, "
+                "/gamemode <player> <mode>, /tp <player> <targetPlayer>, "
+                "/tp <player> <x> <y> <z> <dimension 1|2|3>, /help")
     return "Unknown console command. Type /help."
 
 
@@ -1192,7 +1289,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.4.1 World Selection")
+    print("\nMellorCraft v1.5.0 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -1283,7 +1380,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.4.1 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.5.0 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -1307,7 +1404,7 @@ def main() -> None:
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.4.1 multiplayer server is running")
+    print("\nMellorCraft v1.5.0 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")
@@ -1316,7 +1413,7 @@ def main() -> None:
     print(f"  World seed:    {world.seed}")
     print(f"  Save file:     {save_path.relative_to(SCRIPT_DIR)}")
     print("Join this same world on the host PC using the Host PC address above.")
-    print("Console commands: /op <username>, /deop <username>, /ops, /list, /mobs, /help")
+    print("Console commands: /op, /deop, /ops, /list, /mobs, /gamemode <player> <mode>, /tp <player> <target|x y z dim>, /help")
     print("Press Ctrl+C to stop.\n")
     if open_game:
         try:
