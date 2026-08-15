@@ -634,6 +634,7 @@
             pointer-events: auto; font-size: 18px; user-select: none;
         }
         html.mobile-mode .mob-top-btn:active { background: rgba(255,255,255,0.3); }
+        html.mobile-mode #btnCrouch.crouch-active { background: rgba(78,204,163,0.72); border-color: #bfffe9; }
         html.mobile-mode #btnMenu { top: 10px; left: 10px; }
         html.mobile-mode #btnChat { top: 10px; left: 55px; }
         html.mobile-mode #btnEat { top: 10px; left: 100px; }
@@ -641,6 +642,7 @@
         html.mobile-mode #btnInv { top: 10px; right: 10px; }
         html.mobile-mode #btnCraft { top: 10px; right: 55px; }
         html.mobile-mode #btnCreative { top: 10px; right: 100px; display: none; }
+        html.mobile-mode #btnCrouch { top: 10px; right: 145px; }
         html.mobile-mode #joyBase {
             position: absolute; width: 100px; height: 100px; background: rgba(255,255,255,0.1);
             border-radius: 50%; display: none; pointer-events: none; border: 2px solid rgba(255,255,255,0.2);
@@ -746,6 +748,14 @@
             </select>
         </div>
         <div class="setting-group">
+            <label>Crouch Control:</label>
+            <select id="setCrouchMode">
+                <option value="hold">Hold</option>
+                <option value="toggle">Toggle</option>
+            </select>
+            <div class="setting-help">Shift on desktop or the crouch button on mobile. Crouching hides your nametag and locator marker from other players.</div>
+        </div>
+        <div class="setting-group">
             <label>Render Distance: <span id="rdVal">6</span> chunks</label>
             <input type="range" id="setRd" min="2" max="16" value="6">
         </div>
@@ -809,6 +819,7 @@
             <div id="btnInv" class="mob-top-btn">🎒</div>
             <div id="btnCraft" class="mob-top-btn">⚒️</div>
             <div id="btnCreative" class="mob-top-btn">🎨</div>
+            <div id="btnCrouch" class="mob-top-btn" title="Crouch">⇩</div>
             <div id="btnJump" class="mob-btn">⬆️</div>
             <div id="btnMine" class="mob-btn">⛏️</div>
             <div id="btnPlace" class="mob-btn">🧱</div>
@@ -842,7 +853,7 @@
             <strong>Controls:</strong><br>
             WASD - Move<br>
             Space - Jump/Fly Up<br>
-            Shift - Fly Down<br>
+            Shift - Crouch / Fly Down<br>
             T - Multiplayer Chat<br>
             / - Open Commands<br>
             ESC - Settings Menu<br>
@@ -963,6 +974,9 @@
         let espEnabled = false;
         let masterVolume = 0.45;
         let FOV = 60;
+        let crouchControlMode = safeStorageGet('mellorcraftCrouchMode') === 'toggle' ? 'toggle' : 'hold';
+        let crouchToggleActive = false;
+        let mobileCrouchHeld = false;
         let liteShaderEnabled = safeStorageGet('mellorcraftLiteShader') !== null ? safeStorageGet('mellorcraftLiteShader') === '1' : !isMobilePlaying;
         let shaderShadowStrength = loadShaderNumber('mellorcraftShaderShadowV2', 105, 0, 125) / 100;
         let shaderSunrayStrength = loadShaderNumber('mellorcraftShaderSunrays', 125, 0, 200) / 100;
@@ -1188,7 +1202,7 @@
         function integratedPublicPlayer(state) {
             return { id:state.id, username:state.username, skin:state.skin, x:state.x, y:state.y, z:state.z,
                 yaw:state.yaw, pitch:state.pitch, dimension:state.dimension, health:state.health,
-                gamemode:state.gamemode, heldItem:state.heldItem, isOperator:Boolean(state.isOperator) };
+                gamemode:state.gamemode, heldItem:state.heldItem, crouching:Boolean(state.crouching), isOperator:Boolean(state.isOperator) };
         }
 
         function integratedLocalState() {
@@ -1198,6 +1212,7 @@
                 x:Number(player?.x)||0.5, y:Number(player?.y)||50, z:Number(player?.z)||0.5,
                 yaw:Number(player?.yaw)||0, pitch:Number(player?.pitch)||0, dimension:currentDimension,
                 health:Number(player?.health)||10, gamemode:player?.gamemode||'survival', heldItem:slot?Number(slot.id)||0:0,
+                crouching:Boolean(player?.crouching),
                 selectedSlot:Number(player?.selectedSlot)||0,
                 inventory:(player?.inventory||[]).map(item=>({id:Number(item?.id)||0,count:Number(item?.count)||0})),
                 originalSpawn:playerOriginalSpawn?{...playerOriginalSpawn}:null,
@@ -1374,6 +1389,7 @@
                 state.dimension=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0)));
                 if (now >= (integratedDamageLocks.get(clientId)||0)) state.health=Math.max(0,Math.min(10,Number(payload.health)||state.health||10));
                 state.heldItem=Math.max(0,Math.min(255,Math.floor(Number(payload.heldItem)||0)));
+                state.crouching=Boolean(payload.crouching);
                 if (Array.isArray(payload.inventory)) state.inventory=payload.inventory.slice(0,30).map(v=>({id:Math.max(0,Math.min(255,Number(v?.id)||0)),count:Math.max(0,Math.min(100,Number(v?.count)||0))}));
                 state.selectedSlot=Math.max(0,Math.min(8,Math.floor(Number(payload.selectedSlot)||0)));
                 if (state.inventory && state.inventory[state.selectedSlot]) state.heldItem=state.inventory[state.selectedSlot].count>0?state.inventory[state.selectedSlot].id:0;
@@ -1383,7 +1399,7 @@
             }
             if (type==='block_change') {
                 const dim=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0))),x=Math.floor(Number(payload.x)),y=Math.floor(Number(payload.y)),z=Math.floor(Number(payload.z));
-                const previous=Number.isFinite(Number(payload.previousType))?Number(payload.previousType):getBlock(x,y,z,dim);
+                const previous=Number.isFinite(Number(payload.previousType))?Number(payload.previousType):peekLoadedBlock(x,y,z,dim);
                 networkApplyingBlock=true; try { setBlock(x,y,z,payload.blockType,dim); } finally { networkApplyingBlock=false; }
                 if(previous===BLOCKS.RESPAWN_BLOCK&&Number(payload.blockType)!==BLOCKS.RESPAWN_BLOCK)integratedResetRespawnsForBrokenBlock(dim,x,y,z);
                 integratedBroadcast({type:'block_update',playerId:clientId,dimension:dim,x,y,z,blockType:Number(payload.blockType)||0});
@@ -1392,7 +1408,7 @@
             if (type==='block_batch') {
                 const clean=[];
                 networkApplyingBlock=true;
-                try { for (const c of (Array.isArray(payload.changes)?payload.changes:[]).slice(0,256)) { const dim=Math.max(0,Math.min(2,Math.floor(Number(c.dimension)||0))),x=Math.floor(Number(c.x)),y=Math.floor(Number(c.y)),z=Math.floor(Number(c.z)),previous=getBlock(x,y,z,dim); setBlock(x,y,z,c.blockType,dim); if(previous===BLOCKS.RESPAWN_BLOCK&&Number(c.blockType)!==BLOCKS.RESPAWN_BLOCK)integratedResetRespawnsForBrokenBlock(dim,x,y,z); clean.push({dimension:dim,x,y,z,blockType:Number(c.blockType)||0}); } }
+                try { for (const c of (Array.isArray(payload.changes)?payload.changes:[]).slice(0,256)) { const dim=Math.max(0,Math.min(2,Math.floor(Number(c.dimension)||0))),x=Math.floor(Number(c.x)),y=Math.floor(Number(c.y)),z=Math.floor(Number(c.z)),previous=peekLoadedBlock(x,y,z,dim); setBlock(x,y,z,c.blockType,dim); if(previous===BLOCKS.RESPAWN_BLOCK&&Number(c.blockType)!==BLOCKS.RESPAWN_BLOCK)integratedResetRespawnsForBrokenBlock(dim,x,y,z); clean.push({dimension:dim,x,y,z,blockType:Number(c.blockType)||0}); } }
                 finally { networkApplyingBlock=false; }
                 if (clean.length) integratedBroadcast({type:'block_batch_update',playerId:clientId,changes:clean},clientId);
                 return true;
@@ -1633,7 +1649,8 @@
                     pitch: Number(data.pitch) || 0,
                     dimension: Number.isInteger(data.dimension) ? data.dimension : 0,
                     health: Number.isFinite(Number(data.health)) ? Number(data.health) : 10,
-                    gamemode: data.gamemode || 'survival', heldItem: Number(data.heldItem) || 0
+                    gamemode: data.gamemode || 'survival', heldItem: Number(data.heldItem) || 0,
+                    crouching: Boolean(data.crouching)
                 };
                 remotePlayers.set(data.id, rp);
             } else {
@@ -1648,6 +1665,7 @@
                 if (Number.isFinite(Number(data.health))) rp.health = Number(data.health);
                 rp.gamemode = data.gamemode || rp.gamemode;
                 rp.heldItem = Number(data.heldItem) || 0;
+                rp.crouching = Boolean(data.crouching);
             }
         }
 
@@ -2990,7 +3008,7 @@
             const maxAge = isMobilePlaying ? 260 : 140;
             if (now-lastCaveLightAt < maxAge && moved < 0.55 && lastCaveMeshRevision === chunkMeshRevision) return cachedCaveOcclusion;
 
-            const eyeY = player.y + 1.55;
+            const eyeY = playerEyeY();
             // Center samples detect overburden; wider samples let daylight leak in near
             // cave mouths and beneath sparse tree canopies instead of causing a hard switch.
             const samples = [
@@ -3043,7 +3061,7 @@
             const maxAge = isMobilePlaying ? 120 : 80;
             if (now-lastSunLosCheckAt < maxAge && moved < 0.18 && dirChanged < 0.004 && lastSunLosMeshRevision === chunkMeshRevision) return cachedSunLosClear;
 
-            const eyeX = player.x, eyeY = player.y + 1.62, eyeZ = player.z;
+            const eyeX = player.x, eyeY = playerEyeY(), eyeZ = player.z;
             const horizontal = Math.hypot(dx, dz);
             let clear = true;
             if (horizontal < 0.002) {
@@ -3078,7 +3096,7 @@
             const mag = Math.hypot(lightDir[0], lightDir[1], lightDir[2]) || 1;
             const dx = lightDir[0] / mag, dy = lightDir[1] / mag, dz = lightDir[2] / mag;
             if (!hasDirectSunLineOfSight([dx, dy, dz])) { sun.style.display = 'none'; return; }
-            let clip = multiplyMat4Vec4(uViewMat, [player.x + dx * 420, player.y + 1.6 + dy * 420, player.z + dz * 420, 1]);
+            let clip = multiplyMat4Vec4(uViewMat, [player.x + dx * 420, playerEyeY() + dy * 420, player.z + dz * 420, 1]);
             clip = multiplyMat4Vec4(uProjectionMat, clip);
             if (clip[3] <= 0.01) { sun.style.display = 'none'; return; }
             const ndcX = clip[0] / clip[3], ndcY = clip[1] / clip[3];
@@ -3252,6 +3270,9 @@
         let urgentChunkRemeshQueue = [];
         let urgentChunkRemeshHead = 0;
         const urgentChunkRemeshSet = new Set();
+        let deferredChunkDisposalQueue = [];
+        let deferredChunkDisposalHead = 0;
+        const deferredChunkDisposalSet = new Set();
         let chunkMeshRevision = 0;
         let chunkMaintenanceTimer = 0;
         let lastChunkCenterX = Number.NaN, lastChunkCenterZ = Number.NaN, lastChunkDimension = -1;
@@ -3323,6 +3344,30 @@
                 if (mesh[name]) gl.deleteBuffer(mesh[name]);
             }
         }
+        function deferChunkDisposal(key) {
+            if (deferredChunkDisposalSet.has(key)) return;
+            deferredChunkDisposalSet.add(key);
+            deferredChunkDisposalQueue.push(key);
+        }
+        function processDeferredChunkDisposals() {
+            const start = performance.now();
+            let removed = 0;
+            const maxRemovals = isMobilePlaying ? 2 : 8;
+            const budgetMs = isMobilePlaying ? 0.6 : 1.25;
+            while (deferredChunkDisposalHead < deferredChunkDisposalQueue.length && removed < maxRemovals && performance.now() - start < budgetMs) {
+                const key = deferredChunkDisposalQueue[deferredChunkDisposalHead++];
+                deferredChunkDisposalSet.delete(key);
+                const mesh = chunkMeshes.get(key);
+                if (!mesh || mesh.dim === currentDimension) continue;
+                disposeChunkMesh(mesh);
+                chunkMeshes.delete(key); chunks.delete(key); chunkBuildSet.delete(key); chunkRemeshPending.delete(key);
+                chunkMeshRevision++; removed++;
+            }
+            if (deferredChunkDisposalHead > 128 && deferredChunkDisposalHead * 2 > deferredChunkDisposalQueue.length) {
+                deferredChunkDisposalQueue = deferredChunkDisposalQueue.slice(deferredChunkDisposalHead);
+                deferredChunkDisposalHead = 0;
+            }
+        }
 
         function recordSharedBlockEdit(dim, x, y, z, blockType) {
             const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
@@ -3332,6 +3377,33 @@
             const key = chunkKey(dim, cx, cz);
             if (!sharedChunkEdits.has(key)) sharedChunkEdits.set(key, new Map());
             sharedChunkEdits.get(key).set(index, blockType);
+        }
+
+        function applySharedBlockWithoutGenerating(x, y, z, blockType, dim, dirtyKeys) {
+            recordSharedBlockEdit(dim, x, y, z, blockType);
+            if (isSingleplayerEdition) singleplayerDirty = true;
+
+            const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
+            const key = chunkKey(dim, cx, cz);
+            const chunk = chunks.get(key);
+            if (!chunk) return;
+
+            const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            const index = lx + y * CHUNK_SIZE + lz * CHUNK_SIZE * WORLD_HEIGHT;
+            if (chunk[index] === blockType) return;
+            chunk[index] = blockType;
+            if (blockType !== BLOCKS.AIR) chunk.generatedMaxY = Math.max(Number(chunk.generatedMaxY) || 1, y);
+
+            dirtyKeys.add(key);
+            if (lx === 0) dirtyKeys.add(chunkKey(dim, cx - 1, cz));
+            if (lx === CHUNK_SIZE - 1) dirtyKeys.add(chunkKey(dim, cx + 1, cz));
+            if (lz === 0) dirtyKeys.add(chunkKey(dim, cx, cz - 1));
+            if (lz === CHUNK_SIZE - 1) dirtyKeys.add(chunkKey(dim, cx, cz + 1));
+        }
+
+        function rebuildDirtyChunkMeshes(dirtyKeys) {
+            for (const key of dirtyKeys) scheduleChunkRemesh(key, true);
         }
 
         function applySharedEditsToChunk(chunk, cx, cz, dim) {
@@ -4562,6 +4634,16 @@
             return chunk[lx + y * CHUNK_SIZE + lz * CHUNK_SIZE * WORLD_HEIGHT];
         }
 
+        function peekLoadedBlock(x, y, z, dim = currentDimension) {
+            if (y < 0 || y >= getDimensionHeight(dim)) return BLOCKS.AIR;
+            const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
+            const chunk = chunks.get(chunkKey(dim, cx, cz));
+            if (!chunk) return null;
+            const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            return chunk[lx + y * CHUNK_SIZE + lz * CHUNK_SIZE * WORLD_HEIGHT];
+        }
+
 
         function isWaterBlock(id) { return id >= BLOCKS.WATER_SOURCE && id <= BLOCKS.WATER_FLOW_3; }
         function isLavaBlock(id) { return id >= BLOCKS.LAVA_SOURCE && id <= BLOCKS.LAVA_FLOW_3; }
@@ -4821,8 +4903,41 @@
             x: 0.5, y: 50, z: 0.5, vx: 0, vy: 0, vz: 0, kbX: 0, kbZ: 0, kbTime: 0,
             pitch: 0, yaw: 0, onGround: false, highestY: 50,
             health: 10, maxHealth: 10, invincibleTime: 3, timeSinceHit: 0, regenTimer: 0,
-            gamemode: 'survival', inventory: [], selectedSlot: 0
+            gamemode: 'survival', inventory: [], selectedSlot: 0, crouching: false
         };
+
+        function setPlayerCrouching(next, broadcast = true) {
+            next = Boolean(next);
+            if (player.crouching === next) return false;
+            player.crouching = next;
+            const mobileButton = document.getElementById('btnCrouch');
+            if (mobileButton) mobileButton.classList.toggle('crouch-active', next);
+            if (broadcast && multiplayerConnected) sendLocalPlayerState(performance.now(), true);
+            return true;
+        }
+
+        function refreshCrouchState() {
+            const held = Boolean(keys.ShiftLeft || keys.ShiftRight || mobileCrouchHeld);
+            setPlayerCrouching(crouchControlMode === 'toggle' ? crouchToggleActive : held);
+        }
+
+        function pressCrouchControl() {
+            if (crouchControlMode === 'toggle') {
+                crouchToggleActive = !crouchToggleActive;
+                refreshCrouchState();
+            } else {
+                mobileCrouchHeld = true;
+                refreshCrouchState();
+            }
+        }
+
+        function releaseCrouchControl() {
+            if (crouchControlMode !== 'hold') return;
+            mobileCrouchHeld = false;
+            refreshCrouchState();
+        }
+
+        function playerEyeY() { return player.y + (player.crouching ? 1.32 : 1.6); }
 
         function initInventory() {
             player.inventory = [];
@@ -5821,6 +5936,7 @@
             };
             touchAction('btnJump', () => { keys.Space = true; player.onGround = false; }, () => { keys.Space = false; });
             touchAction('btnFlyDown', () => { keys.ShiftLeft = true; }, () => { keys.ShiftLeft = false; });
+            touchAction('btnCrouch', pressCrouchControl, releaseCrouchControl);
             touchAction('btnMine', () => {
                 cachedRenderHit = raycast();
                 mobileMineTarget = cachedRenderHit ? { ...cachedRenderHit } : null;
@@ -5842,6 +5958,7 @@
                 leftTouchId = null; rightTouchId = null;
                 isMoving = false; moveDx = 0; moveDy = 0;
                 keys.Space = false; keys.ShiftLeft = false;
+                mobileCrouchHeld = false; refreshCrouchState();
                 isMouseDown = false; mobileMineTarget = null;
                 joyBase.style.display = 'none';
             };
@@ -5864,6 +5981,12 @@
             if (e.code === 'KeyT') { e.preventDefault(); openChat(''); return; }
             
             keys[e.code] = true;
+            if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight')) {
+                if (crouchControlMode === 'toggle' && !e.repeat && !settingsOpen) {
+                    crouchToggleActive = !crouchToggleActive;
+                }
+                refreshCrouchState();
+            }
             if (e.code === 'KeyE') toggleCrafting();
             if (e.code === 'KeyR') toggleInventory();
             if (e.code === 'KeyC') toggleCreativeInventory();
@@ -5910,7 +6033,10 @@
             }
         }
 
-        document.addEventListener('keyup', e => keys[e.code] = false);
+        document.addEventListener('keyup', e => {
+            keys[e.code] = false;
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') refreshCrouchState();
+        });
         
         document.addEventListener('mousemove', e => {
             if ((!locked && !isMobilePlaying) || !gameStarted || isChatOpen || deathScreenOpen) return;
@@ -6030,7 +6156,7 @@
             
             let hit = isMobilePlaying ? mobileMineTarget : raycast();
             if (hit && isMobilePlaying) {
-                const centerDistance = Math.hypot((hit.x + 0.5) - player.x, (hit.y + 0.5) - (player.y + 1.6), (hit.z + 0.5) - player.z);
+                const centerDistance = Math.hypot((hit.x + 0.5) - player.x, (hit.y + 0.5) - playerEyeY(), (hit.z + 0.5) - player.z);
                 if (centerDistance > 6.75 || getBlock(hit.x, hit.y, hit.z) === BLOCKS.AIR) {
                     cachedRenderHit = raycast();
                     mobileMineTarget = cachedRenderHit ? { ...cachedRenderHit } : null;
@@ -6238,7 +6364,7 @@
             const dz = -Math.cos(player.pitch) * Math.cos(player.yaw);
             let px, py, pz;
             for (let d = 0; d < 6; d += 0.05) {
-                const x = Math.floor(player.x + dx*d), y = Math.floor(player.y + 1.6 + dy*d), z = Math.floor(player.z + dz*d);
+                const x = Math.floor(player.x + dx*d), y = Math.floor(playerEyeY() + dy*d), z = Math.floor(player.z + dz*d);
                 const b = getBlock(x, y, z);
                 const hittable = b !== BLOCKS.AIR && b !== BLOCKS.ACTIVE_BOSS_PORTAL && (includeLiquids || !isLiquidBlock(b));
                 if (hittable) {
@@ -6260,7 +6386,7 @@
             const dy = Math.sin(player.pitch);
             const dz = -Math.cos(player.pitch) * Math.cos(player.yaw);
             for (let d = 0; d < 4.25; d += 0.08) {
-                const rx = player.x + dx*d, ry = player.y + 1.6 + dy*d, rz = player.z + dz*d;
+                const rx = player.x + dx*d, ry = playerEyeY() + dy*d, rz = player.z + dz*d;
                 const block = getBlock(Math.floor(rx), Math.floor(ry), Math.floor(rz));
                 if (block !== BLOCKS.AIR && block !== BLOCKS.ACTIVE_BOSS_PORTAL) return null;
                 for (const rp of remotePlayers.values()) {
@@ -6276,7 +6402,7 @@
             const dy = Math.sin(player.pitch);
             const dz = -Math.cos(player.pitch) * Math.cos(player.yaw);
             for (let d = 0; d < 4; d += 0.1) {
-                const rx = player.x + dx*d, ry = player.y + 1.6 + dy*d, rz = player.z + dz*d;
+                const rx = player.x + dx*d, ry = playerEyeY() + dy*d, rz = player.z + dz*d;
                 for (const m of mobs) {
                     if (m.dimension !== currentDimension || m.health <= 0) continue;
                     if (Math.abs(rx-m.x) < (m.type.width/2) && Math.abs(ry-m.y-0.5) < (m.type.height/2) && Math.abs(rz-m.z) < (m.type.width/2)) return m;
@@ -6321,32 +6447,23 @@
         }
 
         function resetChunkStreamingForDimension(targetDimension, arrivalX, arrivalZ) {
-            for (const mesh of chunkMeshes.values()) disposeChunkMesh(mesh);
-            chunkMeshes.clear();
             chunkBuildQueue = [];
             chunkBuildHead = 0;
             chunkBuildSet.clear();
             chunkRemeshPending.clear();
             urgentChunkRemeshQueue = []; urgentChunkRemeshHead = 0; urgentChunkRemeshSet.clear();
-            chunkGenerationPending.clear();
             chunkGenerationQueue = []; chunkGenerationQueued.clear(); travelChunkPriority.clear();
             chunkMeshRevision++;
             chunkMaintenanceTimer = 0;
             lastChunkCenterX = Number.NaN;
             lastChunkCenterZ = Number.NaN;
             lastChunkDimension = -1;
-            if (chunkGenerationWorker) {
-                try { chunkGenerationWorker.terminate(); } catch (_) {}
-                chunkGenerationWorker = null;
-            }
-            // iPhones have a much smaller practical memory ceiling than desktop
-            // browsers. Other-dimension chunks can be regenerated from the seed and
-            // shared edit map, so discard them during a transition.
-            if (isMobilePlaying) {
-                for (const key of [...chunks.keys()]) if (!key.startsWith(`${targetDimension},`)) chunks.delete(key);
-            }
             currentDimension = targetDimension;
-            initChunkGenerationWorker();
+            // Reuse the existing terrain worker and dimension caches. Destroying every
+            // GL buffer and rebuilding the worker blob here caused the visible portal
+            // freeze. Phones reclaim old-dimension meshes incrementally after rendering.
+            if (!chunkGenerationWorker) initChunkGenerationWorker();
+            if (isMobilePlaying) for (const [key, mesh] of chunkMeshes) if (mesh && mesh.dim !== targetDimension) deferChunkDisposal(key);
             const centerKey = chunkKey(targetDimension, Math.floor(arrivalX / CHUNK_SIZE), Math.floor(arrivalZ / CHUNK_SIZE));
             travelChunkPriority.add(centerKey);
             queueChunkBuild(centerKey, true);
@@ -6622,7 +6739,7 @@
                 }
                 const len=Math.hypot(mx,mz); if(len>0){mx/=len;mz/=len;}
                 const flying=player.gamemode==='creative'||player.gamemode==='spectator';
-                const speed=flying?FLY_SPEED:MOVE_SPEED*(inWater?0.65:inLava?0.38:1);
+                const speed=(flying?FLY_SPEED:MOVE_SPEED*(inWater?0.65:inLava?0.38:1))*(player.crouching?0.42:1);
                 player.vx=mx*speed;player.vz=mz*speed;
             }
             const flying=player.gamemode==='creative'||player.gamemode==='spectator';
@@ -6862,6 +6979,7 @@
             document.getElementById('settingsMenu').style.display = settingsOpen ? 'flex' : 'none';
             if (settingsOpen) {
                 for (const code of Object.keys(keys)) keys[code] = false;
+                mobileCrouchHeld = false; refreshCrouchState();
                 isMoving = false; moveDx = 0; moveDy = 0;
                 /* Release any gameplay-owned touches before the settings overlay starts receiving taps/pans. */
                 leftTouchId = null; rightTouchId = null;
@@ -6871,6 +6989,7 @@
                 document.getElementById('breakProgress').style.display = 'none';
                 if (!isMobilePlaying) document.exitPointerLock();
                 document.getElementById('setGamemode').value = player.gamemode;
+                document.getElementById('setCrouchMode').value = crouchControlMode;
                 document.getElementById('setRd').value = RENDER_DISTANCE;
                 document.getElementById('rdVal').textContent = RENDER_DISTANCE;
                 document.getElementById('setVol').value = masterVolume * 100;
@@ -6914,6 +7033,12 @@
                 return;
             }
             sendNetwork({ type: 'request_gamemode', gamemode: e.target.value });
+        });
+        document.getElementById('setCrouchMode').addEventListener('change', (e) => {
+            crouchControlMode = e.target.value === 'toggle' ? 'toggle' : 'hold';
+            safeStorageSet('mellorcraftCrouchMode', crouchControlMode);
+            crouchToggleActive = player.crouching;
+            refreshCrouchState();
         });
         document.getElementById('setRd').addEventListener('input', (e) => { RENDER_DISTANCE = parseInt(e.target.value); chunkMaintenanceTimer = 0; document.getElementById('rdVal').textContent = RENDER_DISTANCE; });
         document.getElementById('setVol').addEventListener('input', (e) => { 
@@ -7053,7 +7178,8 @@
                 yaw: player.yaw, pitch: player.pitch,
                 dimension: currentDimension,
                 health: player.health, gamemode: player.gamemode,
-                heldItem: slot ? slot.id : 0
+                heldItem: slot ? slot.id : 0,
+                crouching: Boolean(player.crouching)
             };
             if (activeJoinProtocol >= 4) {
                 payload.selectedSlot = player.selectedSlot;
@@ -7096,6 +7222,7 @@
 
             for (const rp of remotePlayers.values()) {
                 if (rp.dimension !== currentDimension || rp.health <= 0) continue;
+                if (rp.crouching) continue;
                 const dx = rp.x - player.x, dy = rp.y - player.y, dz = rp.z - player.z;
                 const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
 
@@ -7149,8 +7276,10 @@
             for(const entry of needed) entry.remesh ? scheduleChunkRemesh(entry.key) : queueChunkBuild(entry.key);
             const unloadSq=(RENDER_DISTANCE+2)*(RENDER_DISTANCE+2);
             for(const [key,mesh] of chunkMeshes){
-                if(!mesh||mesh.dim!==currentDimension||(mesh.cx-px)*(mesh.cx-px)+(mesh.cz-pz)*(mesh.cz-pz)>unloadSq){
+                if(!mesh||(mesh.dim===currentDimension&&(mesh.cx-px)*(mesh.cx-px)+(mesh.cz-pz)*(mesh.cz-pz)>unloadSq)){
                     disposeChunkMesh(mesh);chunkMeshes.delete(key);chunks.delete(key);chunkBuildSet.delete(key);chunkRemeshPending.delete(key);chunkMeshRevision++;
+                } else if(isMobilePlaying&&mesh.dim!==currentDimension){
+                    deferChunkDisposal(key);
                 }
             }
             prioritizeChunkBuildQueue(px,pz);
@@ -7330,6 +7459,7 @@
             if (raycastUiTimer <= 0) { cachedRenderHit = gameStarted ? raycast() : null; raycastUiTimer = isMobilePlaying ? 0.085 : 0.035; }
             if (gameStarted) processUrgentChunkRemeshes(Math.floor(player.x / CHUNK_SIZE), Math.floor(player.z / CHUNK_SIZE));
             render();
+            processDeferredChunkDisposals();
             if (isMobilePlaying && pendingIOSChunkBuild) {
                 const build = pendingIOSChunkBuild;
                 pendingIOSChunkBuild = null;
@@ -7349,7 +7479,7 @@
             gl.enable(gl.DEPTH_TEST);
             gl.useProgram(program);
             uProjectionMat = perspective((FOV * Math.PI) / 180, canvas.width / canvas.height, 0.1, 1000.0);
-            uViewMat = viewMatrix([player.x, player.y + 1.6, player.z], player.pitch, player.yaw);
+            uViewMat = viewMatrix([player.x, playerEyeY(), player.z], player.pitch, player.yaw);
             
             gl.uniformMatrix4fv(uProjection, false, uProjectionMat);
             gl.uniformMatrix4fv(uView, false, uViewMat);
@@ -7383,7 +7513,7 @@
             if (currentDimension === 2) fd = 0.02;
             gl.uniform1f(uFogDensity, fd);
             
-            gl.uniform3fv(uCameraPos, [player.x, player.y + 1.6, player.z]);
+            gl.uniform3fv(uCameraPos, [player.x, playerEyeY(), player.z]);
             gl.uniform1f(uAmbient, shaderAmbient);
             gl.uniform1f(uAlpha, 1.0);
             gl.uniform1f(uEmission, 0.0);
@@ -7557,14 +7687,14 @@
                 if (m.health >= m.type.maxHealth || m.health <= 0) continue;
                 
                 let hasLOS = true;
-                const dx = m.x - player.x, dy = (m.y + m.type.height) - (player.y + 1.6), dz = m.z - player.z;
+                const dx = m.x - player.x, dy = (m.y + m.type.height) - playerEyeY(), dz = m.z - player.z;
                 const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
                 if (dist > 20) continue;
                 
                 const steps = Math.floor(dist * 2);
                 for (let i = 1; i < steps - 1; i++) {
                     const f = i / steps;
-                    const cx = player.x + dx * f, cy = player.y + 1.6 + dy * f, cz = player.z + dz * f;
+                    const cx = player.x + dx * f, cy = playerEyeY() + dy * f, cz = player.z + dz * f;
                     if (SOLID_BLOCKS.has(getBlock(Math.floor(cx), Math.floor(cy), Math.floor(cz)))) { hasLOS = false; break; }
                 }
                 
@@ -7628,6 +7758,7 @@
             chunkGenerationQueue = []; chunkGenerationQueued.clear(); travelChunkPriority.clear();
             chunkBuildSet.clear(); chunkRemeshPending.clear();
             urgentChunkRemeshQueue = []; urgentChunkRemeshHead = 0; urgentChunkRemeshSet.clear(); chunkMeshRevision++;
+            deferredChunkDisposalQueue = []; deferredChunkDisposalHead = 0; deferredChunkDisposalSet.clear();
             chunkMaintenanceTimer = 0;
             lastChunkCenterX = Number.NaN; lastChunkCenterZ = Number.NaN; lastChunkDimension = -1;
             mobs.length = 0;

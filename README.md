@@ -7,6 +7,8 @@ v1.5.0 update
 - The separate singleplayer and multiplayer pages are now one `mellorcraft.html` client. Its start menu can create a browser world, join a saved browser world, discover and join a relay world, or connect directly to a multiplayer server using separate IP and port fields.
 - Relay and dedicated-server connections now use matching IP and port fields. Players never need to type `ws://`; relay ports default to 8000, dedicated-server ports default to 8765, and secure pages select `wss://` internally when required. Older saved combined addresses are migrated automatically.
 - Torches no longer cull the complete wall, floor, glass, or terrain face beside their narrow model. Supporting surfaces remain closed, preventing spectator-like views into adjacent blocks.
+- Portal transitions now reuse the active terrain worker and loaded dimension caches instead of deleting every GPU chunk buffer and rebuilding the worker in one frame. Portal block batches inspect loaded terrain only, preventing hidden destination chunks from generating synchronously. Mobile clients reclaim old-dimension meshes in tiny post-render batches.
+- Crouching is available with Shift on desktop and a dedicated mobile button. It lowers the viewpoint, slows movement, and hides the crouched player's nametag and locator marker from other browser, relay, and dedicated-server clients. Settings can choose Hold or Toggle behavior.
 - The mobile Creative inventory now uses the full safe-area viewport with native vertical touch scrolling, so every block, material, tool, weapon, and hotbar slot remains reachable on small screens.
 - Portal arrivals no longer generate the destination chunk synchronously on the gameplay thread. The destination is requested through the existing terrain worker while player simulation is briefly held, preventing portal-entry freezes without increasing per-frame work.
 - Terrain generation now keeps only one worker request in flight and dynamically chooses the nearest current need for each next request. Mesh work is reprioritized around the player's latest chunk, stale far-away requests are discarded, and movement waits at an unready chunk edge instead of forcing synchronous generation.
@@ -177,7 +179,7 @@ Desktop controls
 WASD        Move
 Mouse       Look
 Space       Jump / fly upward
-Shift       Fly downward
+Shift       Crouch / fly downward
 Left click  Break / attack
 Right click Place / use jukebox
 Q           Drop selected item
@@ -247,7 +249,7 @@ IPHONE, MOB FACING, AND PORTAL REPAIR
 - Zombie, Skeleton, and Red Alt Zombie humanoid models receive the correct 180-degree model-facing correction.
 - Alt portal arrivals are placed beside the portal at Y=30, never inside it.
 - Portal blocks are no longer mirrored to the same Y coordinate in the other dimension. This prevents the Alt Y=30 portal from appearing underground in the Overworld.
-- Dimension transitions clear stale meshes and chunk queues, restart the iPhone chunk worker, and load the destination chunk before control resumes.
+- Dimension transitions clear stale queue work, reuse the existing terrain worker and loaded caches, and request the destination nearest-first before control resumes.
 - The Alt arrival chamber is sent as one block batch instead of hundreds of individual rebuilds.
 - Entering an affected older world removes the specific legacy Y=30 Overworld portal created by the prior mirroring bug.
 

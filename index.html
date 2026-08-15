@@ -1,9 +1,142 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta http-equiv="refresh" content="0; url=mellorcraft.html" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download MellorCraft v1.5.0</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --sky: #84c8ff;
+            --grass: #54a83f;
+            --grass-dark: #33752b;
+            --dirt: #765139;
+            --panel: rgba(17, 27, 38, 0.94);
+            --text: #f7fbff;
+            --muted: #b9c9d8;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            padding: 28px;
+            color: var(--text);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                linear-gradient(180deg, transparent 0 62%, rgba(255,255,255,.12) 62% 63%, transparent 63%),
+                linear-gradient(180deg, var(--sky) 0 54%, var(--grass) 54% 65%, var(--dirt) 65% 100%);
+        }
+
+        main {
+            width: min(760px, 100%);
+            padding: clamp(26px, 5vw, 48px);
+            border: 3px solid rgba(255,255,255,.2);
+            border-radius: 18px;
+            background: var(--panel);
+            box-shadow: 0 24px 70px rgba(0,0,0,.36);
+            text-align: center;
+        }
+
+        .version {
+            display: inline-block;
+            margin-bottom: 8px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            color: #d9f7d4;
+            background: rgba(84,168,63,.22);
+            font-size: .85rem;
+            font-weight: 750;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 6px 0 10px;
+            font-size: clamp(2.35rem, 8vw, 4.25rem);
+            line-height: 1;
+            letter-spacing: -.055em;
+        }
+
+        .intro {
+            max-width: 570px;
+            margin: 0 auto 32px;
+            color: var(--muted);
+            font-size: 1.05rem;
+            line-height: 1.6;
+        }
+
+        .downloads {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        .download {
+            display: flex;
+            min-height: 150px;
+            flex-direction: column;
+            justify-content: center;
+            gap: 7px;
+            padding: 22px;
+            border: 2px solid rgba(255,255,255,.14);
+            border-radius: 13px;
+            color: var(--text);
+            background: rgba(255,255,255,.055);
+            text-decoration: none;
+            transition: transform .16s ease, border-color .16s ease, background .16s ease;
+        }
+
+        .download:hover,
+        .download:focus-visible {
+            transform: translateY(-3px);
+            border-color: #91e47d;
+            background: rgba(84,168,63,.18);
+            outline: none;
+        }
+
+        .download strong { font-size: 1.2rem; }
+        .download span { color: var(--muted); line-height: 1.45; }
+
+        .download.primary {
+            border-color: var(--grass);
+            background: linear-gradient(145deg, rgba(84,168,63,.3), rgba(51,117,43,.2));
+        }
+
+        footer {
+            margin-top: 28px;
+            color: #91a5b7;
+            font-size: .88rem;
+        }
+
+        @media (max-width: 620px) {
+            body { padding: 16px; }
+            .downloads { grid-template-columns: 1fr; }
+            .download { min-height: 125px; }
+        }
+    </style>
 </head>
 <body>
-    <p>If you are not redirected, <a href="mellorcraft.html">open MellorCraft</a>.</p>
+    <main>
+        <div class="version">Version 1.5.0</div>
+        <h1>MellorCraft</h1>
+        <p class="intro">Choose the standalone browser client for the quickest start, or download the complete current repository directly from GitHub.</p>
+
+        <div class="downloads" aria-label="MellorCraft downloads">
+            <a class="download primary" href="mellorcraft.html" download="mellorcraft.html">
+                <strong>Download Client</strong>
+                <span>The unified singleplayer and multiplayer HTML client.</span>
+            </a>
+            <a class="download" href="https://github.com/linkers15/mellorcraft/archive/refs/heads/main.zip">
+                <strong>Download GitHub Repository</strong>
+                <span>Download the complete current repository directly from GitHub.</span>
+            </a>
+        </div>
+
+        <footer>No installation is required for the standalone client.</footer>
+    </main>
 </body>
 </html>

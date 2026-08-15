@@ -83,6 +83,7 @@ class PlayerState:
     health: float = 10.0
     gamemode: str = "survival"
     heldItem: int = 0
+    crouching: bool = False
     selectedSlot: int = 0
     inventory: list[dict[str, int]] = field(
         default_factory=lambda: [{"id": 0, "count": 0} for _ in range(MAX_INVENTORY_SLOTS)]
@@ -199,7 +200,7 @@ class MellorCraftWorld:
             "x": player.x, "y": player.y, "z": player.z,
             "yaw": player.yaw, "pitch": player.pitch, "dimension": player.dimension,
             "health": player.health, "gamemode": player.gamemode,
-            "heldItem": player.heldItem, "isOperator": player.isOperator,
+            "heldItem": player.heldItem, "crouching": player.crouching, "isOperator": player.isOperator,
         }
 
     @staticmethod
@@ -811,6 +812,7 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         if time.monotonic() >= world.damage_locks.get(player.id, 0.0):
             player.health = max(0.0, min(10.0, finite_number(data.get("health"), player.health)))
         player.heldItem = bounded_int(data.get("heldItem"), 0, 255)
+        player.crouching = bool(data.get("crouching", False))
         if world.client_protocols.get(player_id, 1) >= 4:
             inventory = world.sanitize_inventory(data.get("inventory"))
             if inventory is not None:
