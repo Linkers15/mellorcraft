@@ -4,7 +4,9 @@ MellorCraft v1.5.0
 
 v1.5.0 update
 -------------
-- The separate singleplayer and multiplayer pages are now one `mellorcraft.html` client. Its start menu can create a browser world, join a saved browser world, discover and join a relay world, or connect directly to a multiplayer server using a WebSocket address.
+- The separate singleplayer and multiplayer pages are now one `mellorcraft.html` client. Its start menu can create a browser world, join a saved browser world, discover and join a relay world, or connect directly to a multiplayer server using separate IP and port fields.
+- Relay and dedicated-server connections now use matching IP and port fields. Players never need to type `ws://`; relay ports default to 8000, dedicated-server ports default to 8765, and secure pages select `wss://` internally when required. Older saved combined addresses are migrated automatically.
+- Torches no longer cull the complete wall, floor, glass, or terrain face beside their narrow model. Supporting surfaces remain closed, preventing spectator-like views into adjacent blocks.
 - The mobile Creative inventory now uses the full safe-area viewport with native vertical touch scrolling, so every block, material, tool, weapon, and hotbar slot remains reachable on small screens.
 - Portal arrivals no longer generate the destination chunk synchronously on the gameplay thread. The destination is requested through the existing terrain worker while player simulation is briefly held, preventing portal-entry freezes without increasing per-frame work.
 - Terrain generation now keeps only one worker request in flight and dynamically chooses the nearest current need for each next request. Mesh work is reprioritized around the player's latest chunk, stale far-away requests are discarded, and movement waits at an unready chunk edge instead of forcing synchronous generation.
