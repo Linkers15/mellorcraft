@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MellorCraft v1.5.0 Unified Client</title>
+    <title>MellorCraft v1.6.0</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Courier New', monospace; background: #000; }
@@ -143,7 +143,16 @@
         #startScreen {
             justify-content: flex-start; overflow-y: auto; overflow-x: hidden;
             box-sizing: border-box; padding: 24px 12px 34px;
+            background:
+                radial-gradient(circle at 50% 42%, rgba(255,214,116,.18), transparent 32%),
+                linear-gradient(180deg, rgba(14,34,60,.20), rgba(4,12,22,.78)),
+                linear-gradient(135deg, #315d71, #6f8d67 38%, #304d54 68%, #17283f);
+            background-size: 140% 140%; animation: panoramaDrift 28s ease-in-out infinite alternate;
         }
+        #startScreen::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:.34;
+            background: repeating-linear-gradient(90deg, transparent 0 7.5%, rgba(255,255,255,.025) 7.5% 15%);
+            mix-blend-mode:screen; }
+        @keyframes panoramaDrift { from { background-position: 0% 40%; } to { background-position: 100% 58%; } }
         #deathScreen { background: rgba(80, 0, 0, 0.85); display: none; }
         
         #startScreen h1, #deathScreen h1 {
@@ -187,9 +196,21 @@
             margin-top: 18px; align-items: start;
         }
         .menu-section {
-            background: rgba(0,0,0,0.27); border: 1px solid rgba(255,255,255,0.18);
+            background: rgba(4,10,18,0.72); border: 1px solid rgba(255,255,255,0.24);
             border-radius: 10px; padding: 14px; box-sizing: border-box;
+            box-shadow: 0 15px 50px rgba(0,0,0,.38); backdrop-filter: blur(8px);
         }
+        .main-menu-panel { width:min(430px,92vw); margin-top:20px; position:relative; z-index:1; }
+        .main-menu-panel .menuBtn { display:block; width:100%; margin:8px 0; }
+        .start-page { display:none; width:min(940px,94vw); position:relative; z-index:1; }
+        .start-page.active { display:block; }
+        .start-page-title { text-align:center; color:#fff; text-shadow:2px 2px 4px #000; margin:8px 0 12px; }
+        .world-list { display:grid; gap:9px; }
+        .world-row { display:grid; grid-template-columns:minmax(130px,1fr) repeat(4,auto); gap:6px; align-items:center;
+            padding:9px; background:rgba(255,255,255,.06); border-radius:8px; }
+        .world-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .world-row .menuBtn { margin:0; padding:8px 10px; font-size:12px; }
+        .backBtn { margin-left:0; }
         .menu-section h3 { color: #4ecca3; margin: 0 0 5px; font-size: 17px; }
         .menu-section p { color: #aaa; font-size: 12px; margin: 0 0 10px; line-height: 1.35; }
         .menu-section .joinField { width: 100%; box-sizing: border-box; margin: 5px 0; }
@@ -201,6 +222,8 @@
         @media (max-width: 760px) {
             .start-menu-grid { grid-template-columns: 1fr; }
             .identity-row { grid-template-columns: 1fr; }
+            .world-row { grid-template-columns:1fr 1fr; }
+            .world-name { grid-column:1/-1; }
         }
 
         #chatContainer {
@@ -657,44 +680,37 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2 id="versionSubtitle">v1.5.0 Unified Client</h2>
-        <div class="seedLabel">Player identity</div>
-        <div class="identity-row">
-            <input class="joinField" type="text" id="singleplayerUsernameInput" value="Player" maxlength="20" placeholder="Player name" autocomplete="nickname">
-            <select class="joinField" id="singleplayerSkinInput" aria-label="Shirt color">
-                <option value="steve">Blue Shirt</option>
-                <option value="alex">Green Shirt</option>
-                <option value="mellorite">Purple Shirt</option>
-                <option value="ember">Red Shirt</option>
-                <option value="frost">Light Blue Shirt</option>
-                <option value="forest">Dark Green Shirt</option>
-            </select>
+        <h2 id="versionSubtitle">v1.6.0</h2>
+        <div id="mainMenuPage" class="main-menu-panel start-page active">
+            <button class="menuBtn greenBtn" data-start-page="singleplayerPage">Singleplayer</button>
+            <button class="menuBtn blueBtn" data-start-page="multiplayerPage">Multiplayer</button>
+            <button class="menuBtn blueBtn" data-start-page="clientSettingsPage">Settings</button>
         </div>
 
-        <div class="start-menu-grid">
+        <div id="singleplayerPage" class="start-page">
+          <h2 class="start-page-title">Singleplayer Worlds</h2>
+          <div class="start-menu-grid">
             <section class="menu-section">
-                <h3>Create a Browser World</h3>
+                <h3>Create World</h3>
                 <p>Create a private world saved in this browser.</p>
                 <input class="joinField" type="text" id="worldNameInput" maxlength="40" placeholder="World name">
                 <input class="joinField" type="text" id="seedInput" placeholder="Seed (number or text)">
                 <div class="btnContainer"><button class="menuBtn greenBtn" id="createWorldBtn">Create World</button></div>
             </section>
-
             <section class="menu-section">
-                <h3>Join One of Your Worlds</h3>
-                <p>Load, manage, import, or export a browser-saved world.</p>
-                <select class="joinField" id="worldSelect" aria-label="Saved worlds"></select>
-                <div class="btnContainer">
-                    <button class="menuBtn greenBtn" id="loadWorldBtn">Join Selected</button>
-                    <button class="menuBtn redBtn" id="deleteWorldBtn">Delete</button>
-                    <button class="menuBtn blueBtn" id="exportWorldBtn">Export JSON</button>
-                    <button class="menuBtn blueBtn" id="importWorldBtn">Import JSON</button>
-                    <input type="file" id="importWorldFile" accept=".json,application/json" style="display:none">
-                </div>
+                <h3>Your Worlds</h3><p>Play, delete, import, or export every browser save.</p>
+                <select class="joinField" id="worldSelect" aria-label="Saved worlds" style="display:none"></select>
+                <div id="worldList" class="world-list"></div>
+                <button class="menuBtn blueBtn" id="importWorldBtn">Import JSON</button>
+                <input type="file" id="importWorldFile" accept=".json,application/json" style="display:none">
+                <button id="loadWorldBtn" style="display:none">Play</button><button id="deleteWorldBtn" style="display:none">Delete</button><button id="exportWorldBtn" style="display:none">Export</button>
             </section>
+          </div><button class="menuBtn blueBtn backBtn" data-start-page="mainMenuPage">Back</button>
+        </div>
 
+        <div id="multiplayerPage" class="start-page"><h2 class="start-page-title">Multiplayer</h2><div class="start-menu-grid">
             <section id="lanJoinPanel" class="menu-section">
-                <h3>Join a Relay World</h3>
+                <h3>Find Worlds on a Relay</h3>
                 <p>Discover browser worlds opened through a MellorCraft relay.</p>
                 <div class="lan-grid">
                     <input id="relayJoinAddress" value="192.168.0.1" placeholder="Relay IP" aria-label="Relay IP" spellcheck="false">
@@ -707,7 +723,7 @@
             </section>
 
             <section class="menu-section">
-                <h3>Join a Multiplayer Server</h3>
+                <h3>Connect to Dedicated Server</h3>
                 <p>Enter the server IP and port. MellorCraft handles the WebSocket address automatically.</p>
                 <div class="lan-grid">
                     <input id="serverHostInput" type="text" value="" placeholder="Server IP" aria-label="Multiplayer server IP" spellcheck="false">
@@ -715,6 +731,24 @@
                     <button class="menuBtn greenBtn full" id="joinBtn" style="margin:0;">Join Multiplayer Server</button>
                 </div>
             </section>
+        </div><button class="menuBtn blueBtn backBtn" data-start-page="mainMenuPage">Back</button></div>
+
+        <div id="clientSettingsPage" class="start-page"><h2 class="start-page-title">Settings</h2>
+          <section class="menu-section">
+            <div class="seedLabel">Username and skin</div>
+            <div class="identity-row">
+              <input class="joinField" type="text" id="singleplayerUsernameInput" value="Player" maxlength="20" placeholder="Player name" autocomplete="nickname">
+              <select class="joinField" id="singleplayerSkinInput" aria-label="Skin color">
+                <option value="steve">Blue</option><option value="alex">Green</option><option value="mellorite">Purple</option>
+                <option value="ember">Red</option><option value="frost">Light Blue</option><option value="forest">Dark Green</option>
+              </select>
+            </div>
+            <p>Choose one of the original MellorCraft player colors.</p>
+            <div class="setting-group"><label>Render Distance: <span id="menuRdVal">6</span> chunks</label><input type="range" id="menuSetRd" min="2" max="16" value="6"></div>
+            <div class="setting-group"><label>Master Volume: <span id="menuVolVal">45</span>%</label><input type="range" id="menuSetVol" min="0" max="100" value="45"></div>
+            <div class="setting-group"><label>Field of View: <span id="menuFovVal">60</span></label><input type="range" id="menuSetFov" min="30" max="110" value="60"></div>
+            <div class="setting-group"><label>Look Sensitivity: <span id="menuSensVal">100</span>%</label><input type="range" id="menuSetSens" min="10" max="300" value="100"></div>
+          </section><button class="menuBtn blueBtn backBtn" data-start-page="mainMenuPage">Back</button>
         </div>
         <div id="joinStatus">Worlds autosave to this browser. Export JSON for backups or another device.</div>
         <input type="hidden" id="usernameInput" value="Player">
@@ -725,6 +759,7 @@
         <h1>You Died!</h1>
         <button class="menuBtn greenBtn" id="respawnBtn">Respawn</button>
     </div>
+    <canvas id="weatherCanvas" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:45;display:none"></canvas>
 
     <div id="gameConfirmOverlay" role="dialog" aria-modal="true" aria-labelledby="gameConfirmTitle" aria-describedby="gameConfirmMessage">
         <div id="gameConfirmDialog">
@@ -779,6 +814,9 @@
                 <div class="shader-setting-row"><label>Torch Range: <span id="shaderTorchRangeVal">100</span>%</label><input type="range" id="setShaderTorchRange" min="60" max="150" value="100"></div>
                 <div class="shader-setting-row"><label>Night Darkness: <span id="shaderNightVal">55</span>%</label><input type="range" id="setShaderNight" min="0" max="90" value="55"></div>
                 <div class="shader-setting-row"><label>Cave Darkness: <span id="shaderCaveVal">65</span>%</label><input type="range" id="setShaderCave" min="0" max="90" value="65"></div>
+                <div class="shader-setting-row"><label>Cloud Thickness: <span id="cloudThicknessVal">8</span> blocks</label><input type="range" id="setCloudThickness" min="4" max="16" step="2" value="8"></div>
+                <div class="shader-setting-row"><label>Cloud Density: <span id="cloudDensityVal">100</span>%</label><input type="range" id="setCloudDensity" min="50" max="150" step="10" value="100"></div>
+                <div class="shader-setting-row"><label>Cloud Detail: <span id="cloudDetailVal">2</span></label><input type="range" id="setCloudDetail" min="1" max="3" step="1" value="2"></div>
             </div>
         </div>
         <div class="setting-group mobile-only-setting">
@@ -800,6 +838,7 @@
         <button class="menuBtn blueBtn" id="openLanBtn" style="width:100%; margin:0;">Open World to LAN</button>
         <button class="menuBtn redBtn" id="closeLanBtn" style="width:100%; margin:0; display:none;">Close LAN World</button>
         <div id="relayHostStatus" class="lan-status">Private until opened to a relay.</div>
+        <button class="menuBtn redBtn" id="returnToMainMenuBtn" style="width:100%; margin:10px 0 0 0;">Return to Main Menu</button>
         <button class="menuBtn greenBtn" id="closeSettingsBtn" style="width:100%; margin: 10px 0 0 0;">Resume Game</button>
     </div>
 
@@ -933,7 +972,7 @@
         const isIPhonePlaying = /iPhone|iPod/i.test(navigator.userAgent);
         document.documentElement.classList.toggle('mobile-mode', isMobilePlaying);
         if (isMobilePlaying) {
-            document.getElementById('versionSubtitle').textContent = 'v1.5.0 Advanced Lighting, Shadows & Mob AI';
+            document.getElementById('versionSubtitle').textContent = 'v1.6.0';
             document.getElementById('positionLabel').textContent = 'Pos:';
             document.getElementById('gamemodeLabel').textContent = 'Mode:';
             const mobileDefaultDistance = isIOSDevice ? 2 : 4;
@@ -969,11 +1008,11 @@
         const MOUNTAIN_XZ_SCALE = Math.SQRT1_2; // v1.4.1: same range shape at 50% X/Z land area
         const ALT_WORLD_HEIGHT = 50;
         function getDimensionHeight(dim = currentDimension) { return dim === 1 ? ALT_WORLD_HEIGHT : WORLD_HEIGHT; }
-        let RENDER_DISTANCE = isIOSDevice ? 2 : (isMobilePlaying ? 4 : 6);
+        let RENDER_DISTANCE = Math.max(2,Math.min(isIOSDevice?5:(isMobilePlaying?10:16),parseInt(safeStorageGet('mellorcraftRenderDistance'))||(isIOSDevice?2:(isMobilePlaying?4:6))));
         let MOB_CAP = isIOSDevice ? 6 : (isMobilePlaying ? 12 : 15);
         let espEnabled = false;
-        let masterVolume = 0.45;
-        let FOV = 60;
+        let masterVolume = Math.max(0,Math.min(1,(safeStorageGet('mellorcraftVolume')===null?45:parseInt(safeStorageGet('mellorcraftVolume')))/100));
+        let FOV = Math.max(30,Math.min(110,parseInt(safeStorageGet('mellorcraftFov'))||60));
         let crouchControlMode = safeStorageGet('mellorcraftCrouchMode') === 'toggle' ? 'toggle' : 'hold';
         let crouchToggleActive = false;
         let mobileCrouchHeld = false;
@@ -985,16 +1024,58 @@
         let shaderTorchRange = loadShaderNumber('mellorcraftShaderTorchRange', 100, 60, 150) / 100;
         let shaderNightDarkness = loadShaderNumber('mellorcraftShaderNight', 55, 0, 90) / 100;
         let shaderCaveDarkness = loadShaderNumber('mellorcraftShaderCave', 65, 0, 90) / 100;
+        let cloudThickness = loadShaderNumber('mellorcraftCloudThickness', 8, 4, 16);
+        let cloudVolumetricDensity = loadShaderNumber('mellorcraftCloudDensity', 100, 50, 150) / 100;
+        let cloudDetail = loadShaderNumber('mellorcraftCloudDetail', 2, 1, 3);
         
         const GRAVITY = -25;
         const JUMP_FORCE = 9;
         const MOVE_SPEED = 5;
         const FLY_SPEED = 12;
-        let MOUSE_SENSITIVITY = 0.002;
+        let MOUSE_SENSITIVITY = 0.002*Math.max(10,Math.min(300,parseInt(safeStorageGet('mellorcraftSensitivity'))||100))/100;
 
         const DAY_LENGTH = 600;
         let worldTime = 0.25;
         let dayCount = 1;
+        let weatherSeed = Math.floor(Math.random()*2147483647), weatherPhase = 0, localPressure = 100;
+        const CLOUD_LEVEL = 150;
+        function weatherHash(x,z){let n=(x*374761393+z*668265263+weatherSeed*69069)|0;n=(n^(n>>>13))*1274126177;return ((n^(n>>>16))>>>0)/4294967295;}
+        function weatherSmooth(t){return t*t*(3-2*t);}
+        function weatherNoise(x,z){const ix=Math.floor(x),iz=Math.floor(z),fx=weatherSmooth(x-ix),fz=weatherSmooth(z-iz);const a=weatherHash(ix,iz),b=weatherHash(ix+1,iz),c=weatherHash(ix,iz+1),d=weatherHash(ix+1,iz+1);return (a+(b-a)*fx)+((c+(d-c)*fx)-(a+(b-a)*fx))*fz;}
+        function weatherPressureAt(x,z){return Math.round(weatherNoise((x-weatherPhase*7)/360,(z-weatherPhase*2.6)/360)*100);}
+        function updateLocalWeather(dt){
+            if((singleplayerNetworkMode==='local'||singleplayerNetworkMode==='lan-host')&&gameStarted)weatherPhase+=dt*.35;
+            localPressure=weatherPressureAt(player.x,player.z);
+            drawWeatherOverlay(dt);
+            const weatherCanvas=document.getElementById('weatherCanvas');
+            if(weatherCanvas&&weatherCanvas.style.display!=='none')drawAtmosphericFogSmooth(weatherCanvas.getContext('2d'),innerWidth,innerHeight);
+        }
+        function weatherKind(){return localPressure>=60?'Clear':localPressure>=40?'Overcast':localPressure>=25?'Light Rain':localPressure>=10?'Moderate Rain':'Heavy Rain';}
+        let weatherDrops=[],weatherSplashes=[],rainShelterTimer=0,rainSheltered=false,playerInCave=false;
+        const weatherImpactCache=new Map();
+        function projectWeatherPoint(x,y,z,w,h){if(!uProjectionMat||!uViewMat)return null;let clip=multiplyMat4Vec4(uViewMat,[x,y,z,1]);clip=multiplyMat4Vec4(uProjectionMat,clip);if(clip[3]<=.05)return null;const nx=clip[0]/clip[3],ny=clip[1]/clip[3];if(Math.abs(nx)>1.3||Math.abs(ny)>1.3)return null;return{x:(nx+1)*.5*w,y:(1-ny)*.5*h,depth:clip[3]};}
+        function weatherLineOfSight(x,y,z,step=2){const eyeX=player.x,eyeY=playerEyeY(),eyeZ=player.z,dx=x-eyeX,dz=z-eyeZ,distance=Math.hypot(dx,dz);if(distance<.5)return true;const ux=dx/distance,uz=dz/distance;for(let d=Math.max(.8,step);d<distance-1;d+=step){const rayY=eyeY+(y-eyeY)*(d/distance),top=loadedColumnTop(eyeX+ux*d,eyeZ+uz*d);if(top!==null&&top>rayY+.15)return false;}return true;}
+        function drawAtmosphericFog(ctx,w,h){if(playerInCave)return;const localRain=playerEyeY()>=132||localPressure>=40?0:.65+Math.max(0,Math.min(.35,(40-localPressure)/115));if(localRain>0){const haze=ctx.createLinearGradient(0,0,0,h);haze.addColorStop(0,`rgba(122,136,148,${localRain*.025})`);haze.addColorStop(.28,`rgba(135,147,157,${localRain*.10})`);haze.addColorStop(.54,`rgba(151,160,168,${localRain*.38})`);haze.addColorStop(.76,`rgba(164,171,177,${localRain*.23})`);haze.addColorStop(1,`rgba(176,181,185,${localRain*.10})`);ctx.fillStyle=haze;ctx.fillRect(0,0,w,h);for(let i=0;i<3;i++){const cx=((weatherPhase*18+i*w*.43)%(w*1.4))-w*.2,cy=h*(.48+i*.055),radius=Math.max(w,h)*(.32+i*.07),mist=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);mist.addColorStop(0,`rgba(175,181,186,${localRain*(.07+i*.018)})`);mist.addColorStop(1,'rgba(175,181,186,0)');ctx.fillStyle=mist;ctx.fillRect(0,0,w,h);}}for(const distance of [280,400,500])for(let n=0;n<16;n++){const angle=n/16*Math.PI*2,x=player.x+Math.cos(angle)*distance,z=player.z+Math.sin(angle)*distance,pressure=Math.round(weatherNoise(x/360+weatherPhase*.018,z/360+weatherPhase*.011)*100);if(pressure>=40)continue;const p=projectWeatherPoint(x,86,z,w,h);if(!p)continue;const strength=Math.min(.65,.35+(40-pressure)/80),radius=Math.max(45,220-distance*.18),gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(145,153,160,${strength})`);gradient.addColorStop(1,'rgba(145,153,160,0)');ctx.fillStyle=gradient;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);}}
+        const fogBankVisibility=new Map();
+        function drawAtmosphericFogSmooth(ctx,w,h){
+            if(playerInCave)return;
+            const fogT=playerEyeY()>=CLOUD_LEVEL||localPressure>=40?0:Math.max(0,Math.min(1,(40-localPressure)/39));
+            const localFog=Math.pow(fogT,1.65);
+            if(localFog>.001){const haze=ctx.createLinearGradient(0,0,0,h);haze.addColorStop(0,`rgba(125,137,148,${localFog*.018})`);haze.addColorStop(.28,`rgba(137,148,157,${localFog*.08})`);haze.addColorStop(.54,`rgba(151,160,168,${localFog*.46})`);haze.addColorStop(.78,`rgba(166,173,178,${localFog*.31})`);haze.addColorStop(1,`rgba(178,183,187,${localFog*.15})`);ctx.fillStyle=haze;ctx.fillRect(0,0,w,h);for(let i=0;i<3;i++){const cx=((weatherPhase*18+i*w*.43)%(w*1.4))-w*.2,cy=h*(.47+i*.06),radius=Math.max(w,h)*(.34+i*.08),mist=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);mist.addColorStop(0,`rgba(177,183,188,${localFog*(.10+i*.025)})`);mist.addColorStop(1,'rgba(177,183,188,0)');ctx.fillStyle=mist;ctx.fillRect(0,0,w,h);}}
+            for(const distance of [280,400,500])for(let n=0;n<16;n++){const angle=n/16*Math.PI*2,x=player.x+Math.cos(angle)*distance,z=player.z+Math.sin(angle)*distance,pressure=weatherPressureAt(x,z),stormT=Math.max(0,Math.min(1,(40-pressure)/39));if(stormT<=0)continue;const p=projectWeatherPoint(x,92,z,w,h);if(!p)continue;const key=`${distance}:${n}`,target=weatherLineOfSight(x,92,z,12)?1:.28,current=fogBankVisibility.get(key)??target,visibility=current+(target-current)*.055;fogBankVisibility.set(key,visibility);const strength=Math.pow(stormT,1.35)*.62*visibility,radius=Math.max(55,235-distance*.18),gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(145,154,162,${strength})`);gradient.addColorStop(.62,`rgba(151,159,166,${strength*.58})`);gradient.addColorStop(1,'rgba(151,159,166,0)');ctx.fillStyle=gradient;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);}
+        }
+        function weatherImpactY(x,z){const bx=Math.floor(x),bz=Math.floor(z),key=`${bx},${bz}`,now=performance.now(),cached=weatherImpactCache.get(key);if(cached&&now-cached.at<1200)return cached.y;const terrain=getHeight(bx,bz,getBiome(bx,bz))+1;let impact=terrain;for(let y=CLOUD_LEVEL-1;y>=terrain;y--){if(SOLID_BLOCKS.has(getBlock(bx,y,bz,0))){impact=y+1;break;}}weatherImpactCache.set(key,{y:impact,at:now});if(weatherImpactCache.size>800)weatherImpactCache.clear();return impact;}
+        function resetWeatherDrop(drop){const angle=Math.random()*Math.PI*2,distance=Math.sqrt(Math.random())*68;drop.x=player.x+Math.cos(angle)*distance;drop.z=player.z+Math.sin(angle)*distance;drop.ground=weatherImpactY(drop.x,drop.z);drop.y=Math.max(player.y+18,drop.ground+24)+Math.random()*30;drop.speed=55+Math.random()*35;drop.losAt=0;drop.visible=false;}
+        function drawWeatherOverlay(dt){
+            const canvas=document.getElementById('weatherCanvas');if(!canvas||!gameStarted||currentDimension!==0){if(canvas)canvas.style.display='none';return;}
+            canvas.style.display='block';const ratio=devicePixelRatio||1,w=innerWidth,h=innerHeight;if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);}
+            const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);rainShelterTimer-=dt;
+            if(rainShelterTimer<=0){rainShelterTimer=.4;const px=Math.floor(player.x),pz=Math.floor(player.z),surface=getHeight(px,pz,getBiome(px,pz))+1;playerInCave=playerEyeY()<surface-2;rainSheltered=false;for(let y=Math.ceil(playerEyeY()+1);y<Math.min(WORLD_HEIGHT,CLOUD_LEVEL+8);y++){if(SOLID_BLOCKS.has(getBlock(px,y,pz,0))){rainSheltered=true;break;}}}
+            const rain=!playerInCave&&playerEyeY()<CLOUD_LEVEL&&localPressure<40?Math.min(1,(40-localPressure)/35):0,target=Math.round(rain*(isMobilePlaying?130:300));
+            while(weatherDrops.length<target){const drop={};resetWeatherDrop(drop);weatherDrops.push(drop);}weatherDrops.length=target;ctx.strokeStyle=`rgba(180,215,238,${.38+rain*.48})`;ctx.lineWidth=1.35;ctx.beginPath();
+            const losNow=performance.now();for(const drop of weatherDrops){drop.y-=drop.speed*dt;drop.x-=7*dt;if(drop.y<=drop.ground){const splashY=drop.ground+.05;weatherSplashes.push({x:drop.x,y:splashY,z:drop.z,age:0,duration:.34,visible:weatherLineOfSight(drop.x,splashY,drop.z,2)});resetWeatherDrop(drop);}const coveredNearby=drop.ground>playerEyeY()+.5&&Math.hypot(drop.x-player.x,drop.z-player.z)<4;if(coveredNearby)continue;if(!drop.losAt||losNow-drop.losAt>140){drop.losAt=losNow;drop.visible=weatherLineOfSight(drop.x,drop.y,drop.z,2);}if(!drop.visible)continue;const a=projectWeatherPoint(drop.x,drop.y+2.8,drop.z,w,h),b=projectWeatherPoint(drop.x,drop.y,drop.z,w,h);if(a&&b){ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);}}ctx.stroke();
+            weatherSplashes=weatherSplashes.filter(splash=>{splash.age+=dt;if(splash.age>=splash.duration)return false;if(!splash.visible)return true;const p=projectWeatherPoint(splash.x,splash.y,splash.z,w,h);if(p){const size=(3+splash.age*24)/Math.max(.7,p.depth*.035);ctx.strokeStyle=`rgba(205,230,245,${1-splash.age/splash.duration})`;ctx.beginPath();ctx.ellipse(p.x,p.y,size*2,size*.55,0,0,Math.PI*2);ctx.stroke();}return true;});
+        }
 
         function hashString(str) {
             let hash = 0;
@@ -1008,8 +1089,8 @@
 
         // Multiplayer networking. The Python host owns the seed, clock, shared block edits,
         // connected-player list, usernames, skins, and multiplayer chat.
-        const MULTIPLAYER_PROTOCOL = 4;
-        const SUPPORTED_MULTIPLAYER_PROTOCOLS = [4, 3, 2];
+        const MULTIPLAYER_PROTOCOL = 5;
+        const SUPPORTED_MULTIPLAYER_PROTOCOLS = [5, 4, 3, 2];
         const PLAYER_SKINS = {
             steve:     { body: [0.10, 0.55, 0.78], head: [0.72, 0.49, 0.33] },
             alex:      { body: [0.25, 0.68, 0.38], head: [0.93, 0.68, 0.48] },
@@ -1493,7 +1574,7 @@
             if (type==='chat') { const message=String(payload.message||'').trim().slice(0,200); if(message)integratedBroadcast({type:'chat',username:actor.username,message}); return true; }
             if (type==='request_gamemode') {
                 const mode=String(payload.gamemode||''); if(!actor.isOperator){integratedSend(clientId,{type:'error',message:'Only the LAN world host can switch gamemode.'});return true;}
-                if(['survival','creative','spectator'].includes(mode)){actor.gamemode=mode;if(mode!=='survival')actor.health=10;integratedSend(clientId,{type:'gamemode_update',gamemode:mode});integratedBroadcast({type:'system',message:`${actor.username} changed gamemode to ${mode}.`});}
+                if(['survival','creative','spectator'].includes(mode)){actor.gamemode=mode;if(mode!=='survival')actor.health=10;integratedSend(clientId,{type:'gamemode_update',gamemode:mode});}
                 return true;
             }
             if (type==='set_time') {
@@ -1523,7 +1604,7 @@
             if(profile)Object.assign(state,JSON.parse(JSON.stringify(profile)),{id:info.guestId,username,isOperator:isOp,deviceClass:state.deviceClass});
             integratedPlayers.set(info.guestId,state); integratedRecomputeMobHosts();
             const blocks=snapshotFromChunkEdits(serializeChunkEdits());
-            integratedSend(info.guestId,{type:'welcome',protocol:4,negotiatedProtocol:4,clientId:info.guestId,username,seed:WORLD_SEED,worldName:singleplayerWorldName,worldTime,dayLength:DAY_LENGTH,bossDefeated:Boolean(bossDefeated),isOperator:isOp,blocks,playerState:profile?{...profile}:null,players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
+            integratedSend(info.guestId,{type:'welcome',protocol:5,negotiatedProtocol:5,clientId:info.guestId,username,seed:WORLD_SEED,worldName:singleplayerWorldName,worldTime,weatherSeed,weatherPhase,dayLength:DAY_LENGTH,bossDefeated:Boolean(bossDefeated),isOperator:isOp,blocks,playerState:profile?{...profile}:null,players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
             integratedBroadcast({type:'player_joined',player:integratedPublicPlayer(state)},info.guestId);
             integratedBroadcast({type:'mob_hosts',hosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
         }
@@ -1544,7 +1625,7 @@
                 if(remove){droppedItems.delete(item.id);integratedBroadcast({type:'item_removed',itemId:item.id});singleplayerDirty=true;}
             }
             integratedStateBroadcastTimer+=dt;
-            if(integratedStateBroadcastTimer>=.1){integratedStateBroadcastTimer=0;integratedRecomputeMobHosts();integratedBroadcast({type:'world_state',worldTime,bossDefeated:Boolean(bossDefeated),players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});}
+            if(integratedStateBroadcastTimer>=.1){integratedStateBroadcastTimer=0;integratedRecomputeMobHosts();integratedBroadcast({type:'world_state',worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});}
         }
 
         function openWorldToLan() {
@@ -1613,7 +1694,7 @@
             const identity=selectedSingleplayerIdentity(false);
             if(!identity){relayStatus('relayJoinStatus','Use 1-20 letters, numbers, spaces, _ or -.',true);return;}
             if(socket){try{socket.close();}catch(_){}socket=null;}
-            localUsername=identity.username;localSkin=identity.skin;applySingleplayerIdentity(identity,true);singleplayerNetworkMode='lan-guest';singleplayerWorldName='';activeJoinProtocol=4;localIsOperator=false;
+            localUsername=identity.username;localSkin=identity.skin;applySingleplayerIdentity(identity,true);singleplayerNetworkMode='lan-guest';singleplayerWorldName='';activeJoinProtocol=5;localIsOperator=false;
             relaySend({type:'join_world',worldId,username:localUsername,skin:localSkin,deviceClass:isMobilePlaying?'mobile':'desktop'});
             relayStatus('relayJoinStatus','Joining selected world...');
         }
@@ -1650,7 +1731,7 @@
                     dimension: Number.isInteger(data.dimension) ? data.dimension : 0,
                     health: Number.isFinite(Number(data.health)) ? Number(data.health) : 10,
                     gamemode: data.gamemode || 'survival', heldItem: Number(data.heldItem) || 0,
-                    crouching: Boolean(data.crouching)
+                    crouching: Boolean(data.crouching), walkPhase:0, moveSpeed:0
                 };
                 remotePlayers.set(data.id, rp);
             } else {
@@ -1775,8 +1856,9 @@
                 localClientId = data.clientId;
                 localUsername = data.username || localUsername;
                 WORLD_SEED = Number(data.seed) || 0;
-                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.5.0 - ${data.worldName}`; }
+                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.6.0 - ${data.worldName}`; }
                 worldTime = Number(data.worldTime) || 0.25;
+                if(Number.isFinite(data.weatherSeed))weatherSeed=data.weatherSeed|0;if(Number.isFinite(data.weatherPhase))weatherPhase=Number(data.weatherPhase);
                 pendingBlockSnapshot = Array.isArray(data.blocks) ? data.blocks : [];
                 pendingMobSnapshot = Array.isArray(data.mobs) ? data.mobs : [];
                 pendingItemSnapshot = Array.isArray(data.items) ? data.items : [];
@@ -1792,6 +1874,7 @@
                 return;
             }
             if (data.type === 'world_state') {
+                if(Number.isFinite(data.weatherSeed))weatherSeed=data.weatherSeed|0;if(Number.isFinite(data.weatherPhase))weatherPhase+=(Number(data.weatherPhase)-weatherPhase)*.35;
                 if (typeof data.bossDefeated === 'boolean') bossDefeated = data.bossDefeated;
                 if (Number.isFinite(data.worldTime)) {
                     const drift = data.worldTime - worldTime;
@@ -1865,7 +1948,6 @@
                 player.timeSinceHit = 0;
                 showDamage();
                 updateHealthBar();
-                if (data.attacker) addChatMessage(`${data.attacker} hit you.`, 'chatSystem');
                 return;
             }
             if (data.type === 'player_damaged') {
@@ -2040,6 +2122,7 @@
         }
         function listSingleplayerWorlds() {
             const select = document.getElementById('worldSelect');
+            const list = document.getElementById('worldList');
             const worlds = [];
             for (let i=0;i<localStorage.length;i++) {
                 const key=localStorage.key(i);
@@ -2053,6 +2136,20 @@
             select.innerHTML = worlds.length
                 ? worlds.map(w=>`<option value="${w.key}">${w.name} — seed ${w.seed}</option>`).join('')
                 : '<option value="">No saved worlds yet</option>';
+            if(list) {
+                list.innerHTML='';
+                if(!worlds.length) list.textContent='No browser worlds yet. Create or import one.';
+                for(const world of worlds) {
+                    const row=document.createElement('div'); row.className='world-row';
+                    const label=document.createElement('div'); label.className='world-name'; label.textContent=`${world.name} — seed ${world.seed}`; row.appendChild(label);
+                    for(const [action,text,cls] of [['play','Play','greenBtn'],['delete','Delete','redBtn'],['import','Import','blueBtn'],['export','Export JSON','blueBtn']]) {
+                        const button=document.createElement('button');button.className=`menuBtn ${cls}`;button.textContent=text;
+                        button.addEventListener('click',()=>{select.value=world.key;if(action==='play')loadSelectedSingleplayerWorld();else if(action==='delete')deleteSelectedSingleplayerWorld();else if(action==='export')exportSelectedSingleplayerWorld();else document.getElementById('importWorldFile').click();});
+                        row.appendChild(button);
+                    }
+                    list.appendChild(row);
+                }
+            }
             return worlds;
         }
         function snapshotFromChunkEdits(edits) {
@@ -2110,7 +2207,7 @@
             if(data.lanPlayerProfiles&&typeof data.lanPlayerProfiles==='object')for(const [k,v] of Object.entries(data.lanPlayerProfiles))if(v&&typeof v==='object')profiles[String(k).toLowerCase()]={...v};
             if(data.playerState&&typeof data.playerState==='object'&&!profiles.player)profiles.player={username:'Player',skin:'steve',...data.playerState};
             const operators=Array.isArray(data.operators)?data.operators.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
-            return {format:'MellorCraftWorld',formatVersion:7,version:'1.4.1',name,seed:Number(data.seed)||0,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,bossDefeated:Boolean(data.bossDefeated),blocks,operators:[...new Set(operators)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
+            return {format:'MellorCraftWorld',formatVersion:8,version:'1.6.0',name,seed:Number(data.seed)||0,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,bossDefeated:Boolean(data.bossDefeated),blocks,operators:[...new Set(operators)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
         }
         function canonicalPlayerProfilesForSave() {
             const profiles=JSON.parse(JSON.stringify(singleplayerLanProfiles||{}));
@@ -2122,7 +2219,7 @@
         function saveSingleplayerWorld(force=false) {
             if (!singleplayerWorldName || !gameStarted || (singleplayerNetworkMode!=='local' && singleplayerNetworkMode!=='lan-host')) return false;
             if (!force && !singleplayerDirty) return true;
-            const data={format:'MellorCraftWorld',formatVersion:7,version:'1.4.1',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,bossDefeated:Boolean(bossDefeated),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),updatedAt:Date.now()};
+            const data={format:'MellorCraftWorld',formatVersion:8,version:'1.6.0',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,bossDefeated:Boolean(bossDefeated),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),updatedAt:Date.now()};
             try {localStorage.setItem(singleplayerStorageKey(singleplayerWorldName),JSON.stringify(data));singleplayerDirty=false;listSingleplayerWorlds();return true;}catch(error){addChatMessage(`Autosave failed: ${error.message}`,'chatError');return false;}
         }
         function launchSingleplayerWorld(rawData) {
@@ -2141,7 +2238,7 @@
             singleplayerLanProfiles={};for(const [key,value] of Object.entries(profiles)){const profileKey=String(key).toLowerCase();if(profileKey!==hostKey&&value&&typeof value==='object')singleplayerLanProfiles[profileKey]={...value};}
             pendingBlockSnapshot=snapshotFromBlocksDict(data.blocks);pendingMobSnapshot=(Array.isArray(data.mobs)?data.mobs:[]).filter(m=>!(bossDefeated&&m&&m.typeKey==='MELLOR_BOSS'));pendingItemSnapshot=Array.isArray(data.items)?data.items:[];
             playerOriginalSpawn=pendingPlayerState?.originalSpawn?{...pendingPlayerState.originalSpawn}:null;playerRespawnPoint=normalizePlayerSpawnPoint(pendingPlayerState?.respawnPoint);
-            activeJoinProtocol=4;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.5.0 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
+            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.6.0 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
         }
         let gameConfirmResolver = null;
         function showGameConfirm(message, options={}) {
@@ -2247,6 +2344,11 @@
         document.getElementById('singleplayerUsernameInput').addEventListener('change',rememberSelectedSingleplayerIdentity);
         document.getElementById('singleplayerUsernameInput').addEventListener('blur',rememberSelectedSingleplayerIdentity);
         document.getElementById('singleplayerSkinInput').addEventListener('change',rememberSelectedSingleplayerIdentity);
+        document.querySelectorAll('[data-start-page]').forEach(button=>button.addEventListener('click',()=>{
+            document.querySelectorAll('.start-page').forEach(page=>page.classList.remove('active'));
+            document.getElementById(button.dataset.startPage)?.classList.add('active');
+            if(!gameStarted && (!currentMusicAudio || currentMusicAudio.paused)) playRandomAmbientTrack('menu');
+        }));
         const lanExitNotice=safeStorageGet('mellorcraftLanExitNotice');if(lanExitNotice){safeStorageRemove('mellorcraftLanExitNotice');setJoinStatus(lanExitNotice,true);}
         const serverExitNotice=safeStorageGet('mellorcraftServerExitNotice');if(serverExitNotice){safeStorageRemove('mellorcraftServerExitNotice');setJoinStatus(serverExitNotice,true);}
         document.getElementById('createWorldBtn').addEventListener('click',createSingleplayerWorld);
@@ -2277,6 +2379,7 @@
         document.getElementById('seedInput').addEventListener('keypress',e=>{if(e.key==='Enter')createSingleplayerWorld();});
 
         function startGame() {
+            stopMusicPlayback();
             document.getElementById('startScreen').style.display = 'none';
             document.getElementById('seedValue').textContent = WORLD_SEED;
             gameStarted = true;
@@ -2284,8 +2387,9 @@
             applyBlockSnapshot(pendingBlockSnapshot);
             pendingBlockSnapshot = [];
             addChatMessage(`Welcome to ${singleplayerWorldName}!`, 'chatSystem');
-            if (activeJoinProtocol < MULTIPLAYER_PROTOCOL && singleplayerNetworkMode === 'dedicated') addChatMessage('Compatibility mode: saved player position and inventory require protocol 4.', 'chatError');
+            if (activeJoinProtocol < MULTIPLAYER_PROTOCOL && singleplayerNetworkMode === 'dedicated') addChatMessage('Compatibility mode: synchronized localized weather requires protocol 5.', 'chatError');
             document.getElementById('onlineCount').textContent = String(remotePlayers.size + 1);
+            ambientMusicTimer=0; playRandomAmbientTrack('game');
         }
 
         function isNight() {
@@ -2373,8 +2477,10 @@
         const MUSIC_TRACK_FILES = [
             'Shelter By Moonrise.mp3', 'The Height Limit.mp3', 'Uncraftable.mp3',
             'Mellorite in the Mineshaft.mp3', 'Fogged Hallway.mp3', 'Campfire In Frost.mp3',
-            'Pinewood Sprint.mp3', 'Last Camp Standing.mp3', 'Last Camp Standing (OV).mp3'
+            'Pinewood Sprint.mp3', 'Last Camp Standing.mp3', 'Last Camp Standing (OV).mp3',
+            'Mossline Haven.mp3', 'Driftwood Camp.mp3', 'Forest Dawn.mp3'
         ];
+        const AMBIENT_TRACK_INDEXES = [0,1,2,3,4,5,9,10,11];
 
         const MUSIC_DISC_TRACK = {
             [ITEMS.PINEWOOD_SPRINT_DISC]: 6,
@@ -2385,6 +2491,8 @@
         let currentMusicTrack = null;
         let musicTimeout = null;
         let ambientMusicTimer = 0;
+        setTimeout(()=>playRandomAmbientTrack('menu'),0);
+        document.addEventListener('pointerdown',()=>{if(!gameStarted&&(!currentMusicAudio||currentMusicAudio.paused))playRandomAmbientTrack('menu');},{once:true});
 
         const SOLID_BLOCKS = new Set([
             BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD,
@@ -2412,17 +2520,17 @@
             [BLOCKS.PLANKS]: { top: [0.8, 0.6, 0.35], side: [0.75, 0.55, 0.3], bottom: [0.7, 0.5, 0.25] },
             [BLOCKS.COBBLESTONE]: { top: [0.45, 0.45, 0.45], side: [0.4, 0.4, 0.4], bottom: [0.35, 0.35, 0.35] },
             [BLOCKS.TORCH]: { top: [1.0, 0.9, 0.4], side: [0.9, 0.8, 0.3], bottom: [0.5, 0.4, 0.2] },
-            [BLOCKS.COAL_ORE]: { top: [0.25, 0.25, 0.28], side: [0.2, 0.2, 0.22], bottom: [0.4, 0.4, 0.4] },
-            [BLOCKS.IRON_ORE]: { top: [0.55, 0.45, 0.4], side: [0.7, 0.55, 0.45], bottom: [0.4, 0.4, 0.4] },
-            [BLOCKS.GOLD_ORE]: { top: [0.95, 0.8, 0.2], side: [1.0, 0.85, 0.0], bottom: [0.4, 0.4, 0.4] },
-            [BLOCKS.DIAMOND_ORE]: { top: [0.3, 0.85, 0.95], side: [0.2, 0.7, 0.9], bottom: [0.4, 0.4, 0.4] },
+            [BLOCKS.COAL_ORE]: { top: [0.25, 0.25, 0.28], side: [0.2, 0.2, 0.22], bottom: [0.2, 0.2, 0.22] },
+            [BLOCKS.IRON_ORE]: { top: [0.55, 0.45, 0.4], side: [0.7, 0.55, 0.45], bottom: [0.7, 0.55, 0.45] },
+            [BLOCKS.GOLD_ORE]: { top: [0.95, 0.8, 0.2], side: [1.0, 0.85, 0.0], bottom: [1.0, 0.85, 0.0] },
+            [BLOCKS.DIAMOND_ORE]: { top: [0.3, 0.85, 0.95], side: [0.2, 0.7, 0.9], bottom: [0.2, 0.7, 0.9] },
             [BLOCKS.COAL_BLOCK]: { top: [0.15, 0.15, 0.15], side: [0.1, 0.1, 0.1], bottom: [0.1, 0.1, 0.1] },
             [BLOCKS.IRON_BLOCK]: { top: [0.85, 0.85, 0.85], side: [0.8, 0.8, 0.8], bottom: [0.75, 0.75, 0.75] },
             [BLOCKS.GOLD_BLOCK]: { top: [1.0, 0.85, 0.2], side: [0.95, 0.8, 0.15], bottom: [0.9, 0.75, 0.1] },
             [BLOCKS.DIAMOND_BLOCK]: { top: [0.4, 0.95, 1.0], side: [0.35, 0.9, 0.95], bottom: [0.3, 0.85, 0.9] },
             [BLOCKS.GLASS]: { top: [0.8, 0.9, 0.95], side: [0.75, 0.85, 0.9], bottom: [0.7, 0.8, 0.85] },
             [BLOCKS.BRICK]: { top: [0.7, 0.35, 0.3], side: [0.65, 0.3, 0.25], bottom: [0.6, 0.25, 0.2] },
-            [BLOCKS.MELLORITE_ORE]: { top: [0.7, 0.1, 0.9], side: [0.8, 0.2, 1.0], bottom: [0.4, 0.4, 0.4] },
+            [BLOCKS.MELLORITE_ORE]: { top: [0.7, 0.1, 0.9], side: [0.8, 0.2, 1.0], bottom: [0.8, 0.2, 1.0] },
             [BLOCKS.MELLORITE_BLOCK]: { top: [0.7, 0.3, 0.95], side: [0.65, 0.25, 0.9], bottom: [0.6, 0.2, 0.85] },
             [BLOCKS.RED_SAND]: { top: [0.8, 0.4, 0.2], side: [0.75, 0.35, 0.15], bottom: [0.7, 0.3, 0.1] },
             [BLOCKS.TERRACOTTA]: { top: [0.6, 0.3, 0.15], side: [0.55, 0.25, 0.1], bottom: [0.5, 0.2, 0.05] },
@@ -2722,6 +2830,7 @@
             uniform float uAlpha;
             uniform float uEmission;
             uniform float uShaderEnabled;
+            uniform float uCloudSun;
             uniform float uShadowAmount;
             uniform float uShadowSoftness;
             uniform float uTorchBrightness;
@@ -2801,7 +2910,7 @@
             void main() {
                 vec3 normal = normalize(vNormal);
                 vec3 sunDir = normalize(uLightDir);
-                float diffuse = max(dot(normal, sunDir), 0.0);
+                float diffuse = max(dot(normal, sunDir), 0.0) * uCloudSun;
                 float shadow = heightShadow(vPosition, sunDir);
                 float effectiveAmbient = uAmbient;
                 if (uShaderEnabled > 0.5) {
@@ -2862,6 +2971,7 @@
         const uAlpha = gl.getUniformLocation(program, 'uAlpha');
         const uEmission = gl.getUniformLocation(program, 'uEmission');
         const uShaderEnabled = gl.getUniformLocation(program, 'uShaderEnabled');
+        const uCloudSun = gl.getUniformLocation(program, 'uCloudSun');
         const uShadowAmount = gl.getUniformLocation(program, 'uShadowAmount');
         const uShadowSoftness = gl.getUniformLocation(program, 'uShadowSoftness');
         const uTorchBrightness = gl.getUniformLocation(program, 'uTorchBrightness');
@@ -3087,7 +3197,16 @@
             return clear;
         }
 
-        function updateShaderSun(lightDir, sunAboveHorizon) {
+        function cloudSunTransmission(lightDir){
+            if(!liteShaderEnabled||currentDimension!==0||playerEyeY()>=CLOUD_LEVEL||lightDir[1]<=.001)return 1;
+            const t=(CLOUD_LEVEL-playerEyeY())/lightDir[1],x=player.x+lightDir[0]*t,z=player.z+lightDir[2]*t;
+            const pressure=weatherPressureAt(x,z);
+            if(pressure>=60)return 1;
+            if(pressure<40)return .025;
+            return Math.max(.06,Math.min(1,.06+(pressure-40)/20*.94));
+        }
+
+        function updateShaderSun(lightDir, sunAboveHorizon, cloudTransmission=1) {
             const sun = document.getElementById('shaderSun');
             if (!sun || !liteShaderEnabled || currentDimension !== 0 || !sunAboveHorizon || !uProjectionMat || !uViewMat) {
                 if (sun) sun.style.display = 'none';
@@ -3105,10 +3224,11 @@
             sun.style.top = `${(1 - ndcY) * 0.5 * canvas.clientHeight}px`;
             const horizonVisibility = Math.max(0.22, Math.min(1, lightDir[1] * 1.8 + 0.18));
             const rayPower = Math.max(0, Math.min(2, shaderSunrayStrength));
-            sun.style.opacity = String(Math.max(0.34, Math.min(1, horizonVisibility * (0.84 + rayPower * 0.13))));
-            sun.style.setProperty('--sunray-opacity', String(Math.min(1, horizonVisibility * rayPower * 0.72)));
+            if(cloudTransmission<.12){sun.style.display='none';return;}
+            sun.style.opacity = String(Math.max(0.08, Math.min(1, horizonVisibility * (0.84 + rayPower * 0.13)*cloudTransmission)));
+            sun.style.setProperty('--sunray-opacity', String(Math.min(1, horizonVisibility * rayPower * 0.72*cloudTransmission)));
             sun.style.setProperty('--sunray-scale', String(0.92 + rayPower * 0.24));
-            const glowPower = Math.min(1, horizonVisibility * (0.52 + rayPower * 0.34));
+            const glowPower = Math.min(1, horizonVisibility * (0.52 + rayPower * 0.34)*cloudTransmission);
             sun.style.setProperty('--sun-glow-opacity', String(glowPower));
             sun.style.setProperty('--sun-glow-soft-opacity', String(glowPower * 0.42));
             sun.style.display = 'block';
@@ -3148,6 +3268,10 @@
                 -sRot*sz, 0, c*sz, 0,
                 x, y, z, 1
             ]);
+        }
+        function modelMatrixPitch(x,y,z,rotY=0,rotX=0,sx=1,sy=1,sz=1) {
+            const cy=Math.cos(rotY),syaw=Math.sin(rotY),cx=Math.cos(rotX),sp=Math.sin(rotX);
+            return new Float32Array([cy*sx,0,-syaw*sx,0,syaw*sp*sy,cx*sy,cy*sp*sy,0,syaw*cx*sz,-sp*sz,cy*cx*sz,0,x,y,z,1]);
         }
 
         class SimplexNoise {
@@ -5004,6 +5128,13 @@
             currentMusicTrack = trackIndex;
         }
 
+        function playRandomAmbientTrack(context='game') {
+            const choices=AMBIENT_TRACK_INDEXES.filter(index=>index!==currentMusicTrack);
+            if(!choices.length)return;
+            playMusicTrack(choices[Math.floor(Math.random()*choices.length)]);
+            ambientMusicTimer=context==='menu'?20:60+Math.random()*120;
+        }
+
         function stopMusicPlayback() {
             if (currentMusicAudio) { currentMusicAudio.pause(); currentMusicAudio.currentTime = 0; currentMusicAudio = null; }
             currentMusicTrack = null;
@@ -5710,7 +5841,6 @@
 
         const remotePlayerBodyMeshes = new Map();
         const remotePlayerHeadMeshes = new Map();
-
         function getRemotePlayerType(skinName) {
             const skin = PLAYER_SKINS[skinName] || PLAYER_SKINS.steve;
             return {
@@ -5787,6 +5917,43 @@
             }
         }
 
+        let weatherCloudMesh=null;
+        let weatherCloudPuffMesh=null;
+        function getWeatherCloudPuffMesh(){if(weatherCloudPuffMesh)return weatherCloudPuffMesh;const pos=[],col=[],nor=[],latSteps=7,lonSteps=10;for(let lat=0;lat<latSteps;lat++){const a0=-Math.PI/2+lat/latSteps*Math.PI,a1=-Math.PI/2+(lat+1)/latSteps*Math.PI;for(let lon=0;lon<lonSteps;lon++){const b0=lon/lonSteps*Math.PI*2,b1=(lon+1)/lonSteps*Math.PI*2;const point=(a,b)=>[Math.cos(a)*Math.cos(b),Math.sin(a),Math.cos(a)*Math.sin(b)];const quad=[point(a0,b0),point(a0,b1),point(a1,b1),point(a1,b0)];for(const index of [0,1,2,0,2,3]){const v=quad[index];pos.push(...v);nor.push(...v);const light=.69+(v[1]+1)*.095;col.push(light,light+.018,light+.035);}}}const pb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);const cb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,cb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(col),gl.STATIC_DRAW);const nb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(nor),gl.STATIC_DRAW);weatherCloudPuffMesh={pb,cb,nb,count:pos.length/3};return weatherCloudPuffMesh;}
+        function getWeatherCloudMesh(){
+            if(weatherCloudMesh)return weatherCloudMesh;
+            const pos=[],col=[],nor=[];
+            function box(x,z,color){const y=0,w=16,h=2,d=16,faces=[{v:[[x,y+h,z],[x,y+h,z+d],[x+w,y+h,z+d],[x+w,y+h,z]],n:[0,1,0]},{v:[[x,y,z+d],[x,y,z],[x+w,y,z],[x+w,y,z+d]],n:[0,-1,0]},{v:[[x,y,z+d],[x+w,y,z+d],[x+w,y+h,z+d],[x,y+h,z+d]],n:[0,0,1]},{v:[[x+w,y,z],[x,y,z],[x,y+h,z],[x+w,y+h,z]],n:[0,0,-1]},{v:[[x+w,y,z+d],[x+w,y,z],[x+w,y+h,z],[x+w,y+h,z+d]],n:[1,0,0]},{v:[[x,y,z],[x,y,z+d],[x,y+h,z+d],[x,y+h,z]],n:[-1,0,0]}];for(const face of faces)for(const i of [0,1,2,0,2,3]){pos.push(...face.v[i]);col.push(...color);nor.push(...face.n);}}
+            box(0,0,[.76,.78,.80]);box(16,0,[.71,.74,.77]);box(0,16,[.73,.76,.79]);box(16,16,[.68,.71,.75]);
+            const pb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);const cb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,cb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(col),gl.STATIC_DRAW);const nb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(nor),gl.STATIC_DRAW);weatherCloudMesh={pb,cb,nb,count:pos.length/3};
+            return weatherCloudMesh;
+        }
+        function renderWeatherClouds(){
+            if(currentDimension!==0)return;
+            const tile=32,radius=500,driftX=weatherPhase*7,driftZ=weatherPhase*2.6,mesh=getWeatherCloudMesh(),puffMesh=liteShaderEnabled?getWeatherCloudPuffMesh():null;
+            const minI=Math.floor((player.x-radius-driftX)/tile),maxI=Math.ceil((player.x+radius-driftX)/tile);
+            const minK=Math.floor((player.z-radius-driftZ)/tile),maxK=Math.ceil((player.z+radius-driftZ)/tile);
+            const viewX=-Math.sin(player.yaw),viewZ=-Math.cos(player.yaw),cloudY=CLOUD_LEVEL;
+            if(liteShaderEnabled){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.uniform1f(uAlpha,.46);}else gl.uniform1f(uAlpha,1);
+            gl.uniform1f(uEmission,liteShaderEnabled?.12:.08);
+            for(let i=minI;i<=maxI;i++)for(let k=minK;k<=maxK;k++){
+                const x=i*tile+driftX,z=k*tile+driftZ,dx=x+16-player.x,dz=z+16-player.z,distSq=dx*dx+dz*dz;
+                if(distSq>radius*radius)continue;
+                if(distSq>10000&&dx*viewX+dz*viewZ<-70)continue;
+                const pressure=weatherPressureAt(x+16,z+16);
+                if(pressure>=60+(cloudVolumetricDensity-1)*8)continue;
+                // One 32x32 tile contains four touching 16x16 (one-chunk-wide) cloud blocks.
+                const baseY=cloudY+(weatherHash(i,k)-.5)*5;
+                if(liteShaderEnabled){
+                    const puffCount=Math.max(6,Math.round(5*cloudDetail*cloudVolumetricDensity));
+                    for(let puff=0;puff<puffCount;puff++){const seed=weatherHash(i*31+puff*17,k*29-puff*13),angle=seed*Math.PI*2,spread=5+(puff%3)*4,px=x+16+Math.cos(angle)*spread,pz=z+16+Math.sin(angle)*spread,py=baseY+(weatherHash(i+puff*7,k-puff*5)-.5)*cloudThickness*.45,sx=8+weatherHash(i+puff,k+41)*7,sy=3+cloudThickness*.22+weatherHash(i+71,k+puff)*2.5,sz=8+weatherHash(i-37,k+puff)*7;drawMesh(puffMesh,modelMatrix(px,py,pz,0,sx,sy,sz));}
+                    if(pressure<10){const tower=Math.max(0,Math.min(1,(10-pressure)/9)),levels=2+Math.round(tower*(4+cloudDetail*2));for(let level=0;level<levels;level++){const fraction=level/Math.max(1,levels-1),wobble=(weatherHash(i+level*19,k-level*23)-.5)*5,scale=10+Math.sin(fraction*Math.PI)*5;drawMesh(puffMesh,modelMatrix(x+16+wobble,baseY+6+fraction*(28+tower*38),z+16-wobble*.6,0,scale,5+scale*.42,scale*.9));}}
+                }else drawMesh(mesh,modelMatrix(x,baseY,z));
+            }
+            if(liteShaderEnabled){gl.depthMask(true);gl.disable(gl.BLEND);gl.uniform1f(uAlpha,1);}
+            gl.uniform1f(uEmission,0);
+        }
+
         function renderRemotePlayers() {
             for (const rp of remotePlayers.values()) {
                 if (rp.dimension !== currentDimension || rp.gamemode === 'spectator' || rp.health <= 0) continue;
@@ -5794,8 +5961,9 @@
                 if (distance > (RENDER_DISTANCE + 1) * CHUNK_SIZE) continue;
                 // Camera yaw increases in the opposite direction from the model matrix rotation.
                 const modelYaw = -rp.yaw;
-                drawMesh(getRemotePlayerBodyMesh(rp.skin), modelMatrix(rp.x, rp.y, rp.z, modelYaw));
-                drawMesh(getRemotePlayerHeadMesh(rp.skin), modelMatrix(rp.x, rp.y + 1.4, rp.z, modelYaw));
+                const walk=rp.crouching?0:Math.sin(rp.walkPhase||0)*Math.min(.10,(rp.moveSpeed||0)*.025);
+                drawMesh(getRemotePlayerBodyMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+Math.abs(walk)*.35, rp.z, modelYaw, walk));
+                drawMesh(getRemotePlayerHeadMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+1.4+Math.abs(walk)*.35, rp.z, modelYaw, Math.max(-0.75,Math.min(0.75,rp.pitch))));
             }
         }
 
@@ -7023,6 +7191,7 @@
         }
 
         document.getElementById('closeSettingsBtn').addEventListener('click', toggleSettings);
+        document.getElementById('returnToMainMenuBtn').addEventListener('click',()=>{const button=document.getElementById('returnToMainMenuBtn');button.disabled=true;button.textContent='Saving...';sendFinalPlayerState();stopMusicPlayback();setTimeout(()=>{try{socket?.close();}catch(_){}try{relaySocket?.close();}catch(_){}window.location.reload();},100);});
         document.getElementById('closeCraftingMobile').addEventListener('click', toggleCrafting);
         document.getElementById('closeInventoryMobile').addEventListener('click', toggleInventory);
         document.getElementById('closeCreativeMobile').addEventListener('click', toggleCreativeInventory);
@@ -7040,7 +7209,15 @@
             crouchToggleActive = player.crouching;
             refreshCrouchState();
         });
-        document.getElementById('setRd').addEventListener('input', (e) => { RENDER_DISTANCE = parseInt(e.target.value); chunkMaintenanceTimer = 0; document.getElementById('rdVal').textContent = RENDER_DISTANCE; });
+        function syncCoreSettingsUI(){
+            for(const [id,value] of [['setRd',RENDER_DISTANCE],['menuSetRd',RENDER_DISTANCE],['setVol',Math.round(masterVolume*100)],['menuSetVol',Math.round(masterVolume*100)],['setFov',FOV],['menuSetFov',FOV],['setSens',Math.round(MOUSE_SENSITIVITY/.002*100)],['menuSetSens',Math.round(MOUSE_SENSITIVITY/.002*100)]]){const el=document.getElementById(id);if(el)el.value=String(value);}
+            for(const [id,value] of [['rdVal',RENDER_DISTANCE],['menuRdVal',RENDER_DISTANCE],['volVal',Math.round(masterVolume*100)],['menuVolVal',Math.round(masterVolume*100)],['fovVal',FOV],['menuFovVal',FOV],['sensVal',Math.round(MOUSE_SENSITIVITY/.002*100)],['menuSensVal',Math.round(MOUSE_SENSITIVITY/.002*100)]]){const el=document.getElementById(id);if(el)el.textContent=String(value);}
+        }
+        function setRenderDistance(value){RENDER_DISTANCE=parseInt(value);safeStorageSet('mellorcraftRenderDistance',String(RENDER_DISTANCE));chunkMaintenanceTimer=0;syncCoreSettingsUI();}
+        function setMasterVolume(value){masterVolume=parseInt(value)/100;safeStorageSet('mellorcraftVolume',String(parseInt(value)));if(currentMusicAudio)currentMusicAudio.volume=masterVolume;syncCoreSettingsUI();}
+        function setFovValue(value){FOV=parseInt(value);safeStorageSet('mellorcraftFov',String(FOV));syncCoreSettingsUI();}
+        function setSensitivityValue(value){MOUSE_SENSITIVITY=.002*parseInt(value)/100;safeStorageSet('mellorcraftSensitivity',String(parseInt(value)));syncCoreSettingsUI();}
+        document.getElementById('setRd').addEventListener('input',e=>setRenderDistance(e.target.value));
         document.getElementById('setVol').addEventListener('input', (e) => { 
             masterVolume = e.target.value / 100; 
             document.getElementById('volVal').textContent = e.target.value;
@@ -7054,6 +7231,14 @@
             MOUSE_SENSITIVITY = 0.002 * (parseInt(e.target.value) / 100);
             document.getElementById('sensVal').textContent = e.target.value;
         });
+        document.getElementById('setVol').oninput=e=>setMasterVolume(e.target.value);
+        document.getElementById('setFov').oninput=e=>setFovValue(e.target.value);
+        document.getElementById('setSens').oninput=e=>setSensitivityValue(e.target.value);
+        document.getElementById('menuSetRd').addEventListener('input',e=>setRenderDistance(e.target.value));
+        document.getElementById('menuSetVol').addEventListener('input',e=>setMasterVolume(e.target.value));
+        document.getElementById('menuSetFov').addEventListener('input',e=>setFovValue(e.target.value));
+        document.getElementById('menuSetSens').addEventListener('input',e=>setSensitivityValue(e.target.value));
+        syncCoreSettingsUI();
         function syncShaderSettingsUI() {
             const pairs = [
                 ['setShaderShadow','shaderShadowVal',Math.round(shaderShadowStrength*100)],
@@ -7062,7 +7247,10 @@
                 ['setShaderTorch','shaderTorchVal',Math.round(shaderTorchBrightness*100)],
                 ['setShaderTorchRange','shaderTorchRangeVal',Math.round(shaderTorchRange*100)],
                 ['setShaderNight','shaderNightVal',Math.round(shaderNightDarkness*100)],
-                ['setShaderCave','shaderCaveVal',Math.round(shaderCaveDarkness*100)]
+                ['setShaderCave','shaderCaveVal',Math.round(shaderCaveDarkness*100)],
+                ['setCloudThickness','cloudThicknessVal',Math.round(cloudThickness)],
+                ['setCloudDensity','cloudDensityVal',Math.round(cloudVolumetricDensity*100)],
+                ['setCloudDetail','cloudDetailVal',Math.round(cloudDetail)]
             ];
             for (const [inputId,valueId,value] of pairs) {
                 const input=document.getElementById(inputId), out=document.getElementById(valueId);
@@ -7098,6 +7286,9 @@
         bindShaderSlider('setShaderTorchRange','shaderTorchRangeVal','mellorcraftShaderTorchRange',v=>{ shaderTorchRange=v; lastTorchScanAt=0; });
         bindShaderSlider('setShaderNight','shaderNightVal','mellorcraftShaderNight',v=>shaderNightDarkness=v);
         bindShaderSlider('setShaderCave','shaderCaveVal','mellorcraftShaderCave',v=>{ shaderCaveDarkness=v; lastCaveLightAt=0; });
+        document.getElementById('setCloudThickness').addEventListener('input',e=>{cloudThickness=parseInt(e.target.value);document.getElementById('cloudThicknessVal').textContent=String(cloudThickness);safeStorageSet('mellorcraftCloudThickness',String(cloudThickness));});
+        document.getElementById('setCloudDensity').addEventListener('input',e=>{const value=parseInt(e.target.value);cloudVolumetricDensity=value/100;document.getElementById('cloudDensityVal').textContent=String(value);safeStorageSet('mellorcraftCloudDensity',String(value));});
+        document.getElementById('setCloudDetail').addEventListener('input',e=>{cloudDetail=parseInt(e.target.value);document.getElementById('cloudDetailVal').textContent=String(cloudDetail);safeStorageSet('mellorcraftCloudDetail',String(cloudDetail));});
         syncShaderSettingsUI();
         document.getElementById('setResolution').addEventListener('input', (e) => {
             if (!isMobilePlaying) return;
@@ -7161,10 +7352,13 @@
         function updateRemotePlayers(dt) {
             const smoothing = 1 - Math.pow(0.0005, Math.min(dt, 0.1));
             for (const rp of remotePlayers.values()) {
+                const oldX=rp.x,oldZ=rp.z;
                 rp.x += (rp.targetX - rp.x) * smoothing;
                 rp.y += (rp.targetY - rp.y) * smoothing;
                 rp.z += (rp.targetZ - rp.z) * smoothing;
                 rp.yaw += normalizeAngle(rp.targetYaw - rp.yaw) * smoothing;
+                rp.moveSpeed=Math.hypot(rp.x-oldX,rp.z-oldZ)/Math.max(.001,dt);
+                if(rp.moveSpeed>.05)rp.walkPhase=(rp.walkPhase||0)+dt*Math.min(14,6+rp.moveSpeed);
             }
         }
 
@@ -7372,14 +7566,14 @@
                 timeUiTimer -= dt;
                 if (timeUiTimer <= 0) {
                     const timeOfDay = getTimeOfDay();
-                    document.getElementById('timeDisplay').textContent = `Day ${timeOfDay.dayCount} - ${timeOfDay.hours.toString().padStart(2, '0')}:${timeOfDay.minutes.toString().padStart(2, '0')} (${timeOfDay.period})`;
+                    document.getElementById('timeDisplay').textContent = `Day ${timeOfDay.dayCount} - ${timeOfDay.hours.toString().padStart(2, '0')}:${timeOfDay.minutes.toString().padStart(2, '0')} (${timeOfDay.period}) · ${weatherKind()} ${localPressure}`;
                     timeUiTimer = isMobilePlaying ? 0.45 : 0.2;
                 }
 
                 if (!currentMusicAudio || currentMusicAudio.paused) {
                     ambientMusicTimer -= dt;
                     if (ambientMusicTimer <= 0) {
-                        if (currentDimension !== 2) playMusicTrack(Math.floor(Math.random() * 6));
+                        if (currentDimension !== 2) playRandomAmbientTrack('game');
                         ambientMusicTimer = 60 + Math.random() * 120; // Wait 1-3 minutes before next track
                     }
                 } else {
@@ -7391,6 +7585,7 @@
                 updateDungeonSpawners(dt);
                 updateRemotePlayers(dt);
                 updateDroppedItems(dt);
+                updateLocalWeather(dt);
                 singleplayerTick(dt);
                 sendLocalPlayerState(time);
                 sendHostedMobStates(time);
@@ -7485,6 +7680,7 @@
             gl.uniformMatrix4fv(uView, false, uViewMat);
             
             const shaderSunState = getShaderSunState();
+            const cloudTransmission = cloudSunTransmission(shaderSunState.dir);
             let lightDir = [0.5, 1.0, 0.3];
             if (currentDimension === 0) {
                 if (liteShaderEnabled && shaderSunState.above) {
@@ -7506,11 +7702,14 @@
             const shaderAmbient = getShaderAmbientLevel(shaderSunState);
             const skyColor = getSkyColor();
             const fogLight = liteShaderEnabled ? Math.max(0.16, Math.min(1.0, shaderAmbient * 1.35)) : 1.0;
-            gl.uniform3fv(uFogColor, [skyColor[0]*fogLight, skyColor[1]*fogLight, skyColor[2]*fogLight]);
+            const weatherGray=currentDimension===0?Math.max(0,Math.min(.65,(60-localPressure)/70)):0;
+            gl.uniform3fv(uFogColor, [skyColor[0]*fogLight*(1-weatherGray)+.42*weatherGray,skyColor[1]*fogLight*(1-weatherGray)+.46*weatherGray,skyColor[2]*fogLight*(1-weatherGray)+.50*weatherGray]);
             
-            let fd = 0.015;
+            // Keep the 500-block weather horizon visible while still building obvious distance fog.
+            let fd = 0.0035;
             if (currentDimension === 1) fd = 0.04;
             if (currentDimension === 2) fd = 0.02;
+            if(currentDimension===0&&playerEyeY()<CLOUD_LEVEL&&localPressure<40){const rainFog=Math.max(0,Math.min(1,(40-localPressure)/39));fd=.0035+Math.pow(rainFog,2.15)*.080;}
             gl.uniform1f(uFogDensity, fd);
             
             gl.uniform3fv(uCameraPos, [player.x, playerEyeY(), player.z]);
@@ -7518,6 +7717,7 @@
             gl.uniform1f(uAlpha, 1.0);
             gl.uniform1f(uEmission, 0.0);
             gl.uniform1f(uShaderEnabled, liteShaderEnabled ? 1.0 : 0.0);
+            gl.uniform1f(uCloudSun, cloudTransmission);
             const sunAboveHorizon = shaderSunState.above;
             const shadowAmount = liteShaderEnabled && sunAboveHorizon ? shaderShadowStrength * shaderSunState.strength : 0.0;
             gl.uniform1f(uShadowAmount, shadowAmount);
@@ -7537,7 +7737,7 @@
             gl.uniform3fv(uTorchPos2, torchLights[2] || zeroTorch);
             gl.uniform3fv(uTorchPos3, torchLights[3] || zeroTorch);
             gl.uniform1f(uTorchCount, torchLights.length);
-            updateShaderSun(shaderSunState.dir, sunAboveHorizon);
+            updateShaderSun(shaderSunState.dir, sunAboveHorizon, cloudTransmission);
 
             const dirX = Math.sin(player.yaw), dirZ = Math.cos(player.yaw);
             const visibleChunkMeshes = [];
@@ -7569,6 +7769,8 @@
                     gl.uniform1f(uEmission,0.0);
                 }
             }
+
+            renderWeatherClouds();
 
             for (const m of mobs) {
                 if (m.dimension !== currentDimension || m.health <= 0) continue;

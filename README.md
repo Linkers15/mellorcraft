@@ -1,5 +1,25 @@
-MellorCraft v1.5.0
+MellorCraft v1.6.0
 =========================================================
+
+v1.6.0 update
+-------------
+- Added a panorama-style main menu with separate Singleplayer, Multiplayer, and Settings pages.
+- Singleplayer shows every browser save with Play, Delete, Import, and Export JSON actions, plus Create World.
+- Multiplayer supports direct dedicated-server connections and relay world discovery.
+- Settings uses the original six player colors. Render distance, volume, FOV, and look sensitivity appear on the main-menu Settings page and persist in browser storage.
+- Protocol 5 synchronizes a moving, server-authoritative localized pressure map. Pressure bands provide clear, overcast, light-rain, moderate-rain, and heavy-rain weather with progressively stronger fog and precipitation. Clouds use a continuously drifting, world-anchored ceiling out to 500 blocks; each tile contains four touching chunk-wide cloud blocks, fully covering overcast and rainy pressure regions without player-relative snapping.
+- Cloud rendering evaluates every nearby pressure tile even when the player is currently beneath clear sky, so storm banks remain visible on the 500-block horizon. Distance fog is always present and thickens with rain. Rain uses fast world-space vertical drops, checks overhead blocks to stay out of caves, and produces short ground-impact splashes.
+- Weather regions use twice the previous horizontal noise scale, producing broader storms and clear areas. Heavy-rain fog limits useful visibility to roughly three chunks below the cloud deck, while players above cloud level receive no rain. With Lightweight Shader enabled, clouds gain saved Thickness, Density, and Detail controls and render as layered self-contained voxel volumes.
+- Local rain now adds an explicit atmospheric haze, while projected fog banks reveal rainy weather beneath distant clouds up to the 500-block horizon. Shader clouds use translucent, lit, offset voxel layers; cloud pressure along the sun ray attenuates terrain sunlight, sun glow, and sun rays, fully hiding the sun beneath dense cover.
+- Fog uses a horizon-weighted depth veil plus slowly moving mist layers instead of a uniform gray screen tint. Rain sheltering is column-local: a lone roof no longer disables the surrounding storm, drops find and splash on the highest terrain, canopy, or constructed roof in each column, and only players genuinely below the terrain surface suppress the outdoor rain layer.
+- Distant fog banks, world-space rain streaks, and rain splashes now require a cached terrain line of sight; the shader sun retains its stricter terrain-and-cloud visibility ray. Every rain band now starts with dense fog, with moderate and heavy rain increasing toward a roughly three-chunk visibility limit.
+- Fog now grows continuously from nearly imperceptible at pressure 39 to near-whiteout conditions at pressure 1. Distant fog banks retain a softly occluded minimum instead of blinking when terrain sight tests fluctuate. The pressure field is advected by the exact cloud drift vector, preventing stationary cloud tiles from appearing and disappearing beneath an independently moving map.
+- Standard clouds now sit at Y=150. Shader clouds use rounded low-poly volumetric puffs; pressure below 10 builds tall cumulonimbus columns whose height increases as pressure falls. In-game Settings now includes **Return to Main Menu**, which saves before closing active connections and reloading the menu.
+- Shader-cloud opacity and puff overlap are increased for denser volumes. Rain-bearing clouds now reduce direct sunlight to near zero and fully hide the sun disc and rays. The world-space rain radius is doubled from 34 to 68 blocks, with a doubled particle budget on desktop and mobile.
+- Remote players animate while walking and render synchronized, clamped head pitch without sideways head rotation.
+- Ore bottoms now use the ore appearance instead of stone.
+- Damage-hit notices and other-player gamemode-change notices no longer clutter chat.
+- `Mossline Haven.mp3`, `Driftwood Camp.mp3`, and `Forest Dawn.mp3` join random menu and in-game ambient playback. Menu playback is attempted immediately, stops on world entry, and a fresh in-game track begins.
 
 
 v1.5.0 update

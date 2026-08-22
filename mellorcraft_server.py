@@ -37,8 +37,8 @@ except ImportError:  # websockets 10/11 compatibility
 HTTP_PORT = 8000
 WEBSOCKET_PORT = 8765
 DAY_LENGTH_SECONDS = 600.0
-PROTOCOL_VERSION = 4
-SUPPORTED_PROTOCOLS = (4, 3, 2)
+PROTOCOL_VERSION = 5
+SUPPORTED_PROTOCOLS = (5, 4, 3, 2)
 WORLD_HEIGHT = 200
 PORTAL_BLOCK = 31
 RESPAWN_BLOCK = 48
@@ -131,6 +131,8 @@ class MellorCraftWorld:
         self.world_name = world_name
         self.seed = requested_seed if requested_seed is not None else random.randint(0, 2_147_483_646)
         self.world_time = 0.25
+        self.weather_seed = random.randint(0, 2_147_483_646)
+        self.weather_phase = 0.0
         self.boss_defeated = False
         self.blocks: dict[str, int] = {}
         self.players: dict[str, PlayerState] = {}
@@ -166,6 +168,7 @@ class MellorCraftWorld:
         elapsed = max(0.0, min(now - self.last_tick, 5.0))
         self.last_tick = now
         self.world_time += elapsed / DAY_LENGTH_SECONDS
+        self.weather_phase += elapsed * 0.35
         return elapsed
 
     @staticmethod
@@ -360,7 +363,7 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 7, "version": "1.5.0", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 8, "version": "1.6.0", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "bossDefeated": self.boss_defeated,
             "blocks": self.blocks, "operators": sorted(self.operators), "playerProfiles": profiles,
             "mobs": [asdict(mob) for mob in self.mobs.values()], "items": [asdict(item) for item in self.items.values()],
@@ -889,7 +892,6 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             if mode != "survival":
                 player.health = 10.0
             await send_json(world.connections[player_id], {"type": "gamemode_update", "gamemode": mode})
-            await broadcast({"type": "system", "message": f"{player.username} changed gamemode to {mode}."})
     elif message_type == "set_time":
         if world.client_protocols.get(player_id, 1) >= 2 and not player.isOperator:
             await send_json(world.connections[player_id], {"type": "error", "message": "Only server operators can set the world time."})
@@ -957,7 +959,7 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
         await send_json(websocket, {
             "type": "welcome", "protocol": PROTOCOL_VERSION, "negotiatedProtocol": client_protocol,
             "clientId": player_id, "username": username, "seed": world.seed, "worldName": world.world_name,
-            "worldTime": world.world_time, "dayLength": DAY_LENGTH_SECONDS,
+            "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase, "dayLength": DAY_LENGTH_SECONDS,
             "bossDefeated": world.boss_defeated,
             "isOperator": player.isOperator, "blocks": world.block_snapshot(),
             "playerState": world.player_profile(player) if restored and client_protocol >= 4 else None,
@@ -1013,7 +1015,7 @@ async def world_broadcast_loop() -> None:
         world.tick()
         hosts_changed = world.recompute_mob_hosts()
         await broadcast({
-            "type": "world_state", "worldTime": world.world_time,
+            "type": "world_state", "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
             "bossDefeated": world.boss_defeated,
             "players": world.player_snapshot(),
             "mobs": world.mob_snapshot(), "items": world.item_snapshot(),
@@ -1133,7 +1135,6 @@ async def set_player_gamemode(username: str, mode: str) -> str:
     websocket = world.connections.get(player.id)
     if websocket is not None:
         await send_json(websocket, {"type": "gamemode_update", "gamemode": normalized})
-    await broadcast({"type": "system", "message": f"{player.username}'s gamemode was set to {normalized}."})
     return f"Set {player.username}'s gamemode to {normalized}."
 
 
@@ -1291,7 +1292,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.5.0 World Selection")
+    print("\nMellorCraft v1.6.0 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -1382,7 +1383,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.5.0 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.6.0 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -1406,7 +1407,7 @@ def main() -> None:
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.5.0 multiplayer server is running")
+    print("\nMellorCraft v1.6.0 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")
