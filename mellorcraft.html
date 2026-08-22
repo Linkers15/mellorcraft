@@ -1058,7 +1058,7 @@
         function drawAtmosphericFog(ctx,w,h){if(playerInCave)return;const localRain=playerEyeY()>=132||localPressure>=40?0:.65+Math.max(0,Math.min(.35,(40-localPressure)/115));if(localRain>0){const haze=ctx.createLinearGradient(0,0,0,h);haze.addColorStop(0,`rgba(122,136,148,${localRain*.025})`);haze.addColorStop(.28,`rgba(135,147,157,${localRain*.10})`);haze.addColorStop(.54,`rgba(151,160,168,${localRain*.38})`);haze.addColorStop(.76,`rgba(164,171,177,${localRain*.23})`);haze.addColorStop(1,`rgba(176,181,185,${localRain*.10})`);ctx.fillStyle=haze;ctx.fillRect(0,0,w,h);for(let i=0;i<3;i++){const cx=((weatherPhase*18+i*w*.43)%(w*1.4))-w*.2,cy=h*(.48+i*.055),radius=Math.max(w,h)*(.32+i*.07),mist=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);mist.addColorStop(0,`rgba(175,181,186,${localRain*(.07+i*.018)})`);mist.addColorStop(1,'rgba(175,181,186,0)');ctx.fillStyle=mist;ctx.fillRect(0,0,w,h);}}for(const distance of [280,400,500])for(let n=0;n<16;n++){const angle=n/16*Math.PI*2,x=player.x+Math.cos(angle)*distance,z=player.z+Math.sin(angle)*distance,pressure=Math.round(weatherNoise(x/360+weatherPhase*.018,z/360+weatherPhase*.011)*100);if(pressure>=40)continue;const p=projectWeatherPoint(x,86,z,w,h);if(!p)continue;const strength=Math.min(.65,.35+(40-pressure)/80),radius=Math.max(45,220-distance*.18),gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(145,153,160,${strength})`);gradient.addColorStop(1,'rgba(145,153,160,0)');ctx.fillStyle=gradient;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);}}
         const fogBankVisibility=new Map();
         function drawAtmosphericFogSmooth(ctx,w,h){
-            if(playerInCave)return;
+            if(!liteShaderEnabled||playerInCave)return;
             const fogT=playerEyeY()>=CLOUD_LEVEL||localPressure>=40?0:Math.max(0,Math.min(1,(40-localPressure)/39));
             const localFog=Math.pow(fogT,1.65);
             if(localFog>.001){const haze=ctx.createLinearGradient(0,0,0,h);haze.addColorStop(0,`rgba(125,137,148,${localFog*.018})`);haze.addColorStop(.28,`rgba(137,148,157,${localFog*.08})`);haze.addColorStop(.54,`rgba(151,160,168,${localFog*.46})`);haze.addColorStop(.78,`rgba(166,173,178,${localFog*.31})`);haze.addColorStop(1,`rgba(178,183,187,${localFog*.15})`);ctx.fillStyle=haze;ctx.fillRect(0,0,w,h);for(let i=0;i<3;i++){const cx=((weatherPhase*18+i*w*.43)%(w*1.4))-w*.2,cy=h*(.47+i*.06),radius=Math.max(w,h)*(.34+i*.08),mist=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);mist.addColorStop(0,`rgba(177,183,188,${localFog*(.10+i*.025)})`);mist.addColorStop(1,'rgba(177,183,188,0)');ctx.fillStyle=mist;ctx.fillRect(0,0,w,h);}}
@@ -5930,7 +5930,7 @@
         }
         function renderWeatherClouds(){
             if(currentDimension!==0)return;
-            const tile=32,radius=500,driftX=weatherPhase*7,driftZ=weatherPhase*2.6,mesh=getWeatherCloudMesh(),puffMesh=liteShaderEnabled?getWeatherCloudPuffMesh():null;
+            const tile=32,radius=liteShaderEnabled?500:(isMobilePlaying?224:360),driftX=weatherPhase*7,driftZ=weatherPhase*2.6,mesh=getWeatherCloudMesh(),puffMesh=liteShaderEnabled?getWeatherCloudPuffMesh():null;
             const minI=Math.floor((player.x-radius-driftX)/tile),maxI=Math.ceil((player.x+radius-driftX)/tile);
             const minK=Math.floor((player.z-radius-driftZ)/tile),maxK=Math.ceil((player.z+radius-driftZ)/tile);
             const viewX=-Math.sin(player.yaw),viewZ=-Math.cos(player.yaw),cloudY=CLOUD_LEVEL;
@@ -7706,10 +7706,10 @@
             gl.uniform3fv(uFogColor, [skyColor[0]*fogLight*(1-weatherGray)+.42*weatherGray,skyColor[1]*fogLight*(1-weatherGray)+.46*weatherGray,skyColor[2]*fogLight*(1-weatherGray)+.50*weatherGray]);
             
             // Keep the 500-block weather horizon visible while still building obvious distance fog.
-            let fd = 0.0035;
-            if (currentDimension === 1) fd = 0.04;
-            if (currentDimension === 2) fd = 0.02;
-            if(currentDimension===0&&playerEyeY()<CLOUD_LEVEL&&localPressure<40){const rainFog=Math.max(0,Math.min(1,(40-localPressure)/39));fd=.0035+Math.pow(rainFog,2.15)*.080;}
+            let fd = liteShaderEnabled ? 0.0035 : 0.0;
+            if (liteShaderEnabled && currentDimension === 1) fd = 0.04;
+            if (liteShaderEnabled && currentDimension === 2) fd = 0.02;
+            if(liteShaderEnabled&&currentDimension===0&&playerEyeY()<CLOUD_LEVEL&&localPressure<40){const rainFog=Math.max(0,Math.min(1,(40-localPressure)/39));fd=.0035+Math.pow(rainFog,2.15)*.080;}
             gl.uniform1f(uFogDensity, fd);
             
             gl.uniform3fv(uCameraPos, [player.x, playerEyeY(), player.z]);

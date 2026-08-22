@@ -1,6 +1,11 @@
 MellorCraft v1.6.0
 =========================================================
 
+Client variants
+---------------
+- `mellorcraft.html` is the standard client and loads its MP3 soundtrack files from the same directory.
+- `mellorcraft_embedded_audio.html` is the optional self-contained client. It embeds all 12 MP3 tracks as Base64 `data:audio/mpeg` URLs, so no separate soundtrack files are required. This variant is approximately 100 MB because Base64 increases binary size.
+
 v1.6.0 update
 -------------
 - Added a panorama-style main menu with separate Singleplayer, Multiplayer, and Settings pages.
@@ -16,6 +21,7 @@ v1.6.0 update
 - Fog now grows continuously from nearly imperceptible at pressure 39 to near-whiteout conditions at pressure 1. Distant fog banks retain a softly occluded minimum instead of blinking when terrain sight tests fluctuate. The pressure field is advected by the exact cloud drift vector, preventing stationary cloud tiles from appearing and disappearing beneath an independently moving map.
 - Standard clouds now sit at Y=150. Shader clouds use rounded low-poly volumetric puffs; pressure below 10 builds tall cumulonimbus columns whose height increases as pressure falls. In-game Settings now includes **Return to Main Menu**, which saves before closing active connections and reloading the menu.
 - Shader-cloud opacity and puff overlap are increased for denser volumes. Rain-bearing clouds now reduce direct sunlight to near zero and fully hide the sun disc and rays. The world-space rain radius is doubled from 34 to 68 blocks, with a doubled particle budget on desktop and mobile.
+- Performance fallback: disabling Lightweight Shader now disables all fog passes and volumetric cloud puffs. The client uses one flat block-cloud tile per weather cell instead, and mobile limits that lightweight cloud horizon to 224 blocks. Shader mode retains the full 500-block volumetric weather rendering.
 - Remote players animate while walking and render synchronized, clamped head pitch without sideways head rotation.
 - Ore bottoms now use the ore appearance instead of stone.
 - Damage-hit notices and other-player gamemode-change notices no longer clutter chat.
