@@ -1,4 +1,4 @@
-MellorCraft v1.6.0
+MellorCraft v1.6.1
 =========================================================
 
 Client variants
@@ -6,10 +6,26 @@ Client variants
 - `mellorcraft.html` is the standard client and loads its MP3 soundtrack files from the same directory.
 - `mellorcraft_embedded_audio.html` is the optional self-contained client. It embeds all 12 MP3 tracks as Base64 `data:audio/mpeg` URLs, so no separate soundtrack files are required. This variant is approximately 100 MB because Base64 increases binary size.
 
+v1.6.1 update
+-------------
+- Opening the client now shows a single Start button before the main menu. Pressing it unlocks browser audio and immediately starts a random menu track.
+- Singleplayer keeps one Import World button beside Create World. Each saved world now has Play, Edit, Delete, and Export JSON actions; export uses the browser save-file picker when available and a forced-download fallback elsewhere.
+- Create World now opens a World Settings menu, and every saved browser world has an Edit action. Per-world rules cover Daylight Cycle, Weather Cycle, Keep Inventory, Mob Spawning, PvP, Mob Cap, and Day Length; exports and imports preserve them.
+- Browser hosts, relay LAN hosts, and dedicated Python hosts synchronize those rules authoritatively. Hosts can list, query, or change them at runtime with `/gamerule [rule] [value]`, including from the Python console.
+- Disabling Weather Cycle now clears rain, clouds, and weather fog instead of freezing the current storm. Each world's pressure-map seed and movement phase are saved and restored, including dedicated-server worlds.
+- Dawn, dusk, sun brightness, cloud shadowing, and ambient light now blend continuously. Direct sunlight is temporally smoothed, preventing the repeated flashes that could occur around sunrise, sunset, and first world creation.
+- Rain now renders as one depth-tested WebGL line batch instead of projecting and stroking every drop on a full-resolution Canvas2D overlay. Terrain, trees, and roofs occlude the rain through the existing depth buffer, eliminating per-drop line-of-sight rays while preserving world-space ground splashes.
+- Mobile rain uses a smaller fixed particle budget, a reusable interleaved GPU buffer, and cached loaded-column impact heights. The lightweight non-shader cloud ceiling uses WebGL instancing when supported, reducing overcast rendering from many tile draw calls to one.
+- The shader fog overlay renders at a reduced mobile resolution with fewer mist and distant-bank samples. Distant storm banks remain continuously tracked, while cached weighted sight probes fade fully blocked fog to zero and preserve a proportional visible fraction behind partial cover without flashing.
+- Cave detection now disables both the Canvas atmospheric overlay and the WebGL distance-fog pass. Above ground, a smoothed multi-column sky-exposure sample removes the baseline fog beneath complete cover and scales it beneath partial shelter; directional distant banks still use their independent terrain line-of-sight samples.
+- Nighttime fog now inherits the current sky and ambient brightness in both the WebGL depth-fog pass and the atmospheric overlay, preventing bright gray fog after sunset.
+- Multiplayer protocol 5 and world format 8 remain compatible with v1.6.0 saves and hosts.
+
+
 v1.6.0 update
 -------------
 - Added a panorama-style main menu with separate Singleplayer, Multiplayer, and Settings pages.
-- Singleplayer shows every browser save with Play, Delete, Import, and Export JSON actions, plus Create World.
+- Singleplayer shows every browser save with Play, Edit, Delete, and Export JSON actions, plus Create World and one shared Import World control.
 - Multiplayer supports direct dedicated-server connections and relay world discovery.
 - Settings uses the original six player colors. Render distance, volume, FOV, and look sensitivity appear on the main-menu Settings page and persist in browser storage.
 - Protocol 5 synchronizes a moving, server-authoritative localized pressure map. Pressure bands provide clear, overcast, light-rain, moderate-rain, and heavy-rain weather with progressively stronger fog and precipitation. Clouds use a continuously drifting, world-anchored ceiling out to 500 blocks; each tile contains four touching chunk-wide cloud blocks, fully covering overcast and rainy pressure regions without player-relative snapping.
@@ -115,6 +131,25 @@ The interactive server menu can create a named world with a seed or load an
 existing JSON world from the worlds folder. The host can join through the local
 address printed by the server; other devices use the printed LAN address.
 
+World game rules
+----------------
+Create World and Edit World open the browser World Settings screen. Game rules are
+stored inside the world JSON and are shared with relay guests and dedicated-server
+players. The supported rules are `doDaylightCycle`, `doWeatherCycle`,
+`keepInventory`, `doMobSpawning`, `pvp`, `mobCap` (0-200), and `dayLength`
+(60-3600 seconds).
+
+In an operator's in-game chat, a browser relay host's chat, or the dedicated
+server's Python console, use:
+
+   /gamerule
+   /gamerule keepInventory false
+   /gamerule mobCap 20
+   /gamerule dayLength 900
+
+Using only a rule name reports its current value. Boolean values accept
+`true`/`false`, `on`/`off`, `yes`/`no`, or `1`/`0`.
+
 Useful server options
 ---------------------
 Create a named world:
@@ -179,9 +214,10 @@ worlds or a dedicated server using its `ws://` or `wss://` address.
 
 You can also open the unified client online by opening linkers15.github.io/mellorcraft
 
-Export World downloads the selected save as JSON. Import JSON World restores a
-save or transfers it to another browser. Browser storage is tied to the page
-origin, so direct-file and web-served copies may have separate save collections.
+Export World downloads the selected save as JSON, using the system save dialog
+where the browser supports it. The shared Import World button beside Create World
+restores a save or transfers it to another browser. Browser storage is tied to the
+page origin, so direct-file and web-served copies may have separate save collections.
 
 Seed map generator
 ------------------

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MellorCraft v1.6.0</title>
+    <title>MellorCraft v1.6.1</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Courier New', monospace; background: #000; }
@@ -202,6 +202,7 @@
         }
         .main-menu-panel { width:min(430px,92vw); margin-top:20px; position:relative; z-index:1; }
         .main-menu-panel .menuBtn { display:block; width:100%; margin:8px 0; }
+        .startup-copy { color:#d5e2ea; line-height:1.45; text-align:center; margin:6px 8px 15px; }
         .start-page { display:none; width:min(940px,94vw); position:relative; z-index:1; }
         .start-page.active { display:block; }
         .start-page-title { text-align:center; color:#fff; text-shadow:2px 2px 4px #000; margin:8px 0 12px; }
@@ -219,11 +220,21 @@
         .menu-section .menuBtn { padding: 10px 14px; font-size: 14px; margin: 4px; }
         .identity-row { width: min(460px, 90vw); display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .identity-row .joinField { width: 100%; box-sizing: border-box; }
+        .world-settings-panel { width:min(700px,94vw); margin:18px auto 0; }
+        .world-settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 16px; margin-top:12px; }
+        .world-rule-row { min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:14px;
+            padding:9px 10px; background:rgba(255,255,255,.055); border-radius:8px; box-sizing:border-box; }
+        .world-rule-row label { color:#ddd; font-size:13px; line-height:1.25; }
+        .world-rule-row input[type="checkbox"] { width:22px; height:22px; flex:0 0 auto; accent-color:#4ecca3; }
+        .world-rule-row input[type="number"] { width:108px; margin:0; padding:8px; }
+        .world-rule-help { display:block; color:#888; font-size:10px; margin-top:2px; }
+        .world-settings-actions { display:flex; flex-wrap:wrap; justify-content:center; margin-top:12px; }
         @media (max-width: 760px) {
             .start-menu-grid { grid-template-columns: 1fr; }
             .identity-row { grid-template-columns: 1fr; }
             .world-row { grid-template-columns:1fr 1fr; }
             .world-name { grid-column:1/-1; }
+            .world-settings-grid { grid-template-columns:1fr; }
         }
 
         #chatContainer {
@@ -680,8 +691,12 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2 id="versionSubtitle">v1.6.0</h2>
-        <div id="mainMenuPage" class="main-menu-panel start-page active">
+        <h2 id="versionSubtitle">v1.6.1</h2>
+        <div id="startupPage" class="main-menu-panel start-page active">
+            <p class="startup-copy">Press Start to enable the soundtrack and open the main menu.</p>
+            <button class="menuBtn greenBtn" id="startClientBtn">Start MellorCraft</button>
+        </div>
+        <div id="mainMenuPage" class="main-menu-panel start-page">
             <button class="menuBtn greenBtn" data-start-page="singleplayerPage">Singleplayer</button>
             <button class="menuBtn blueBtn" data-start-page="multiplayerPage">Multiplayer</button>
             <button class="menuBtn blueBtn" data-start-page="clientSettingsPage">Settings</button>
@@ -692,20 +707,41 @@
           <div class="start-menu-grid">
             <section class="menu-section">
                 <h3>Create World</h3>
-                <p>Create a private world saved in this browser.</p>
-                <input class="joinField" type="text" id="worldNameInput" maxlength="40" placeholder="World name">
-                <input class="joinField" type="text" id="seedInput" placeholder="Seed (number or text)">
-                <div class="btnContainer"><button class="menuBtn greenBtn" id="createWorldBtn">Create World</button></div>
+                <p>Create a private world and choose its game rules before loading it.</p>
+                <div class="btnContainer">
+                    <button class="menuBtn greenBtn" id="createWorldBtn">Create World</button>
+                    <button class="menuBtn blueBtn" id="importWorldBtn">Import World</button>
+                    <input type="file" id="importWorldFile" accept=".json,application/json" style="display:none">
+                </div>
             </section>
             <section class="menu-section">
-                <h3>Your Worlds</h3><p>Play, delete, import, or export every browser save.</p>
+                <h3>Your Worlds</h3><p>Play, edit, delete, or export any browser save.</p>
                 <select class="joinField" id="worldSelect" aria-label="Saved worlds" style="display:none"></select>
                 <div id="worldList" class="world-list"></div>
-                <button class="menuBtn blueBtn" id="importWorldBtn">Import JSON</button>
-                <input type="file" id="importWorldFile" accept=".json,application/json" style="display:none">
                 <button id="loadWorldBtn" style="display:none">Play</button><button id="deleteWorldBtn" style="display:none">Delete</button><button id="exportWorldBtn" style="display:none">Export</button>
             </section>
           </div><button class="menuBtn blueBtn backBtn" data-start-page="mainMenuPage">Back</button>
+        </div>
+
+        <div id="worldSettingsPage" class="start-page">
+          <h2 id="worldSettingsTitle" class="start-page-title">Create World</h2>
+          <section class="menu-section world-settings-panel">
+            <div class="world-settings-grid">
+              <div class="setting-group"><label for="worldNameInput">World Name</label><input class="joinField" type="text" id="worldNameInput" maxlength="40" placeholder="World name"></div>
+              <div class="setting-group"><label for="seedInput">Seed</label><input class="joinField" type="text" id="seedInput" placeholder="Seed (number or text)"></div>
+              <div class="world-rule-row"><label for="ruleDaylightCycle">Daylight Cycle<span class="world-rule-help">Allow time of day to advance.</span></label><input type="checkbox" id="ruleDaylightCycle" checked></div>
+              <div class="world-rule-row"><label for="ruleWeatherCycle">Weather Cycle<span class="world-rule-help">Allow pressure systems and storms to move.</span></label><input type="checkbox" id="ruleWeatherCycle" checked></div>
+              <div class="world-rule-row"><label for="ruleKeepInventory">Keep Inventory<span class="world-rule-help">Keep items after dying.</span></label><input type="checkbox" id="ruleKeepInventory" checked></div>
+              <div class="world-rule-row"><label for="ruleMobSpawning">Mob Spawning<span class="world-rule-help">Allow natural mob spawning.</span></label><input type="checkbox" id="ruleMobSpawning" checked></div>
+              <div class="world-rule-row"><label for="rulePvp">Player vs Player<span class="world-rule-help">Allow players to damage each other.</span></label><input type="checkbox" id="rulePvp" checked></div>
+              <div class="world-rule-row"><label for="ruleMobCap">Mob Cap<span class="world-rule-help">Maximum mobs per dimension.</span></label><input class="joinField" type="number" id="ruleMobCap" min="0" max="200" step="1" value="15"></div>
+              <div class="world-rule-row"><label for="ruleDayLength">Day Length<span class="world-rule-help">Seconds in a full day (60–3600).</span></label><input class="joinField" type="number" id="ruleDayLength" min="60" max="3600" step="30" value="600"></div>
+            </div>
+            <div class="world-settings-actions">
+              <button class="menuBtn greenBtn" id="saveWorldSettingsBtn">Create World</button>
+              <button class="menuBtn blueBtn" id="cancelWorldSettingsBtn">Back</button>
+            </div>
+          </section>
         </div>
 
         <div id="multiplayerPage" class="start-page"><h2 class="start-page-title">Multiplayer</h2><div class="start-menu-grid">
@@ -972,7 +1008,7 @@
         const isIPhonePlaying = /iPhone|iPod/i.test(navigator.userAgent);
         document.documentElement.classList.toggle('mobile-mode', isMobilePlaying);
         if (isMobilePlaying) {
-            document.getElementById('versionSubtitle').textContent = 'v1.6.0';
+            document.getElementById('versionSubtitle').textContent = 'v1.6.1';
             document.getElementById('positionLabel').textContent = 'Pos:';
             document.getElementById('gamemodeLabel').textContent = 'Mode:';
             const mobileDefaultDistance = isIOSDevice ? 2 : 4;
@@ -1009,7 +1045,8 @@
         const ALT_WORLD_HEIGHT = 50;
         function getDimensionHeight(dim = currentDimension) { return dim === 1 ? ALT_WORLD_HEIGHT : WORLD_HEIGHT; }
         let RENDER_DISTANCE = Math.max(2,Math.min(isIOSDevice?5:(isMobilePlaying?10:16),parseInt(safeStorageGet('mellorcraftRenderDistance'))||(isIOSDevice?2:(isMobilePlaying?4:6))));
-        let MOB_CAP = isIOSDevice ? 6 : (isMobilePlaying ? 12 : 15);
+        const DEVICE_DEFAULT_MOB_CAP = isIOSDevice ? 6 : (isMobilePlaying ? 12 : 15);
+        let MOB_CAP = DEVICE_DEFAULT_MOB_CAP;
         let espEnabled = false;
         let masterVolume = Math.max(0,Math.min(1,(safeStorageGet('mellorcraftVolume')===null?45:parseInt(safeStorageGet('mellorcraftVolume')))/100));
         let FOV = Math.max(30,Math.min(110,parseInt(safeStorageGet('mellorcraftFov'))||60));
@@ -1034,47 +1071,99 @@
         const FLY_SPEED = 12;
         let MOUSE_SENSITIVITY = 0.002*Math.max(10,Math.min(300,parseInt(safeStorageGet('mellorcraftSensitivity'))||100))/100;
 
-        const DAY_LENGTH = 600;
+        const DEFAULT_DAY_LENGTH = 600;
+        const GAME_RULE_ORDER = ['doDaylightCycle','doWeatherCycle','keepInventory','doMobSpawning','pvp','mobCap','dayLength'];
+        const GAME_RULE_LABELS = {
+            doDaylightCycle:'Daylight Cycle',doWeatherCycle:'Weather Cycle',keepInventory:'Keep Inventory',
+            doMobSpawning:'Mob Spawning',pvp:'Player vs Player',mobCap:'Mob Cap',dayLength:'Day Length'
+        };
+        function normalizeGameRules(value,defaultMobCap=DEVICE_DEFAULT_MOB_CAP) {
+            const raw=value&&typeof value==='object'?value:{};
+            const intRule=(name,fallback,min,max)=>{const parsed=Math.round(Number(raw[name]));return Number.isFinite(parsed)?Math.max(min,Math.min(max,parsed)):fallback;};
+            const boolRule=name=>{if(raw[name]===undefined)return true;if(typeof raw[name]==='string'){const parsed=raw[name].trim().toLowerCase();if(['false','off','0','no'].includes(parsed))return false;if(['true','on','1','yes'].includes(parsed))return true;}return Boolean(raw[name]);};
+            return {
+                doDaylightCycle:boolRule('doDaylightCycle'),
+                doWeatherCycle:boolRule('doWeatherCycle'),
+                keepInventory:boolRule('keepInventory'),
+                doMobSpawning:boolRule('doMobSpawning'),
+                pvp:boolRule('pvp'),
+                mobCap:intRule('mobCap',defaultMobCap,0,200),
+                dayLength:intRule('dayLength',DEFAULT_DAY_LENGTH,60,3600)
+            };
+        }
+        let gameRules=normalizeGameRules(null);
+        function applyGameRules(value,announce=false) {
+            gameRules=normalizeGameRules(value);
+            MOB_CAP=gameRules.mobCap;
+            if(announce&&gameStarted)addChatMessage('World game rules updated.','chatSystem');
+            return gameRules;
+        }
+        function currentDayLength(){return Math.max(60,Number(gameRules.dayLength)||DEFAULT_DAY_LENGTH);}
         let worldTime = 0.25;
         let dayCount = 1;
         let weatherSeed = Math.floor(Math.random()*2147483647), weatherPhase = 0, localPressure = 100;
         const CLOUD_LEVEL = 150;
+        function weatherSeedForWorldSeed(seed){let n=(Math.trunc(Number(seed)||0)^0x6d2b79f5)|0;n=Math.imul(n^(n>>>15),1|n);n^=n+Math.imul(n^(n>>>7),61|n);return ((n^(n>>>14))>>>0)%2147483647||1;}
         function weatherHash(x,z){let n=(x*374761393+z*668265263+weatherSeed*69069)|0;n=(n^(n>>>13))*1274126177;return ((n^(n>>>16))>>>0)/4294967295;}
         function weatherSmooth(t){return t*t*(3-2*t);}
         function weatherNoise(x,z){const ix=Math.floor(x),iz=Math.floor(z),fx=weatherSmooth(x-ix),fz=weatherSmooth(z-iz);const a=weatherHash(ix,iz),b=weatherHash(ix+1,iz),c=weatherHash(ix,iz+1),d=weatherHash(ix+1,iz+1);return (a+(b-a)*fx)+((c+(d-c)*fx)-(a+(b-a)*fx))*fz;}
         function weatherPressureAt(x,z){return Math.round(weatherNoise((x-weatherPhase*7)/360,(z-weatherPhase*2.6)/360)*100);}
         function updateLocalWeather(dt){
-            if((singleplayerNetworkMode==='local'||singleplayerNetworkMode==='lan-host')&&gameStarted)weatherPhase+=dt*.35;
+            if(!gameRules.doWeatherCycle){localPressure=100;updateWeatherRain(dt);updateWeatherFogOverlay();return;}
+            if((singleplayerNetworkMode==='local'||singleplayerNetworkMode==='lan-host')&&gameStarted){weatherPhase+=dt*.35;singleplayerDirty=true;}
             localPressure=weatherPressureAt(player.x,player.z);
-            drawWeatherOverlay(dt);
-            const weatherCanvas=document.getElementById('weatherCanvas');
-            if(weatherCanvas&&weatherCanvas.style.display!=='none')drawAtmosphericFogSmooth(weatherCanvas.getContext('2d'),innerWidth,innerHeight);
+            updateWeatherRain(dt);
+            updateWeatherFogOverlay();
         }
-        function weatherKind(){return localPressure>=60?'Clear':localPressure>=40?'Overcast':localPressure>=25?'Light Rain':localPressure>=10?'Moderate Rain':'Heavy Rain';}
-        let weatherDrops=[],weatherSplashes=[],rainShelterTimer=0,rainSheltered=false,playerInCave=false;
+        function weatherKind(){if(!gameRules.doWeatherCycle)return 'Clear';return localPressure>=60?'Clear':localPressure>=40?'Overcast':localPressure>=25?'Light Rain':localPressure>=10?'Moderate Rain':'Heavy Rain';}
+        let weatherDrops=[],weatherSplashes=[],rainShelterTimer=0,playerInCave=false,weatherSkyExposure=1,weatherSkyExposureTarget=1,localRainIntensity=0;
         const weatherImpactCache=new Map();
         function projectWeatherPoint(x,y,z,w,h){if(!uProjectionMat||!uViewMat)return null;let clip=multiplyMat4Vec4(uViewMat,[x,y,z,1]);clip=multiplyMat4Vec4(uProjectionMat,clip);if(clip[3]<=.05)return null;const nx=clip[0]/clip[3],ny=clip[1]/clip[3];if(Math.abs(nx)>1.3||Math.abs(ny)>1.3)return null;return{x:(nx+1)*.5*w,y:(1-ny)*.5*h,depth:clip[3]};}
-        function weatherLineOfSight(x,y,z,step=2){const eyeX=player.x,eyeY=playerEyeY(),eyeZ=player.z,dx=x-eyeX,dz=z-eyeZ,distance=Math.hypot(dx,dz);if(distance<.5)return true;const ux=dx/distance,uz=dz/distance;for(let d=Math.max(.8,step);d<distance-1;d+=step){const rayY=eyeY+(y-eyeY)*(d/distance),top=loadedColumnTop(eyeX+ux*d,eyeZ+uz*d);if(top!==null&&top>rayY+.15)return false;}return true;}
-        function drawAtmosphericFog(ctx,w,h){if(playerInCave)return;const localRain=playerEyeY()>=132||localPressure>=40?0:.65+Math.max(0,Math.min(.35,(40-localPressure)/115));if(localRain>0){const haze=ctx.createLinearGradient(0,0,0,h);haze.addColorStop(0,`rgba(122,136,148,${localRain*.025})`);haze.addColorStop(.28,`rgba(135,147,157,${localRain*.10})`);haze.addColorStop(.54,`rgba(151,160,168,${localRain*.38})`);haze.addColorStop(.76,`rgba(164,171,177,${localRain*.23})`);haze.addColorStop(1,`rgba(176,181,185,${localRain*.10})`);ctx.fillStyle=haze;ctx.fillRect(0,0,w,h);for(let i=0;i<3;i++){const cx=((weatherPhase*18+i*w*.43)%(w*1.4))-w*.2,cy=h*(.48+i*.055),radius=Math.max(w,h)*(.32+i*.07),mist=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);mist.addColorStop(0,`rgba(175,181,186,${localRain*(.07+i*.018)})`);mist.addColorStop(1,'rgba(175,181,186,0)');ctx.fillStyle=mist;ctx.fillRect(0,0,w,h);}}for(const distance of [280,400,500])for(let n=0;n<16;n++){const angle=n/16*Math.PI*2,x=player.x+Math.cos(angle)*distance,z=player.z+Math.sin(angle)*distance,pressure=Math.round(weatherNoise(x/360+weatherPhase*.018,z/360+weatherPhase*.011)*100);if(pressure>=40)continue;const p=projectWeatherPoint(x,86,z,w,h);if(!p)continue;const strength=Math.min(.65,.35+(40-pressure)/80),radius=Math.max(45,220-distance*.18),gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(145,153,160,${strength})`);gradient.addColorStop(1,'rgba(145,153,160,0)');ctx.fillStyle=gradient;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);}}
-        const fogBankVisibility=new Map();
+        function weatherLineOfSight(x,y,z,step=2){const eyeX=player.x,eyeY=playerEyeY(),eyeZ=player.z,dx=x-eyeX,dz=z-eyeZ,distance=Math.hypot(dx,dz);if(distance<.5)return true;const ux=dx/distance,uz=dz/distance,blockedAt=d=>{const rayY=eyeY+(y-eyeY)*(d/distance),top=loadedColumnTop(eyeX+ux*d,eyeZ+uz*d);return top!==null&&top>rayY+.15;};const nearEnd=Math.min(distance-1,8);for(let d=.75;d<nearEnd;d+=.75)if(blockedAt(d))return false;for(let d=Math.max(8,step);d<distance-1;d+=step)if(blockedAt(d))return false;return true;}
+        function weatherColumnHasSky(x,z,eyeY){const top=loadedColumnTop(x,z);if(top!==null)return top<=eyeY+.2;const bx=Math.floor(x),bz=Math.floor(z);return getHeight(bx,bz,getBiome(bx,bz))+1<=eyeY+.2;}
+        function weatherSkyExposureAt(x,z,eyeY){const probes=isMobilePlaying?[[0,0,2],[-4,0,1],[4,0,1],[0,-4,1],[0,4,1]]:[[0,0,2],[-4,0,1],[4,0,1],[0,-4,1],[0,4,1],[-4,-4,.7],[4,-4,.7],[-4,4,.7],[4,4,.7]];let open=0,total=0;for(const [dx,dz,weight] of probes){total+=weight;if(weatherColumnHasSky(x+dx,z+dz,eyeY))open+=weight;}return total?open/total:1;}
+        function drawAtmosphericFog(ctx,w,h){if(playerInCave)return;const localRain=(playerEyeY()>=132||localPressure>=40?0:.65+Math.max(0,Math.min(.35,(40-localPressure)/115)))*weatherSkyExposure;if(localRain>0){const haze=ctx.createLinearGradient(0,0,0,h);haze.addColorStop(0,`rgba(122,136,148,${localRain*.025})`);haze.addColorStop(.28,`rgba(135,147,157,${localRain*.10})`);haze.addColorStop(.54,`rgba(151,160,168,${localRain*.38})`);haze.addColorStop(.76,`rgba(164,171,177,${localRain*.23})`);haze.addColorStop(1,`rgba(176,181,185,${localRain*.10})`);ctx.fillStyle=haze;ctx.fillRect(0,0,w,h);for(let i=0;i<3;i++){const cx=((weatherPhase*18+i*w*.43)%(w*1.4))-w*.2,cy=h*(.48+i*.055),radius=Math.max(w,h)*(.32+i*.07),mist=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);mist.addColorStop(0,`rgba(175,181,186,${localRain*(.07+i*.018)})`);mist.addColorStop(1,'rgba(175,181,186,0)');ctx.fillStyle=mist;ctx.fillRect(0,0,w,h);}}for(const distance of [280,400,500])for(let n=0;n<16;n++){const angle=n/16*Math.PI*2,x=player.x+Math.cos(angle)*distance,z=player.z+Math.sin(angle)*distance,pressure=Math.round(weatherNoise(x/360+weatherPhase*.018,z/360+weatherPhase*.011)*100);if(pressure>=40)continue;const p=projectWeatherPoint(x,86,z,w,h);if(!p)continue;const strength=Math.min(.65,.35+(40-pressure)/80),radius=Math.max(45,220-distance*.18),gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(145,153,160,${strength})`);gradient.addColorStop(1,'rgba(145,153,160,0)');ctx.fillStyle=gradient;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);}}
+        const fogBankVisibility=new Map(),fogBankOcclusionCache=new Map();
+        function fogBankVisibilityTarget(key,x,y,z){
+            const now=performance.now(),cached=fogBankOcclusionCache.get(key),maxAge=isMobilePlaying?340:200;
+            if(cached&&now-cached.at<maxAge&&Math.hypot(player.x-cached.px,player.z-cached.pz)<3&&cached.revision===chunkMeshRevision)return cached.target;
+            const dx=x-player.x,dz=z-player.z,distance=Math.hypot(dx,dz)||1,perpX=-dz/distance,perpZ=dx/distance;
+            const probes=isMobilePlaying?[[0,-18,.7],[0,0,1.4],[0,22,1]]:[[-24,4,.75],[0,-20,.7],[0,0,1.4],[0,24,1],[24,4,.75]];
+            let clearWeight=0,totalWeight=0;
+            for(const [lateral,vertical,weight] of probes){totalWeight+=weight;if(weatherLineOfSight(x+perpX*lateral,y+vertical,z+perpZ*lateral,isMobilePlaying?8:6))clearWeight+=weight;}
+            const target=totalWeight?clearWeight/totalWeight:1;
+            fogBankOcclusionCache.set(key,{target,at:now,px:player.x,pz:player.z,revision:chunkMeshRevision});return target;
+        }
+        function weatherFogRgb(){const sky=getSkyColor(),sunState=getShaderSunState(),ambient=getShaderAmbientLevel(sunState),fogLight=Math.max(.10,Math.min(1,ambient*1.25)),weatherGray=Math.max(.28,Math.min(.78,(60-localPressure)/60));return[(sky[0]*(1-weatherGray)+.42*weatherGray)*fogLight*255,(sky[1]*(1-weatherGray)+.46*weatherGray)*fogLight*255,(sky[2]*(1-weatherGray)+.50*weatherGray)*fogLight*255];}
         function drawAtmosphericFogSmooth(ctx,w,h){
             if(!liteShaderEnabled||playerInCave)return;
+            const fogRgb=weatherFogRgb(),fogColor=`${Math.round(fogRgb[0])},${Math.round(fogRgb[1])},${Math.round(fogRgb[2])}`;
             const fogT=playerEyeY()>=CLOUD_LEVEL||localPressure>=40?0:Math.max(0,Math.min(1,(40-localPressure)/39));
-            const localFog=Math.pow(fogT,1.65);
-            if(localFog>.001){const haze=ctx.createLinearGradient(0,0,0,h);haze.addColorStop(0,`rgba(125,137,148,${localFog*.018})`);haze.addColorStop(.28,`rgba(137,148,157,${localFog*.08})`);haze.addColorStop(.54,`rgba(151,160,168,${localFog*.46})`);haze.addColorStop(.78,`rgba(166,173,178,${localFog*.31})`);haze.addColorStop(1,`rgba(178,183,187,${localFog*.15})`);ctx.fillStyle=haze;ctx.fillRect(0,0,w,h);for(let i=0;i<3;i++){const cx=((weatherPhase*18+i*w*.43)%(w*1.4))-w*.2,cy=h*(.47+i*.06),radius=Math.max(w,h)*(.34+i*.08),mist=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);mist.addColorStop(0,`rgba(177,183,188,${localFog*(.10+i*.025)})`);mist.addColorStop(1,'rgba(177,183,188,0)');ctx.fillStyle=mist;ctx.fillRect(0,0,w,h);}}
-            for(const distance of [280,400,500])for(let n=0;n<16;n++){const angle=n/16*Math.PI*2,x=player.x+Math.cos(angle)*distance,z=player.z+Math.sin(angle)*distance,pressure=weatherPressureAt(x,z),stormT=Math.max(0,Math.min(1,(40-pressure)/39));if(stormT<=0)continue;const p=projectWeatherPoint(x,92,z,w,h);if(!p)continue;const key=`${distance}:${n}`,target=weatherLineOfSight(x,92,z,12)?1:.28,current=fogBankVisibility.get(key)??target,visibility=current+(target-current)*.055;fogBankVisibility.set(key,visibility);const strength=Math.pow(stormT,1.35)*.62*visibility,radius=Math.max(55,235-distance*.18),gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(145,154,162,${strength})`);gradient.addColorStop(.62,`rgba(151,159,166,${strength*.58})`);gradient.addColorStop(1,'rgba(151,159,166,0)');ctx.fillStyle=gradient;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);}
+            const localFog=Math.pow(fogT,1.65)*weatherSkyExposure;
+            if(localFog>.001){const haze=ctx.createLinearGradient(0,0,0,h);haze.addColorStop(0,`rgba(${fogColor},${localFog*.018})`);haze.addColorStop(.28,`rgba(${fogColor},${localFog*.08})`);haze.addColorStop(.54,`rgba(${fogColor},${localFog*.46})`);haze.addColorStop(.78,`rgba(${fogColor},${localFog*.31})`);haze.addColorStop(1,`rgba(${fogColor},${localFog*.15})`);ctx.fillStyle=haze;ctx.fillRect(0,0,w,h);const mistCount=isMobilePlaying?2:3;for(let i=0;i<mistCount;i++){const cx=((weatherPhase*18+i*w*.43)%(w*1.4))-w*.2,cy=h*(.47+i*.06),radius=Math.max(w,h)*(.34+i*.08),mist=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);mist.addColorStop(0,`rgba(${fogColor},${localFog*(.10+i*.025)})`);mist.addColorStop(1,`rgba(${fogColor},0)`);ctx.fillStyle=mist;ctx.fillRect(0,0,w,h);}}
+            const distances=isMobilePlaying?[300,500]:[280,400,500],samples=isMobilePlaying?12:16;
+            for(const distance of distances)for(let n=0;n<samples;n++){const angle=n/samples*Math.PI*2,x=player.x+Math.cos(angle)*distance,z=player.z+Math.sin(angle)*distance,pressure=weatherPressureAt(x,z),stormT=Math.max(0,Math.min(1,(40-pressure)/39));if(stormT<=0)continue;const p=projectWeatherPoint(x,92,z,w,h);if(!p)continue;const key=`${distance}:${n}:${samples}`,target=fogBankVisibilityTarget(key,x,92,z),current=fogBankVisibility.get(key)??0,ease=target<current?(isMobilePlaying?.045:.06):(isMobilePlaying?.075:.10),visibility=current+(target-current)*ease;fogBankVisibility.set(key,visibility);if(visibility<.003)continue;const strength=Math.pow(stormT,1.35)*.62*visibility,radius=Math.max(55,235-distance*.18),gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(${fogColor},${strength})`);gradient.addColorStop(.62,`rgba(${fogColor},${strength*.58})`);gradient.addColorStop(1,`rgba(${fogColor},0)`);ctx.fillStyle=gradient;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);}
         }
-        function weatherImpactY(x,z){const bx=Math.floor(x),bz=Math.floor(z),key=`${bx},${bz}`,now=performance.now(),cached=weatherImpactCache.get(key);if(cached&&now-cached.at<1200)return cached.y;const terrain=getHeight(bx,bz,getBiome(bx,bz))+1;let impact=terrain;for(let y=CLOUD_LEVEL-1;y>=terrain;y--){if(SOLID_BLOCKS.has(getBlock(bx,y,bz,0))){impact=y+1;break;}}weatherImpactCache.set(key,{y:impact,at:now});if(weatherImpactCache.size>800)weatherImpactCache.clear();return impact;}
-        function resetWeatherDrop(drop){const angle=Math.random()*Math.PI*2,distance=Math.sqrt(Math.random())*68;drop.x=player.x+Math.cos(angle)*distance;drop.z=player.z+Math.sin(angle)*distance;drop.ground=weatherImpactY(drop.x,drop.z);drop.y=Math.max(player.y+18,drop.ground+24)+Math.random()*30;drop.speed=55+Math.random()*35;drop.losAt=0;drop.visible=false;}
-        function drawWeatherOverlay(dt){
-            const canvas=document.getElementById('weatherCanvas');if(!canvas||!gameStarted||currentDimension!==0){if(canvas)canvas.style.display='none';return;}
-            canvas.style.display='block';const ratio=devicePixelRatio||1,w=innerWidth,h=innerHeight;if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);}
-            const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);rainShelterTimer-=dt;
-            if(rainShelterTimer<=0){rainShelterTimer=.4;const px=Math.floor(player.x),pz=Math.floor(player.z),surface=getHeight(px,pz,getBiome(px,pz))+1;playerInCave=playerEyeY()<surface-2;rainSheltered=false;for(let y=Math.ceil(playerEyeY()+1);y<Math.min(WORLD_HEIGHT,CLOUD_LEVEL+8);y++){if(SOLID_BLOCKS.has(getBlock(px,y,pz,0))){rainSheltered=true;break;}}}
-            const rain=!playerInCave&&playerEyeY()<CLOUD_LEVEL&&localPressure<40?Math.min(1,(40-localPressure)/35):0,target=Math.round(rain*(isMobilePlaying?130:300));
-            while(weatherDrops.length<target){const drop={};resetWeatherDrop(drop);weatherDrops.push(drop);}weatherDrops.length=target;ctx.strokeStyle=`rgba(180,215,238,${.38+rain*.48})`;ctx.lineWidth=1.35;ctx.beginPath();
-            const losNow=performance.now();for(const drop of weatherDrops){drop.y-=drop.speed*dt;drop.x-=7*dt;if(drop.y<=drop.ground){const splashY=drop.ground+.05;weatherSplashes.push({x:drop.x,y:splashY,z:drop.z,age:0,duration:.34,visible:weatherLineOfSight(drop.x,splashY,drop.z,2)});resetWeatherDrop(drop);}const coveredNearby=drop.ground>playerEyeY()+.5&&Math.hypot(drop.x-player.x,drop.z-player.z)<4;if(coveredNearby)continue;if(!drop.losAt||losNow-drop.losAt>140){drop.losAt=losNow;drop.visible=weatherLineOfSight(drop.x,drop.y,drop.z,2);}if(!drop.visible)continue;const a=projectWeatherPoint(drop.x,drop.y+2.8,drop.z,w,h),b=projectWeatherPoint(drop.x,drop.y,drop.z,w,h);if(a&&b){ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);}}ctx.stroke();
-            weatherSplashes=weatherSplashes.filter(splash=>{splash.age+=dt;if(splash.age>=splash.duration)return false;if(!splash.visible)return true;const p=projectWeatherPoint(splash.x,splash.y,splash.z,w,h);if(p){const size=(3+splash.age*24)/Math.max(.7,p.depth*.035);ctx.strokeStyle=`rgba(205,230,245,${1-splash.age/splash.duration})`;ctx.beginPath();ctx.ellipse(p.x,p.y,size*2,size*.55,0,0,Math.PI*2);ctx.stroke();}return true;});
+        function weatherImpactY(x,z){const bx=Math.floor(x),bz=Math.floor(z),key=`${bx},${bz}`,now=performance.now(),cached=weatherImpactCache.get(key);if(cached&&now-cached.at<1800)return cached.y;const terrain=getHeight(bx,bz,getBiome(bx,bz))+1,loadedTop=loadedColumnTop(bx,bz),impact=loadedTop===null?terrain:Math.max(terrain,loadedTop);weatherImpactCache.set(key,{y:impact,at:now});if(weatherImpactCache.size>640)weatherImpactCache.clear();return impact;}
+        function resetWeatherDrop(drop){const angle=Math.random()*Math.PI*2,distance=Math.sqrt(Math.random())*68;drop.x=player.x+Math.cos(angle)*distance;drop.z=player.z+Math.sin(angle)*distance;drop.ground=weatherImpactY(drop.x,drop.z);drop.y=Math.max(player.y+16,drop.ground+18)+Math.random()*28;drop.speed=65+Math.random()*35;}
+        function updateWeatherRain(dt){
+            if(!gameStarted||currentDimension!==0||!gameRules.doWeatherCycle){localRainIntensity=0;weatherDrops.length=0;weatherSplashes.length=0;return;}
+            rainShelterTimer-=dt;
+            if(rainShelterTimer<=0){rainShelterTimer=isMobilePlaying?.65:.4;const px=Math.floor(player.x),pz=Math.floor(player.z),eyeY=playerEyeY(),surface=getHeight(px,pz,getBiome(px,pz))+1;playerInCave=eyeY<surface-2;weatherSkyExposureTarget=playerInCave?0:weatherSkyExposureAt(player.x,player.z,eyeY);}
+            if(playerInCave){weatherSkyExposure=0;fogBankVisibility.clear();fogBankOcclusionCache.clear();}else{const shelterEase=1-Math.exp(-dt*(weatherSkyExposureTarget<weatherSkyExposure?8:4));weatherSkyExposure+=(weatherSkyExposureTarget-weatherSkyExposure)*shelterEase;}
+            localRainIntensity=!playerInCave&&playerEyeY()<CLOUD_LEVEL&&localPressure<40?Math.min(1,(40-localPressure)/35):0;
+            const target=Math.round(localRainIntensity*MAX_RAIN_DROPS);
+            while(weatherDrops.length<target){const drop={};resetWeatherDrop(drop);weatherDrops.push(drop);}weatherDrops.length=target;
+            const maxSplashes=MAX_RAIN_SPLASHES;
+            for(const drop of weatherDrops){drop.y-=drop.speed*dt;drop.x-=7*dt;if(drop.y<=drop.ground){weatherSplashes.push({x:drop.x,y:drop.ground+.045,z:drop.z,age:0,duration:.30});resetWeatherDrop(drop);}}
+            if(weatherSplashes.length>maxSplashes)weatherSplashes.splice(0,weatherSplashes.length-maxSplashes);
+            weatherSplashes=weatherSplashes.filter(splash=>{splash.age+=dt;return splash.age<splash.duration;});
+        }
+        function updateWeatherFogOverlay(){
+            const weatherCanvas=document.getElementById('weatherCanvas');if(!weatherCanvas)return;
+            if(!gameStarted||currentDimension!==0||!liteShaderEnabled||!gameRules.doWeatherCycle||playerInCave){weatherCanvas.style.display='none';return;}
+            weatherCanvas.style.display='block';const w=innerWidth,h=innerHeight,ratio=isMobilePlaying?.55:Math.min(1.25,devicePixelRatio||1),pixelW=Math.max(1,Math.round(w*ratio)),pixelH=Math.max(1,Math.round(h*ratio));if(weatherCanvas.width!==pixelW||weatherCanvas.height!==pixelH){weatherCanvas.width=pixelW;weatherCanvas.height=pixelH;}
+            const ctx=weatherCanvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);drawAtmosphericFogSmooth(ctx,w,h);
         }
 
         function hashString(str) {
@@ -1127,6 +1216,8 @@
         let singleplayerWorldName = '';
         let singleplayerAutosaveTimer = 0;
         let singleplayerDirty = false;
+        let worldSettingsMode = 'create';
+        let worldSettingsEditKey = '';
         let singleplayerNetworkMode = 'local'; // local | lan-host | lan-guest | dedicated
         let singleplayerLanProfiles = {};
         let singleplayerOperators = new Set();
@@ -1367,6 +1458,10 @@
             if (now < (integratedDamageLocks.get(victim.id)||0)) return;
             victim.health=Math.max(0,victim.health-Math.max(0,Number(damage)||0));
             integratedDamageLocks.set(victim.id,now+0.45);
+            if(victim.health<=0&&!gameRules.keepInventory){
+                victim.inventory=Array.from({length:30},()=>({id:0,count:0}));victim.heldItem=0;victim.selectedSlot=0;
+                integratedSend(victim.id,{type:'inventory_reset',message:'Your inventory was cleared on death.'});
+            }
             let horizontal=Math.hypot(dx,dz);
             if (horizontal<0.01) { dx=0; dz=-1; horizontal=1; }
             integratedSend(victim.id,{type:'player_hit',health:victim.health,attacker:sourceName,
@@ -1443,6 +1538,30 @@
             singleplayerDirty=true;
         }
 
+        function canonicalGameRuleName(value) {
+            const key=String(value||'').replace(/[_\s-]/g,'').toLowerCase();
+            const aliases={daylightcycle:'doDaylightCycle',dodaylightcycle:'doDaylightCycle',weathercycle:'doWeatherCycle',doweathercycle:'doWeatherCycle',keepinventory:'keepInventory',mobspawning:'doMobSpawning',domobspawning:'doMobSpawning',pvp:'pvp',mobcap:'mobCap',daylength:'dayLength'};
+            return aliases[key]||null;
+        }
+        function gameRuleValueText(name,value=gameRules[name]) { return typeof value==='boolean'?(value?'true':'false'):String(value); }
+        function parseGameRuleValue(name,value) {
+            if(['doDaylightCycle','doWeatherCycle','keepInventory','doMobSpawning','pvp'].includes(name)){
+                const normalized=String(value||'').toLowerCase();if(['true','on','1','yes'].includes(normalized))return true;if(['false','off','0','no'].includes(normalized))return false;return null;
+            }
+            const number=Math.round(Number(value)),min=name==='dayLength'?60:0,max=name==='dayLength'?3600:200;
+            return Number.isFinite(number)&&number>=min&&number<=max?number:null;
+        }
+        function integratedGameRuleCommand(actor,args) {
+            if(!args.length){integratedSend(actor.id,{type:'system',message:GAME_RULE_ORDER.map(name=>`${name}=${gameRuleValueText(name)}`).join(', ')});return;}
+            const name=canonicalGameRuleName(args[0]);
+            if(!name){integratedSend(actor.id,{type:'error',message:`Unknown game rule. Available: ${GAME_RULE_ORDER.join(', ')}`});return;}
+            if(args.length===1){integratedSend(actor.id,{type:'system',message:`${name} = ${gameRuleValueText(name)}`});return;}
+            const value=parseGameRuleValue(name,args[1]);
+            if(value===null){const expected=['mobCap','dayLength'].includes(name)?(name==='mobCap'?'0–200':'60–3600'):'true or false';integratedSend(actor.id,{type:'error',message:`Usage: /gamerule ${name} <${expected}>`});return;}
+            applyGameRules({...gameRules,[name]:value});singleplayerDirty=true;
+            integratedBroadcast({type:'game_rules',gameRules:{...gameRules},changedRule:name,message:`${actor.username} set ${name} to ${gameRuleValueText(name)}.`});
+        }
+
         function integratedProcessServerCommand(actor,command) {
             if(!actor || actor.id!==localClientId){integratedSend(actor?.id,{type:'error',message:'Only the LAN world host can run server-management commands.'});return;}
             const parts=String(command||'').trim().split(/\s+/),name=(parts.shift()||'').toLowerCase(),arg=parts.join(' ');
@@ -1451,7 +1570,8 @@
             if(name==='/ops'){const ops=[...singleplayerOperators].sort();integratedSend(actor.id,{type:'system',message:`Operators: ${ops.length?ops.join(', '):'none'}`});return;}
             if(name==='/list'){const names=[...integratedPlayers.values()].map(p=>`${p.username}${p.isOperator?' [OP]':''}`);integratedSend(actor.id,{type:'system',message:`Players (${names.length}): ${names.join(', ')}`});return;}
             if(name==='/mobs'){const counts=[0,1,2].map(dim=>mobs.filter(m=>m.dimension===dim).length);integratedSend(actor.id,{type:'system',message:`Mobs: overworld=${counts[0]}, alternate=${counts[1]}, boss=${counts[2]}`});return;}
-            integratedSend(actor.id,{type:'system',message:'Server commands: /op <username>, /deop <username>, /ops, /list, /mobs'});
+            if(name==='/gamerule')return integratedGameRuleCommand(actor,parts);
+            integratedSend(actor.id,{type:'system',message:'Server commands: /op <username>, /deop <username>, /ops, /list, /mobs, /gamerule [rule] [value]'});
         }
 
         function integratedServerReceive(clientId,payload) {
@@ -1497,7 +1617,7 @@
             if (type==='attack_player') {
                 const victim=integratedPlayers.get(String(payload.targetId||''));
                 const key='player:'+clientId;
-                if (!victim || victim.id===clientId || now<(integratedAttackCooldowns.get(key)||0) || actor.gamemode==='spectator' || actor.dimension!==victim.dimension) return true;
+                if (!gameRules.pvp || !victim || victim.id===clientId || now<(integratedAttackCooldowns.get(key)||0) || actor.gamemode==='spectator' || actor.dimension!==victim.dimension) return true;
                 integratedAttackCooldowns.set(key,now+0.4);
                 const dx=victim.x-actor.x,dy=victim.y-actor.y,dz=victim.z-actor.z;
                 if (Math.hypot(dx,dy,dz)<=4.5) integratedDamagePlayer(victim,SWORD_DAMAGE[actor.heldItem]||1,actor.username,dx,dz);
@@ -1527,7 +1647,7 @@
             }
             if (type==='mob_spawn') {
                 const dim=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0)));
-                if (mobHosts[dim]!==clientId || !MOB_TYPES[payload.typeKey] || mobs.filter(m=>m.dimension===dim).length>=25) return true;
+                if (!gameRules.doMobSpawning || mobHosts[dim]!==clientId || !MOB_TYPES[payload.typeKey] || mobs.filter(m=>m.dimension===dim).length>=gameRules.mobCap) return true;
                 let id=String(payload.id||''); if(!/^[A-Za-z0-9_-]{1,64}$/.test(id)||mobById.has(id)) id=`m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
                 const typeObj=MOB_TYPES[payload.typeKey];
                 const mob=upsertSharedMob({id,typeKey:payload.typeKey,x:Number(payload.x)||0,y:Number(payload.y)||50,z:Number(payload.z)||0,dimension:dim,health:typeObj.health,bodyRotation:Number(payload.bodyRotation)||0,headRotation:Number(payload.headRotation)||0});
@@ -1604,7 +1724,7 @@
             if(profile)Object.assign(state,JSON.parse(JSON.stringify(profile)),{id:info.guestId,username,isOperator:isOp,deviceClass:state.deviceClass});
             integratedPlayers.set(info.guestId,state); integratedRecomputeMobHosts();
             const blocks=snapshotFromChunkEdits(serializeChunkEdits());
-            integratedSend(info.guestId,{type:'welcome',protocol:5,negotiatedProtocol:5,clientId:info.guestId,username,seed:WORLD_SEED,worldName:singleplayerWorldName,worldTime,weatherSeed,weatherPhase,dayLength:DAY_LENGTH,bossDefeated:Boolean(bossDefeated),isOperator:isOp,blocks,playerState:profile?{...profile}:null,players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
+            integratedSend(info.guestId,{type:'welcome',protocol:5,negotiatedProtocol:5,clientId:info.guestId,username,seed:WORLD_SEED,worldName:singleplayerWorldName,worldTime,weatherSeed,weatherPhase,dayLength:currentDayLength(),gameRules:{...gameRules},bossDefeated:Boolean(bossDefeated),isOperator:isOp,blocks,playerState:profile?{...profile}:null,players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
             integratedBroadcast({type:'player_joined',player:integratedPublicPlayer(state)},info.guestId);
             integratedBroadcast({type:'mob_hosts',hosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
         }
@@ -1625,7 +1745,7 @@
                 if(remove){droppedItems.delete(item.id);integratedBroadcast({type:'item_removed',itemId:item.id});singleplayerDirty=true;}
             }
             integratedStateBroadcastTimer+=dt;
-            if(integratedStateBroadcastTimer>=.1){integratedStateBroadcastTimer=0;integratedRecomputeMobHosts();integratedBroadcast({type:'world_state',worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});}
+            if(integratedStateBroadcastTimer>=.1){integratedStateBroadcastTimer=0;integratedRecomputeMobHosts();integratedBroadcast({type:'world_state',worldTime,weatherSeed,weatherPhase,gameRules:{...gameRules},bossDefeated:Boolean(bossDefeated),players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});}
         }
 
         function openWorldToLan() {
@@ -1856,9 +1976,10 @@
                 localClientId = data.clientId;
                 localUsername = data.username || localUsername;
                 WORLD_SEED = Number(data.seed) || 0;
-                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.6.0 - ${data.worldName}`; }
+                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.6.1 - ${data.worldName}`; }
                 worldTime = Number(data.worldTime) || 0.25;
                 if(Number.isFinite(data.weatherSeed))weatherSeed=data.weatherSeed|0;if(Number.isFinite(data.weatherPhase))weatherPhase=Number(data.weatherPhase);
+                applyGameRules(data.gameRules);
                 pendingBlockSnapshot = Array.isArray(data.blocks) ? data.blocks : [];
                 pendingMobSnapshot = Array.isArray(data.mobs) ? data.mobs : [];
                 pendingItemSnapshot = Array.isArray(data.items) ? data.items : [];
@@ -1875,6 +1996,7 @@
             }
             if (data.type === 'world_state') {
                 if(Number.isFinite(data.weatherSeed))weatherSeed=data.weatherSeed|0;if(Number.isFinite(data.weatherPhase))weatherPhase+=(Number(data.weatherPhase)-weatherPhase)*.35;
+                if(data.gameRules&&typeof data.gameRules==='object')applyGameRules(data.gameRules);
                 if (typeof data.bossDefeated === 'boolean') bossDefeated = data.bossDefeated;
                 if (Number.isFinite(data.worldTime)) {
                     const drift = data.worldTime - worldTime;
@@ -1891,6 +2013,11 @@
                     applyMobSnapshot(data.mobs || []);
                     applyItemSnapshot(data.items || []);
                 }
+                return;
+            }
+            if (data.type === 'game_rules') {
+                applyGameRules(data.gameRules);
+                if(data.message)addChatMessage(String(data.message),'chatSystem');
                 return;
             }
             if (data.type === 'player_joined') {
@@ -1991,6 +2118,11 @@
                 addToInventory(Number(data.itemId), Number(data.count) || 1);
                 updateInventoryUI();
                 addChatMessage(`Picked up ${getItemName(Number(data.itemId))}.`, 'chatSuccess');
+                return;
+            }
+            if (data.type === 'inventory_reset') {
+                player.inventory=Array.from({length:30},()=>({id:0,count:0}));player.selectedSlot=0;
+                updateInventoryUI();if(data.message)addChatMessage(String(data.message),'chatSystem');
                 return;
             }
             if (data.type === 'chat') {
@@ -2142,9 +2274,9 @@
                 for(const world of worlds) {
                     const row=document.createElement('div'); row.className='world-row';
                     const label=document.createElement('div'); label.className='world-name'; label.textContent=`${world.name} — seed ${world.seed}`; row.appendChild(label);
-                    for(const [action,text,cls] of [['play','Play','greenBtn'],['delete','Delete','redBtn'],['import','Import','blueBtn'],['export','Export JSON','blueBtn']]) {
+                    for(const [action,text,cls] of [['play','Play','greenBtn'],['edit','Edit','blueBtn'],['delete','Delete','redBtn'],['export','Export JSON','blueBtn']]) {
                         const button=document.createElement('button');button.className=`menuBtn ${cls}`;button.textContent=text;
-                        button.addEventListener('click',()=>{select.value=world.key;if(action==='play')loadSelectedSingleplayerWorld();else if(action==='delete')deleteSelectedSingleplayerWorld();else if(action==='export')exportSelectedSingleplayerWorld();else document.getElementById('importWorldFile').click();});
+                        button.addEventListener('click',()=>{select.value=world.key;if(action==='play')loadSelectedSingleplayerWorld();else if(action==='edit')openEditWorldSettings(world.key);else if(action==='delete')deleteSelectedSingleplayerWorld();else exportSelectedSingleplayerWorld();});
                         row.appendChild(button);
                     }
                     list.appendChild(row);
@@ -2207,7 +2339,8 @@
             if(data.lanPlayerProfiles&&typeof data.lanPlayerProfiles==='object')for(const [k,v] of Object.entries(data.lanPlayerProfiles))if(v&&typeof v==='object')profiles[String(k).toLowerCase()]={...v};
             if(data.playerState&&typeof data.playerState==='object'&&!profiles.player)profiles.player={username:'Player',skin:'steve',...data.playerState};
             const operators=Array.isArray(data.operators)?data.operators.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
-            return {format:'MellorCraftWorld',formatVersion:8,version:'1.6.0',name,seed:Number(data.seed)||0,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,bossDefeated:Boolean(data.bossDefeated),blocks,operators:[...new Set(operators)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
+            const seed=Number(data.seed)||0;
+            return {format:'MellorCraftWorld',formatVersion:8,version:'1.6.1',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),blocks,operators:[...new Set(operators)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
         }
         function canonicalPlayerProfilesForSave() {
             const profiles=JSON.parse(JSON.stringify(singleplayerLanProfiles||{}));
@@ -2219,7 +2352,7 @@
         function saveSingleplayerWorld(force=false) {
             if (!singleplayerWorldName || !gameStarted || (singleplayerNetworkMode!=='local' && singleplayerNetworkMode!=='lan-host')) return false;
             if (!force && !singleplayerDirty) return true;
-            const data={format:'MellorCraftWorld',formatVersion:8,version:'1.6.0',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,bossDefeated:Boolean(bossDefeated),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),updatedAt:Date.now()};
+            const data={format:'MellorCraftWorld',formatVersion:8,version:'1.6.1',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),updatedAt:Date.now()};
             try {localStorage.setItem(singleplayerStorageKey(singleplayerWorldName),JSON.stringify(data));singleplayerDirty=false;listSingleplayerWorlds();return true;}catch(error){addChatMessage(`Autosave failed: ${error.message}`,'chatError');return false;}
         }
         function launchSingleplayerWorld(rawData) {
@@ -2229,7 +2362,7 @@
             if(relaySocket){try{relaySocket.close();}catch(_){}relaySocket=null;}
             localClientId='singleplayer';localUsername=identity.username;localSkin=identity.skin;
             const hostKey=String(localUsername).toLowerCase();
-            singleplayerWorldName=String(data.name);WORLD_SEED=Number(data.seed)||0;worldTime=Number(data.worldTime)||0.25;bossDefeated=Boolean(data.bossDefeated);
+            singleplayerWorldName=String(data.name);WORLD_SEED=Number(data.seed)||0;worldTime=Number(data.worldTime)||0.25;weatherSeed=Math.trunc(Number(data.weatherSeed))||weatherSeedForWorldSeed(WORLD_SEED);weatherPhase=Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0;bossDefeated=Boolean(data.bossDefeated);applyGameRules(data.gameRules);
             singleplayerOperators=new Set((data.operators||[]).map(v=>String(v).toLowerCase()));singleplayerOperators.add(hostKey);
             const profiles=(data.playerProfiles&&typeof data.playerProfiles==='object')?data.playerProfiles:{};
             pendingPlayerState=profiles[hostKey]&&typeof profiles[hostKey]==='object'?{...profiles[hostKey]}:null;
@@ -2238,7 +2371,7 @@
             singleplayerLanProfiles={};for(const [key,value] of Object.entries(profiles)){const profileKey=String(key).toLowerCase();if(profileKey!==hostKey&&value&&typeof value==='object')singleplayerLanProfiles[profileKey]={...value};}
             pendingBlockSnapshot=snapshotFromBlocksDict(data.blocks);pendingMobSnapshot=(Array.isArray(data.mobs)?data.mobs:[]).filter(m=>!(bossDefeated&&m&&m.typeKey==='MELLOR_BOSS'));pendingItemSnapshot=Array.isArray(data.items)?data.items:[];
             playerOriginalSpawn=pendingPlayerState?.originalSpawn?{...pendingPlayerState.originalSpawn}:null;playerRespawnPoint=normalizePlayerSpawnPoint(pendingPlayerState?.respawnPoint);
-            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.6.0 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
+            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.6.1 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
         }
         let gameConfirmResolver = null;
         function showGameConfirm(message, options={}) {
@@ -2278,6 +2411,62 @@
             else if(e.key==='Enter'){ e.preventDefault(); closeGameConfirm(true); }
         });
 
+        function showStartPage(pageId) {
+            document.querySelectorAll('.start-page').forEach(page=>page.classList.remove('active'));
+            document.getElementById(pageId)?.classList.add('active');
+            if(!gameStarted&&(!currentMusicAudio||currentMusicAudio.paused))playRandomAmbientTrack('menu');
+        }
+        function gameRulesFromWorldSettings() {
+            return normalizeGameRules({
+                doDaylightCycle:document.getElementById('ruleDaylightCycle').checked,
+                doWeatherCycle:document.getElementById('ruleWeatherCycle').checked,
+                keepInventory:document.getElementById('ruleKeepInventory').checked,
+                doMobSpawning:document.getElementById('ruleMobSpawning').checked,
+                pvp:document.getElementById('rulePvp').checked,
+                mobCap:document.getElementById('ruleMobCap').value,
+                dayLength:document.getElementById('ruleDayLength').value
+            });
+        }
+        function fillWorldSettingsForm(rules) {
+            const value=normalizeGameRules(rules);
+            document.getElementById('ruleDaylightCycle').checked=value.doDaylightCycle;
+            document.getElementById('ruleWeatherCycle').checked=value.doWeatherCycle;
+            document.getElementById('ruleKeepInventory').checked=value.keepInventory;
+            document.getElementById('ruleMobSpawning').checked=value.doMobSpawning;
+            document.getElementById('rulePvp').checked=value.pvp;
+            document.getElementById('ruleMobCap').value=String(value.mobCap);
+            document.getElementById('ruleDayLength').value=String(value.dayLength);
+        }
+        function openCreateWorldSettings() {
+            worldSettingsMode='create';worldSettingsEditKey='';
+            document.getElementById('worldSettingsTitle').textContent='Create World';
+            document.getElementById('saveWorldSettingsBtn').textContent='Create World';
+            const name=document.getElementById('worldNameInput'),seed=document.getElementById('seedInput');
+            name.readOnly=false;seed.readOnly=false;name.value='New World';seed.value='';fillWorldSettingsForm(null);
+            showStartPage('worldSettingsPage');setTimeout(()=>{name.focus();name.select();},0);
+        }
+        function openEditWorldSettings(key) {
+            try {
+                const raw=localStorage.getItem(key);if(!raw)throw new Error('World save was not found');
+                const data=normalizeWorldSaveData(JSON.parse(raw));
+                worldSettingsMode='edit';worldSettingsEditKey=key;
+                document.getElementById('worldSettingsTitle').textContent=`Edit ${data.name}`;
+                document.getElementById('saveWorldSettingsBtn').textContent='Save World Settings';
+                const name=document.getElementById('worldNameInput'),seed=document.getElementById('seedInput');
+                name.value=data.name;name.readOnly=true;seed.value=String(data.seed);seed.readOnly=true;fillWorldSettingsForm(data.gameRules);
+                showStartPage('worldSettingsPage');
+            } catch(error){setJoinStatus(`Could not edit world: ${error.message}`,true);}
+        }
+        function saveEditedWorldSettings() {
+            try {
+                const raw=localStorage.getItem(worldSettingsEditKey);if(!raw)throw new Error('World save was not found');
+                const data=normalizeWorldSaveData(JSON.parse(raw));
+                data.gameRules=gameRulesFromWorldSettings();data.updatedAt=Date.now();
+                localStorage.setItem(worldSettingsEditKey,JSON.stringify(data));
+                listSingleplayerWorlds();setJoinStatus(`Saved game rules for "${data.name}".`);showStartPage('singleplayerPage');
+            } catch(error){setJoinStatus(`Could not save world settings: ${error.message}`,true);}
+        }
+
         async function createSingleplayerWorld() {
             const name=(document.getElementById('worldNameInput').value||'New World').trim().slice(0,40);
             const seedText=(document.getElementById('seedInput').value||'').trim();
@@ -2290,7 +2479,7 @@
                 });
                 if(!replace) return;
             }
-            launchSingleplayerWorld({name,seed,worldTime:0.25,bossDefeated:false,chunkEdits:{},playerState:null,mobs:[],items:[]});
+            launchSingleplayerWorld({name,seed,worldTime:0.25,weatherSeed:weatherSeedForWorldSeed(seed),weatherPhase:0,bossDefeated:false,gameRules:gameRulesFromWorldSettings(),chunkEdits:{},playerState:null,mobs:[],items:[]});
             singleplayerDirty=true;
             setTimeout(()=>saveSingleplayerWorld(true),100);
         }
@@ -2312,16 +2501,28 @@
             if(!approved)return;
             try{localStorage.removeItem(key);listSingleplayerWorlds();setJoinStatus(`Deleted "${name}".`);}catch(error){setJoinStatus(`Could not delete world: ${error.message}`,true);}
         }
-        function exportSelectedSingleplayerWorld() {
-            if (gameStarted) saveSingleplayerWorld(true);
-            const key=gameStarted?singleplayerStorageKey(singleplayerWorldName):document.getElementById('worldSelect').value;
-            if (!key) { setJoinStatus('Select a saved world to export.',true); return; }
-            const raw=localStorage.getItem(key); if(!raw)return;
-            const data=normalizeWorldSaveData(JSON.parse(raw));
-            const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-            const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-            a.download=`${String(data.name||'MellorCraft World').replace(/[^A-Za-z0-9 _-]/g,'_')}.json`;
-            a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+        async function exportSelectedSingleplayerWorld() {
+            try {
+                if (gameStarted) saveSingleplayerWorld(true);
+                const key=gameStarted?singleplayerStorageKey(singleplayerWorldName):document.getElementById('worldSelect').value;
+                if (!key) { setJoinStatus('Select a saved world to export.',true); return false; }
+                const raw=localStorage.getItem(key);if(!raw)throw new Error('World save was not found');
+                const data=normalizeWorldSaveData(JSON.parse(raw));
+                const json=JSON.stringify(data,null,2),blob=new Blob([json],{type:'application/json;charset=utf-8'});
+                const fileName=`${String(data.name||'MellorCraft World').replace(/[^A-Za-z0-9 _-]/g,'_')}.json`;
+                if(typeof window.showSaveFilePicker==='function'){
+                    try{
+                        const handle=await window.showSaveFilePicker({suggestedName:fileName,types:[{description:'MellorCraft World JSON',accept:{'application/json':['.json']}}]});
+                        const writable=await handle.createWritable();await writable.write(blob);await writable.close();
+                        setJoinStatus(`Exported "${data.name}" as ${fileName}.`);return true;
+                    }catch(error){if(error&&error.name==='AbortError'){setJoinStatus('World export canceled.');return false;}}
+                }
+                const url=URL.createObjectURL(blob),a=document.createElement('a');
+                a.href=url;a.download=fileName;a.setAttribute('download',fileName);a.rel='noopener';a.style.display='none';
+                document.body.appendChild(a);a.click();
+                setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},30000);
+                setJoinStatus(`Downloading ${fileName}…`);return true;
+            }catch(error){setJoinStatus(`Export failed: ${error.message}`,true);return false;}
         }
         async function importSingleplayerWorld(file) {
             try {
@@ -2344,14 +2545,13 @@
         document.getElementById('singleplayerUsernameInput').addEventListener('change',rememberSelectedSingleplayerIdentity);
         document.getElementById('singleplayerUsernameInput').addEventListener('blur',rememberSelectedSingleplayerIdentity);
         document.getElementById('singleplayerSkinInput').addEventListener('change',rememberSelectedSingleplayerIdentity);
-        document.querySelectorAll('[data-start-page]').forEach(button=>button.addEventListener('click',()=>{
-            document.querySelectorAll('.start-page').forEach(page=>page.classList.remove('active'));
-            document.getElementById(button.dataset.startPage)?.classList.add('active');
-            if(!gameStarted && (!currentMusicAudio || currentMusicAudio.paused)) playRandomAmbientTrack('menu');
-        }));
+        document.querySelectorAll('[data-start-page]').forEach(button=>button.addEventListener('click',()=>showStartPage(button.dataset.startPage)));
         const lanExitNotice=safeStorageGet('mellorcraftLanExitNotice');if(lanExitNotice){safeStorageRemove('mellorcraftLanExitNotice');setJoinStatus(lanExitNotice,true);}
         const serverExitNotice=safeStorageGet('mellorcraftServerExitNotice');if(serverExitNotice){safeStorageRemove('mellorcraftServerExitNotice');setJoinStatus(serverExitNotice,true);}
-        document.getElementById('createWorldBtn').addEventListener('click',createSingleplayerWorld);
+        document.getElementById('createWorldBtn').addEventListener('click',openCreateWorldSettings);
+        document.getElementById('startClientBtn').addEventListener('click',()=>showStartPage('mainMenuPage'));
+        document.getElementById('saveWorldSettingsBtn').addEventListener('click',()=>worldSettingsMode==='edit'?saveEditedWorldSettings():createSingleplayerWorld());
+        document.getElementById('cancelWorldSettingsBtn').addEventListener('click',()=>showStartPage('singleplayerPage'));
         document.getElementById('loadWorldBtn').addEventListener('click',loadSelectedSingleplayerWorld);
         document.getElementById('deleteWorldBtn').addEventListener('click',deleteSelectedSingleplayerWorld);
         document.getElementById('exportWorldBtn').addEventListener('click',exportSelectedSingleplayerWorld);
@@ -2376,7 +2576,7 @@
         document.getElementById('serverHostInput').addEventListener('keypress',e=>{if(e.key==='Enter')connectToServer();});
         document.getElementById('serverPortInput').addEventListener('keypress',e=>{if(e.key==='Enter')connectToServer();});
         // Start-screen controls use native Safari focus and tap behavior.
-        document.getElementById('seedInput').addEventListener('keypress',e=>{if(e.key==='Enter')createSingleplayerWorld();});
+        document.getElementById('seedInput').addEventListener('keypress',e=>{if(e.key==='Enter'&&worldSettingsMode==='create')createSingleplayerWorld();});
 
         function startGame() {
             stopMusicPlayback();
@@ -2407,6 +2607,10 @@
             return { hours, minutes, period, dayCount: Math.floor(worldTime) + 1 };
         }
 
+        function smoothDayStep(value){const t=Math.max(0,Math.min(1,value));return t*t*(3-2*t);}
+        function daylightStrengthAt(time){const t=((time%1)+1)%1,rise=smoothDayStep((t-.25)/.07),fall=1-smoothDayStep((t-.70)/.10);return Math.max(0,Math.min(1,rise*fall));}
+        function twilightGlowAt(time){const t=((time%1)+1)%1,hump=(start,end)=>{const p=Math.max(0,Math.min(1,(t-start)/(end-start)));return t<start||t>end?0:Math.sin(p*Math.PI);};return Math.max(hump(.22,.34),hump(.66,.82));}
+
         function getSkyColor() {
             if (currentDimension === 2) return [0.05, 0.0, 0.1]; // Boss Dim Sky
             if (currentDimension === 1) {
@@ -2417,33 +2621,15 @@
                 if (altBiome === 2) return [0.05, 0.15, 0.05]; // Green
                 return [0.1, 0.0, 0.05]; // Dark red Alt sky
             }
-            const t = worldTime % 1;
-            let r, g, b;
-            if (t >= 0.25 && t < 0.3) {
-                const f = (t - 0.25) / 0.05;
-                r = 0.1 + 0.4 * f; g = 0.1 + 0.6 * f; b = 0.2 + 0.8 * f;
-            } else if (t >= 0.3 && t < 0.7) {
-                r = 0.5; g = 0.7; b = 1.0;
-            } else if (t >= 0.7 && t < 0.75) {
-                const f = (t - 0.7) / 0.05;
-                r = 0.5 + 0.3 * f; g = 0.7 - 0.4 * f; b = 1.0 - 0.6 * f;
-            } else if (t >= 0.75 && t < 0.8) {
-                const f = (t - 0.75) / 0.05;
-                r = 0.8 - 0.7 * f; g = 0.3 - 0.2 * f; b = 0.4 - 0.3 * f;
-            } else {
-                r = 0.05; g = 0.05; b = 0.15;
-            }
-            return [r, g, b];
+            const day=daylightStrengthAt(worldTime),twilight=twilightGlowAt(worldTime)*(1-day);
+            const night=[.05,.05,.15],daySky=[.5,.7,1.0];
+            return [night[0]+(daySky[0]-night[0])*day+.38*twilight,night[1]+(daySky[1]-night[1])*day+.13*twilight,Math.max(.08,night[2]+(daySky[2]-night[2])*day-.025*twilight)];
         }
 
         function getLightLevel() {
             if (currentDimension === 2) return 0.6;
             if (currentDimension === 1) return 0.2;
-            const t = worldTime % 1;
-            if (t >= 0.3 && t < 0.7) return 1.0;
-            if (t >= 0.25 && t < 0.3) return 0.4 + 0.6 * ((t - 0.25) / 0.05);
-            if (t >= 0.7 && t < 0.8) return 1.0 - 0.6 * ((t - 0.7) / 0.1);
-            return 0.3;
+            return .3+.7*daylightStrengthAt(worldTime);
         }
 
         const BLOCKS = {
@@ -2491,8 +2677,6 @@
         let currentMusicTrack = null;
         let musicTimeout = null;
         let ambientMusicTimer = 0;
-        setTimeout(()=>playRandomAmbientTrack('menu'),0);
-        document.addEventListener('pointerdown',()=>{if(!gameStarted&&(!currentMusicAudio||currentMusicAudio.paused))playRandomAmbientTrack('menu');},{once:true});
 
         const SOLID_BLOCKS = new Set([
             BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD,
@@ -2944,11 +3128,47 @@
             precision mediump float;
             void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); }
         `;
+        const weatherVsSource = `
+            attribute vec3 aPosition;
+            attribute float aAlpha;
+            uniform mat4 uProjection;
+            uniform mat4 uView;
+            varying float vAlpha;
+            void main() {
+                gl_Position = uProjection * uView * vec4(aPosition, 1.0);
+                vAlpha = aAlpha;
+            }
+        `;
+        const weatherFsSource = `
+            precision mediump float;
+            varying float vAlpha;
+            uniform vec3 uColor;
+            void main() { gl_FragColor = vec4(uColor, vAlpha); }
+        `;
+        const flatCloudVsSource = `
+            attribute vec3 aPosition;
+            attribute vec3 aColor;
+            attribute vec3 aOffset;
+            uniform mat4 uProjection;
+            uniform mat4 uView;
+            uniform float uBrightness;
+            varying vec3 vColor;
+            void main() {
+                gl_Position = uProjection * uView * vec4(aPosition + aOffset, 1.0);
+                vColor = aColor * uBrightness;
+            }
+        `;
+        const flatCloudFsSource = `
+            precision mediump float;
+            varying vec3 vColor;
+            void main() { gl_FragColor = vec4(vColor, 1.0); }
+        `;
 
         function createShader(type, source) {
             const shader = gl.createShader(type);
             gl.shaderSource(shader, source);
             gl.compileShader(shader);
+            if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS))console.error('MellorCraft WebGL shader compile failed:',gl.getShaderInfoLog(shader));
             return shader;
         }
 
@@ -2956,6 +3176,7 @@
         gl.attachShader(program, createShader(gl.VERTEX_SHADER, vsSource));
         gl.attachShader(program, createShader(gl.FRAGMENT_SHADER, fsSource));
         gl.linkProgram(program);
+        if(!gl.getProgramParameter(program,gl.LINK_STATUS))console.error('MellorCraft terrain program link failed:',gl.getProgramInfoLog(program));
 
         const aPosition = gl.getAttribLocation(program, 'aPosition');
         const aColor = gl.getAttribLocation(program, 'aColor');
@@ -2989,6 +3210,7 @@
         gl.attachShader(lineProgram, createShader(gl.VERTEX_SHADER, lineVsSource));
         gl.attachShader(lineProgram, createShader(gl.FRAGMENT_SHADER, lineFsSource));
         gl.linkProgram(lineProgram);
+        if(!gl.getProgramParameter(lineProgram,gl.LINK_STATUS))console.error('MellorCraft line program link failed:',gl.getProgramInfoLog(lineProgram));
         const aLinePos = gl.getAttribLocation(lineProgram, 'aPosition');
         const uLineProj = gl.getUniformLocation(lineProgram, 'uProjection');
         const uLineView = gl.getUniformLocation(lineProgram, 'uView');
@@ -2996,6 +3218,49 @@
 
         const lineBuffer = gl.createBuffer();
         const IDENTITY_MODEL_MATRIX = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+
+        // Rain is packed into one interleaved dynamic buffer and submitted in one
+        // depth-tested draw. This replaces the old full-resolution Canvas2D pass,
+        // per-drop projection, and per-drop terrain LOS ray on mobile.
+        const weatherProgram = gl.createProgram();
+        gl.attachShader(weatherProgram, createShader(gl.VERTEX_SHADER, weatherVsSource));
+        gl.attachShader(weatherProgram, createShader(gl.FRAGMENT_SHADER, weatherFsSource));
+        gl.linkProgram(weatherProgram);
+        if(!gl.getProgramParameter(weatherProgram,gl.LINK_STATUS))console.error('MellorCraft weather program link failed:',gl.getProgramInfoLog(weatherProgram));
+        const aWeatherPosition = gl.getAttribLocation(weatherProgram, 'aPosition');
+        const aWeatherAlpha = gl.getAttribLocation(weatherProgram, 'aAlpha');
+        const uWeatherProjection = gl.getUniformLocation(weatherProgram, 'uProjection');
+        const uWeatherView = gl.getUniformLocation(weatherProgram, 'uView');
+        const uWeatherColor = gl.getUniformLocation(weatherProgram, 'uColor');
+        const MAX_RAIN_DROPS = isMobilePlaying ? 88 : 260;
+        const MAX_RAIN_SPLASHES = isMobilePlaying ? 28 : 72;
+        const MAX_WEATHER_VERTICES = MAX_RAIN_DROPS * 2 + MAX_RAIN_SPLASHES * 8;
+        const weatherVertexData = new Float32Array(MAX_WEATHER_VERTICES * 4);
+        const weatherVertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, weatherVertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, weatherVertexData.byteLength, gl.DYNAMIC_DRAW);
+
+        // ANGLE instancing is available on nearly all current mobile WebGL stacks.
+        // It turns the lightweight overcast ceiling from hundreds of draw calls into one.
+        const cloudInstanceExt = gl.getExtension('ANGLE_instanced_arrays');
+        const flatCloudProgram = cloudInstanceExt ? gl.createProgram() : null;
+        let aFlatCloudPosition=-1,aFlatCloudColor=-1,aFlatCloudOffset=-1,uFlatCloudProjection=null,uFlatCloudView=null,uFlatCloudBrightness=null;
+        const flatCloudInstanceData = new Float32Array(2048 * 3);
+        const flatCloudInstanceBuffer = cloudInstanceExt ? gl.createBuffer() : null;
+        if(flatCloudProgram){
+            gl.attachShader(flatCloudProgram, createShader(gl.VERTEX_SHADER, flatCloudVsSource));
+            gl.attachShader(flatCloudProgram, createShader(gl.FRAGMENT_SHADER, flatCloudFsSource));
+            gl.linkProgram(flatCloudProgram);
+            if(!gl.getProgramParameter(flatCloudProgram,gl.LINK_STATUS))console.error('MellorCraft cloud batch program link failed:',gl.getProgramInfoLog(flatCloudProgram));
+            aFlatCloudPosition=gl.getAttribLocation(flatCloudProgram,'aPosition');
+            aFlatCloudColor=gl.getAttribLocation(flatCloudProgram,'aColor');
+            aFlatCloudOffset=gl.getAttribLocation(flatCloudProgram,'aOffset');
+            uFlatCloudProjection=gl.getUniformLocation(flatCloudProgram,'uProjection');
+            uFlatCloudView=gl.getUniformLocation(flatCloudProgram,'uView');
+            uFlatCloudBrightness=gl.getUniformLocation(flatCloudProgram,'uBrightness');
+            gl.bindBuffer(gl.ARRAY_BUFFER,flatCloudInstanceBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER,flatCloudInstanceData.byteLength,gl.DYNAMIC_DRAW);
+        }
 
         gl.enable(gl.DEPTH_TEST);
         gl.enable(gl.CULL_FACE);
@@ -3077,18 +3342,18 @@
             // Match MellorCraft's existing sky clock: sunrise begins at 0.25,
             // full daylight follows, and sunset completes at 0.80.
             const sunrise = 0.25, sunset = 0.80;
-            if (currentDimension !== 0 || t < sunrise || t > sunset) {
+            if (currentDimension !== 0 || t <= sunrise || t >= sunset) {
                 return { above: false, strength: 0, dir: [0.25, 0.08, 0.22] };
             }
             const phase = Math.max(0, Math.min(1, (t - sunrise) / (sunset - sunrise)));
             const arc = phase * Math.PI;
-            const elevation = Math.max(0.025, Math.sin(arc));
+            const elevation = Math.max(0, Math.sin(arc));
             const horizontal = Math.cos(arc);
-            const raw = [horizontal, elevation, 0.30];
+            const raw = [horizontal, Math.max(.002,elevation), 0.30];
             const mag = Math.hypot(raw[0], raw[1], raw[2]) || 1;
             const dir = [raw[0] / mag, raw[1] / mag, raw[2] / mag];
-            const strength = Math.max(0.18, Math.min(1, 0.18 + Math.sqrt(Math.max(0, Math.sin(arc))) * 0.82));
-            return { above: true, strength, dir };
+            const strength = Math.max(0,Math.min(1,daylightStrengthAt(t)*(.35+.65*Math.sqrt(elevation))));
+            return { above: strength>.001, strength, dir };
         }
 
         // The sun is a DOM disc rather than world geometry, so depth testing cannot
@@ -3098,6 +3363,8 @@
         let cachedSunLosClear = true;
         let lastSunLosCheckAt = 0, lastSunLosX = Number.NaN, lastSunLosY = Number.NaN, lastSunLosZ = Number.NaN;
         let lastSunLosDx = Number.NaN, lastSunLosDy = Number.NaN, lastSunLosDz = Number.NaN, lastSunLosMeshRevision = -1;
+        let smoothedDirectSunLevel=0,lastDirectSunLevelAt=0;
+        function smoothDirectSunLevel(target){const now=performance.now();if(!lastDirectSunLevelAt){lastDirectSunLevelAt=now;smoothedDirectSunLevel=Math.max(0,Math.min(1,target));return smoothedDirectSunLevel;}const dt=Math.max(0,Math.min(.1,(now-lastDirectSunLevelAt)/1000));lastDirectSunLevelAt=now;const rate=target<smoothedDirectSunLevel?4.5:3,ease=1-Math.exp(-dt*rate);smoothedDirectSunLevel+=(Math.max(0,Math.min(1,target))-smoothedDirectSunLevel)*ease;return smoothedDirectSunLevel;}
 
         function loadedColumnTop(wx, wz) {
             const bx = Math.floor(wx), bz = Math.floor(wz);
@@ -3198,7 +3465,7 @@
         }
 
         function cloudSunTransmission(lightDir){
-            if(!liteShaderEnabled||currentDimension!==0||playerEyeY()>=CLOUD_LEVEL||lightDir[1]<=.001)return 1;
+            if(!liteShaderEnabled||!gameRules.doWeatherCycle||currentDimension!==0||playerEyeY()>=CLOUD_LEVEL||lightDir[1]<=.001)return 1;
             const t=(CLOUD_LEVEL-playerEyeY())/lightDir[1],x=player.x+lightDir[0]*t,z=player.z+lightDir[2]*t;
             const pressure=weatherPressureAt(x,z);
             if(pressure>=60)return 1;
@@ -3206,9 +3473,9 @@
             return Math.max(.06,Math.min(1,.06+(pressure-40)/20*.94));
         }
 
-        function updateShaderSun(lightDir, sunAboveHorizon, cloudTransmission=1) {
+        function updateShaderSun(lightDir, sunAboveHorizon, cloudTransmission=1, sunStrength=1) {
             const sun = document.getElementById('shaderSun');
-            if (!sun || !liteShaderEnabled || currentDimension !== 0 || !sunAboveHorizon || !uProjectionMat || !uViewMat) {
+            if (!sun || !liteShaderEnabled || currentDimension !== 0 || !sunAboveHorizon || sunStrength<=.005 || !uProjectionMat || !uViewMat) {
                 if (sun) sun.style.display = 'none';
                 return;
             }
@@ -3224,11 +3491,11 @@
             sun.style.top = `${(1 - ndcY) * 0.5 * canvas.clientHeight}px`;
             const horizonVisibility = Math.max(0.22, Math.min(1, lightDir[1] * 1.8 + 0.18));
             const rayPower = Math.max(0, Math.min(2, shaderSunrayStrength));
-            if(cloudTransmission<.12){sun.style.display='none';return;}
-            sun.style.opacity = String(Math.max(0.08, Math.min(1, horizonVisibility * (0.84 + rayPower * 0.13)*cloudTransmission)));
-            sun.style.setProperty('--sunray-opacity', String(Math.min(1, horizonVisibility * rayPower * 0.72*cloudTransmission)));
+            if(cloudTransmission<.005){sun.style.display='none';return;}
+            sun.style.opacity = String(Math.max(0, Math.min(1, horizonVisibility * (0.84 + rayPower * 0.13)*cloudTransmission*sunStrength)));
+            sun.style.setProperty('--sunray-opacity', String(Math.min(1, horizonVisibility * rayPower * 0.72*cloudTransmission*sunStrength)));
             sun.style.setProperty('--sunray-scale', String(0.92 + rayPower * 0.24));
-            const glowPower = Math.min(1, horizonVisibility * (0.52 + rayPower * 0.34)*cloudTransmission);
+            const glowPower = Math.min(1, horizonVisibility * (0.52 + rayPower * 0.34)*cloudTransmission*sunStrength);
             sun.style.setProperty('--sun-glow-opacity', String(glowPower));
             sun.style.setProperty('--sun-glow-soft-opacity', String(glowPower * 0.42));
             sun.style.display = 'block';
@@ -5928,12 +6195,39 @@
             const pb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);const cb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,cb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(col),gl.STATIC_DRAW);const nb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(nor),gl.STATIC_DRAW);weatherCloudMesh={pb,cb,nb,count:pos.length/3};
             return weatherCloudMesh;
         }
+        function renderFlatWeatherCloudBatch(mesh,count){
+            if(!cloudInstanceExt||!flatCloudProgram||count<=0)return false;
+            gl.useProgram(flatCloudProgram);
+            gl.uniformMatrix4fv(uFlatCloudProjection,false,uProjectionMat);
+            gl.uniformMatrix4fv(uFlatCloudView,false,uViewMat);
+            gl.uniform1f(uFlatCloudBrightness,Math.max(.28,Math.min(1,getLightLevel()+.08)));
+            gl.bindBuffer(gl.ARRAY_BUFFER,mesh.pb);gl.vertexAttribPointer(aFlatCloudPosition,3,gl.FLOAT,false,0,0);gl.enableVertexAttribArray(aFlatCloudPosition);
+            gl.bindBuffer(gl.ARRAY_BUFFER,mesh.cb);gl.vertexAttribPointer(aFlatCloudColor,3,gl.FLOAT,false,0,0);gl.enableVertexAttribArray(aFlatCloudColor);
+            gl.bindBuffer(gl.ARRAY_BUFFER,flatCloudInstanceBuffer);gl.bufferSubData(gl.ARRAY_BUFFER,0,flatCloudInstanceData.subarray(0,count*3));gl.vertexAttribPointer(aFlatCloudOffset,3,gl.FLOAT,false,0,0);gl.enableVertexAttribArray(aFlatCloudOffset);cloudInstanceExt.vertexAttribDivisorANGLE(aFlatCloudOffset,1);
+            cloudInstanceExt.drawArraysInstancedANGLE(gl.TRIANGLES,0,mesh.count,count);
+            cloudInstanceExt.vertexAttribDivisorANGLE(aFlatCloudOffset,0);
+            gl.disableVertexAttribArray(aFlatCloudOffset);
+            gl.useProgram(program);gl.uniformMatrix4fv(uModel,false,IDENTITY_MODEL_MATRIX);
+            return true;
+        }
         function renderWeatherClouds(){
-            if(currentDimension!==0)return;
+            if(currentDimension!==0||!gameRules.doWeatherCycle)return;
             const tile=32,radius=liteShaderEnabled?500:(isMobilePlaying?224:360),driftX=weatherPhase*7,driftZ=weatherPhase*2.6,mesh=getWeatherCloudMesh(),puffMesh=liteShaderEnabled?getWeatherCloudPuffMesh():null;
             const minI=Math.floor((player.x-radius-driftX)/tile),maxI=Math.ceil((player.x+radius-driftX)/tile);
             const minK=Math.floor((player.z-radius-driftZ)/tile),maxK=Math.ceil((player.z+radius-driftZ)/tile);
             const viewX=-Math.sin(player.yaw),viewZ=-Math.cos(player.yaw),cloudY=CLOUD_LEVEL;
+            if(!liteShaderEnabled&&cloudInstanceExt){
+                let instanceCount=0;
+                for(let i=minI;i<=maxI;i++)for(let k=minK;k<=maxK;k++){
+                    const x=i*tile+driftX,z=k*tile+driftZ,dx=x+16-player.x,dz=z+16-player.z,distSq=dx*dx+dz*dz;
+                    if(distSq>radius*radius||(distSq>10000&&dx*viewX+dz*viewZ<-70))continue;
+                    const pressure=weatherPressureAt(x+16,z+16);if(pressure>=60+(cloudVolumetricDensity-1)*8)continue;
+                    if(instanceCount*3+2>=flatCloudInstanceData.length)continue;
+                    const offset=instanceCount*3;flatCloudInstanceData[offset]=x;flatCloudInstanceData[offset+1]=cloudY+(weatherHash(i,k)-.5)*5;flatCloudInstanceData[offset+2]=z;instanceCount++;
+                }
+                renderFlatWeatherCloudBatch(mesh,instanceCount);
+                return;
+            }
             if(liteShaderEnabled){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.uniform1f(uAlpha,.46);}else gl.uniform1f(uAlpha,1);
             gl.uniform1f(uEmission,liteShaderEnabled?.12:.08);
             for(let i=minI;i<=maxI;i++)for(let k=minK;k<=maxK;k++){
@@ -5954,6 +6248,25 @@
             gl.uniform1f(uEmission,0);
         }
 
+        function renderWebGLRain(){
+            if(currentDimension!==0||localRainIntensity<=0||weatherDrops.length===0||!uProjectionMat||!uViewMat)return;
+            let vertexCount=0;
+            const addVertex=(x,y,z,alpha)=>{if(vertexCount>=MAX_WEATHER_VERTICES)return;const offset=vertexCount*4;weatherVertexData[offset]=x;weatherVertexData[offset+1]=y;weatherVertexData[offset+2]=z;weatherVertexData[offset+3]=alpha;vertexCount++;};
+            const rainAlpha=.34+localRainIntensity*.48,streakLength=2.5+localRainIntensity*1.2;
+            for(const drop of weatherDrops){addVertex(drop.x+.26,drop.y+streakLength,drop.z+.08,rainAlpha);addVertex(drop.x,drop.y,drop.z,rainAlpha);}
+            for(const splash of weatherSplashes){const t=splash.age/splash.duration,alpha=(1-t)*(.38+localRainIntensity*.34),radius=.08+t*.72,y=splash.y+.025,x=splash.x,z=splash.z;addVertex(x-radius,y,z,alpha);addVertex(x+radius,y,z,alpha);addVertex(x,y,z-radius,alpha);addVertex(x,y,z+radius,alpha);addVertex(x-radius*.7,y,z-radius*.7,alpha*.75);addVertex(x+radius*.7,y,z+radius*.7,alpha*.75);addVertex(x-radius*.7,y,z+radius*.7,alpha*.75);addVertex(x+radius*.7,y,z-radius*.7,alpha*.75);}
+            if(vertexCount===0)return;
+            gl.useProgram(weatherProgram);
+            gl.uniformMatrix4fv(uWeatherProjection,false,uProjectionMat);gl.uniformMatrix4fv(uWeatherView,false,uViewMat);
+            const light=.42+getLightLevel()*.58;gl.uniform3f(uWeatherColor,.64*light,.80*light,.92*light);
+            gl.bindBuffer(gl.ARRAY_BUFFER,weatherVertexBuffer);gl.bufferSubData(gl.ARRAY_BUFFER,0,weatherVertexData.subarray(0,vertexCount*4));
+            gl.vertexAttribPointer(aWeatherPosition,3,gl.FLOAT,false,16,0);gl.enableVertexAttribArray(aWeatherPosition);
+            gl.vertexAttribPointer(aWeatherAlpha,1,gl.FLOAT,false,16,12);gl.enableVertexAttribArray(aWeatherAlpha);
+            gl.enable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.disable(gl.CULL_FACE);
+            gl.drawArrays(gl.LINES,0,vertexCount);
+            gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);gl.useProgram(program);
+        }
+
         function renderRemotePlayers() {
             for (const rp of remotePlayers.values()) {
                 if (rp.dimension !== currentDimension || rp.gamemode === 'spectator' || rp.health <= 0) continue;
@@ -5968,7 +6281,7 @@
         }
 
         function spawnInitialMobs(dimension = currentDimension) {
-            if (!isMobHostForDimension(dimension)) return;
+            if (!gameRules.doMobSpawning || MOB_CAP<=0 || !isMobHostForDimension(dimension)) return;
             const existing = mobs.filter(m => m.dimension === dimension).length;
             const targetCount = dimension === 2 ? 0 : Math.min(MOB_CAP, dimension === 0 ? 15 : 8);
             for (let i = existing; i < targetCount; i++) {
@@ -6430,7 +6743,11 @@
                 return;
             }
 
-            if (['op','deop','ops','list','mobs'].includes(cmd) || (singleplayerNetworkMode==='dedicated' && ['gamemode','gm','tp'].includes(cmd))) {
+            if (cmd==='mobcap') {
+                sendNetwork({type:'server_command',command:`/gamerule mobCap ${args.join(' ')}`.trim()});
+                return;
+            }
+            if (['op','deop','ops','list','mobs','gamerule'].includes(cmd) || (singleplayerNetworkMode==='dedicated' && ['gamemode','gm','tp'].includes(cmd))) {
                 sendNetwork({type:'server_command',command:cmdStr});
                 return;
             }
@@ -6451,7 +6768,9 @@
                     addChatMessage("/place [mansion|cabin] - Force structure", "chatSystem");
                     addChatMessage("/esp - Toggle mob X-Ray", "chatSystem");
                     addChatMessage("/killall - Kill loaded mobs", "chatSystem");
-                    addChatMessage("/mobcap [value] - Set max mob limit", "chatSystem");
+                    addChatMessage("/gamerule [rule] [value] - View or change world rules", "chatSystem");
+                    addChatMessage("Rules: doDaylightCycle, doWeatherCycle, keepInventory, doMobSpawning, pvp, mobCap, dayLength", "chatSystem");
+                    addChatMessage("/mobcap [value] - Alias for /gamerule mobCap", "chatSystem");
                     addChatMessage("/op <username>, /deop <username>, /ops, /list, /mobs - Server commands", "chatSystem");
                     break;
                 case 'gamemode':
@@ -6505,10 +6824,7 @@
                     else addChatMessage("Invalid render distance.", "chatError");
                     break;
                 case 'mobcap':
-                    if (args.length < 1) return addChatMessage("Usage: /mobcap [amount]", "chatError");
-                    const newCap = parseInt(args[0]);
-                    if (!isNaN(newCap) && newCap >= 0) { MOB_CAP = newCap; addChatMessage(`Mob cap set to ${newCap}`, "chatSuccess"); } 
-                    else addChatMessage("Invalid amount.", "chatError");
+                    break;
                     break;
                 case 'killall':
                     if (!isMobHostForDimension(currentDimension)) addChatMessage('Only the current dimension mob host can remove shared mobs.', 'chatError');
@@ -7129,6 +7445,9 @@
                 c.appendChild(h);
             }
             if (player.health <= 0 && !deathScreenOpen) {
+                if(!gameRules.keepInventory){
+                    player.inventory=Array.from({length:30},()=>({id:0,count:0}));player.selectedSlot=0;updateInventoryUI();singleplayerDirty=true;
+                }
                 document.getElementById('deathScreen').style.display = 'flex';
                 if (!isMobilePlaying) document.exitPointerLock(); deathScreenOpen = true; updateMobileControlsVisibility();
             }
@@ -7560,7 +7879,7 @@
             lastTime = time;
             
             if (gameStarted && !deathScreenOpen) {
-                worldTime += dt / DAY_LENGTH;
+                if(gameRules.doDaylightCycle)worldTime += dt / currentDayLength();
                 if (worldTime >= dayCount) dayCount++;
                 
                 timeUiTimer -= dt;
@@ -7600,10 +7919,10 @@
                     let dimensionMobCount=0;
                     for(const m of mobs) if(m.dimension===currentDimension) dimensionMobCount++;
                     const hostingMobs=isMobHostForDimension(currentDimension);
-                    if (hostingMobs && dimensionMobCount === 0) spawnInitialMobs(currentDimension);
+                    if (hostingMobs && gameRules.doMobSpawning && dimensionMobCount === 0) spawnInitialMobs(currentDimension);
                     // Equivalent roughly to the old per-frame spawn pressure, without doing
                     // biome/height/despawn scans sixty times per second.
-                    if (hostingMobs && dimensionMobCount < MOB_CAP && Math.random() < 0.75) {
+                    if (hostingMobs && gameRules.doMobSpawning && dimensionMobCount < MOB_CAP && Math.random() < 0.75) {
                         const a = Math.random() * Math.PI * 2, d = 15 + Math.random() * 40;
                         const x = player.x + Math.cos(a) * d, z = player.z + Math.sin(a) * d;
                         let typeKey = null, h = 50;
@@ -7681,6 +8000,7 @@
             
             const shaderSunState = getShaderSunState();
             const cloudTransmission = cloudSunTransmission(shaderSunState.dir);
+            const directSunLevel=liteShaderEnabled&&currentDimension===0?smoothDirectSunLevel(shaderSunState.strength*cloudTransmission):cloudTransmission;
             let lightDir = [0.5, 1.0, 0.3];
             if (currentDimension === 0) {
                 if (liteShaderEnabled && shaderSunState.above) {
@@ -7703,13 +8023,16 @@
             const skyColor = getSkyColor();
             const fogLight = liteShaderEnabled ? Math.max(0.16, Math.min(1.0, shaderAmbient * 1.35)) : 1.0;
             const weatherGray=currentDimension===0?Math.max(0,Math.min(.65,(60-localPressure)/70)):0;
-            gl.uniform3fv(uFogColor, [skyColor[0]*fogLight*(1-weatherGray)+.42*weatherGray,skyColor[1]*fogLight*(1-weatherGray)+.46*weatherGray,skyColor[2]*fogLight*(1-weatherGray)+.50*weatherGray]);
+            // Weather gray must be night-lit too; otherwise distance fog becomes a
+            // bright gray wall after sunset even though the world and sky are dark.
+            gl.uniform3fv(uFogColor, [(skyColor[0]*(1-weatherGray)+.42*weatherGray)*fogLight,(skyColor[1]*(1-weatherGray)+.46*weatherGray)*fogLight,(skyColor[2]*(1-weatherGray)+.50*weatherGray)*fogLight]);
             
             // Keep the 500-block weather horizon visible while still building obvious distance fog.
             let fd = liteShaderEnabled ? 0.0035 : 0.0;
             if (liteShaderEnabled && currentDimension === 1) fd = 0.04;
             if (liteShaderEnabled && currentDimension === 2) fd = 0.02;
             if(liteShaderEnabled&&currentDimension===0&&playerEyeY()<CLOUD_LEVEL&&localPressure<40){const rainFog=Math.max(0,Math.min(1,(40-localPressure)/39));fd=.0035+Math.pow(rainFog,2.15)*.080;}
+            if(liteShaderEnabled&&currentDimension===0)fd=playerInCave?0:fd*weatherSkyExposure;
             gl.uniform1f(uFogDensity, fd);
             
             gl.uniform3fv(uCameraPos, [player.x, playerEyeY(), player.z]);
@@ -7717,9 +8040,9 @@
             gl.uniform1f(uAlpha, 1.0);
             gl.uniform1f(uEmission, 0.0);
             gl.uniform1f(uShaderEnabled, liteShaderEnabled ? 1.0 : 0.0);
-            gl.uniform1f(uCloudSun, cloudTransmission);
+            gl.uniform1f(uCloudSun, directSunLevel);
             const sunAboveHorizon = shaderSunState.above;
-            const shadowAmount = liteShaderEnabled && sunAboveHorizon ? shaderShadowStrength * shaderSunState.strength : 0.0;
+            const shadowAmount = liteShaderEnabled && sunAboveHorizon ? shaderShadowStrength * directSunLevel : 0.0;
             gl.uniform1f(uShadowAmount, shadowAmount);
             gl.uniform1f(uShadowSoftness, shaderShadowSoftness);
             gl.uniform1f(uTorchBrightness, shaderTorchBrightness);
@@ -7737,7 +8060,7 @@
             gl.uniform3fv(uTorchPos2, torchLights[2] || zeroTorch);
             gl.uniform3fv(uTorchPos3, torchLights[3] || zeroTorch);
             gl.uniform1f(uTorchCount, torchLights.length);
-            updateShaderSun(shaderSunState.dir, sunAboveHorizon, cloudTransmission);
+            updateShaderSun(shaderSunState.dir, sunAboveHorizon, cloudTransmission, shaderSunState.strength);
 
             const dirX = Math.sin(player.yaw), dirZ = Math.cos(player.yaw);
             const visibleChunkMeshes = [];
@@ -7817,6 +8140,7 @@
 
             renderDroppedItems();
             renderRemotePlayers();
+            renderWebGLRain();
 
             // Glass is drawn after opaque world/entities. Keeping it in a separate pass
             // makes it genuinely see-through while retaining a pale blue surface cue.

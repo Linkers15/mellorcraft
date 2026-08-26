@@ -67,6 +67,45 @@ LEGACY_SAVE_FILENAME = "mellorcraft_world.json"
 WORLDS_DIRNAME = "worlds"
 DEFAULT_WORLD_NAME = "World"
 WORLD_NAME_PATTERN = re.compile(r"^[A-Za-z0-9 _.-]{1,48}$")
+DEFAULT_GAME_RULES: dict[str, bool | int] = {
+    "doDaylightCycle": True,
+    "doWeatherCycle": True,
+    "keepInventory": True,
+    "doMobSpawning": True,
+    "pvp": True,
+    "mobCap": MOB_CAP_PER_DIMENSION,
+    "dayLength": int(DAY_LENGTH_SECONDS),
+}
+GAME_RULE_ORDER = tuple(DEFAULT_GAME_RULES)
+BOOLEAN_GAME_RULES = {"doDaylightCycle", "doWeatherCycle", "keepInventory", "doMobSpawning", "pvp"}
+GAME_RULE_ALIASES = {
+    "daylightcycle": "doDaylightCycle", "dodaylightcycle": "doDaylightCycle",
+    "weathercycle": "doWeatherCycle", "doweathercycle": "doWeatherCycle",
+    "keepinventory": "keepInventory", "mobspawning": "doMobSpawning", "domobspawning": "doMobSpawning",
+    "pvp": "pvp", "mobcap": "mobCap", "daylength": "dayLength",
+}
+
+
+def normalize_game_rules(value: Any) -> dict[str, bool | int]:
+    raw = value if isinstance(value, dict) else {}
+    normalized = dict(DEFAULT_GAME_RULES)
+    for name in BOOLEAN_GAME_RULES:
+        if name in raw:
+            incoming = raw[name]
+            if isinstance(incoming, str):
+                lowered = incoming.strip().lower()
+                if lowered in {"true", "on", "1", "yes"}:
+                    normalized[name] = True
+                elif lowered in {"false", "off", "0", "no"}:
+                    normalized[name] = False
+            else:
+                normalized[name] = bool(incoming)
+    for name, minimum, maximum in (("mobCap", 0, 200), ("dayLength", 60, 3600)):
+        try:
+            normalized[name] = max(minimum, min(maximum, round(float(raw.get(name, normalized[name])))))
+        except (TypeError, ValueError):
+            pass
+    return normalized
 
 
 @dataclass
@@ -133,6 +172,7 @@ class MellorCraftWorld:
         self.world_time = 0.25
         self.weather_seed = random.randint(0, 2_147_483_646)
         self.weather_phase = 0.0
+        self.game_rules = dict(DEFAULT_GAME_RULES)
         self.boss_defeated = False
         self.blocks: dict[str, int] = {}
         self.players: dict[str, PlayerState] = {}
@@ -167,8 +207,12 @@ class MellorCraftWorld:
         now = time.monotonic()
         elapsed = max(0.0, min(now - self.last_tick, 5.0))
         self.last_tick = now
-        self.world_time += elapsed / DAY_LENGTH_SECONDS
-        self.weather_phase += elapsed * 0.35
+        if bool(self.game_rules["doDaylightCycle"]):
+            self.world_time += elapsed / max(60.0, float(self.game_rules["dayLength"]))
+        if bool(self.game_rules["doWeatherCycle"]):
+            self.weather_phase += elapsed * 0.35
+        if elapsed > 0 and (bool(self.game_rules["doDaylightCycle"]) or bool(self.game_rules["doWeatherCycle"])):
+            self.dirty = True
         return elapsed
 
     @staticmethod
@@ -296,6 +340,9 @@ class MellorCraftWorld:
             self.world_name = str(raw.get("name", raw.get("worldName", self.world_name))).strip()[:48] or self.world_name
             self.seed = int(raw.get("seed", self.seed)) % 2_147_483_647
             self.world_time = float(raw.get("worldTime", self.world_time))
+            self.weather_seed = int(raw.get("weatherSeed", self.weather_seed)) % 2_147_483_647
+            self.weather_phase = float(raw.get("weatherPhase", self.weather_phase))
+            self.game_rules = normalize_game_rules(raw.get("gameRules"))
             self.boss_defeated = bool(raw.get("bossDefeated", False))
             blocks = raw.get("blocks")
             if not isinstance(blocks, dict):
@@ -363,8 +410,9 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 8, "version": "1.6.0", "name": self.world_name,
-            "seed": self.seed, "worldTime": self.world_time, "bossDefeated": self.boss_defeated,
+            "format": "MellorCraftWorld", "formatVersion": 8, "version": "1.6.1", "name": self.world_name,
+            "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
+            "bossDefeated": self.boss_defeated, "gameRules": self.game_rules,
             "blocks": self.blocks, "operators": sorted(self.operators), "playerProfiles": profiles,
             "mobs": [asdict(mob) for mob in self.mobs.values()], "items": [asdict(item) for item in self.items.values()],
             "updatedAt": int(time.time() * 1000),
@@ -600,7 +648,15 @@ async def damage_player(
     if now < world.damage_locks.get(victim.id, 0.0):
         return
     victim.health = max(0.0, victim.health - max(0.0, damage))
+    world.dirty = True
     world.damage_locks[victim.id] = now + 0.45
+    if victim.health <= 0 and not bool(world.game_rules["keepInventory"]):
+        victim.inventory = [{"id": 0, "count": 0} for _ in range(MAX_INVENTORY_SLOTS)]
+        victim.selectedSlot = 0
+        victim.heldItem = 0
+        websocket = world.connections.get(victim.id)
+        if websocket is not None:
+            await send_json(websocket, {"type": "inventory_reset", "message": "Your inventory was cleared on death."})
     horizontal = math.hypot(dx, dz)
     if horizontal < 0.01:
         dx, dz, horizontal = 0.0, -1.0, 1.0
@@ -616,6 +672,8 @@ async def damage_player(
 
 
 async def handle_player_attack(attacker_id: str, data: dict[str, Any]) -> None:
+    if not bool(world.game_rules["pvp"]):
+        return
     attacker = world.players.get(attacker_id)
     victim = world.players.get(str(data.get("targetId", "")))
     if attacker is None or victim is None or attacker.id == victim.id:
@@ -674,10 +732,12 @@ async def remove_mob(
 
 
 async def handle_mob_spawn(player_id: str, data: dict[str, Any]) -> None:
+    if not bool(world.game_rules["doMobSpawning"]):
+        return
     dimension = bounded_int(data.get("dimension"), 0, 2)
     if world.mob_hosts.get(dimension) != player_id:
         return
-    if sum(1 for mob in world.mobs.values() if mob.dimension == dimension) >= MOB_CAP_PER_DIMENSION:
+    if sum(1 for mob in world.mobs.values() if mob.dimension == dimension) >= int(world.game_rules["mobCap"]):
         return
     type_key = str(data.get("typeKey", ""))
     if type_key not in MOB_DEFINITIONS:
@@ -959,7 +1019,8 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
         await send_json(websocket, {
             "type": "welcome", "protocol": PROTOCOL_VERSION, "negotiatedProtocol": client_protocol,
             "clientId": player_id, "username": username, "seed": world.seed, "worldName": world.world_name,
-            "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase, "dayLength": DAY_LENGTH_SECONDS,
+            "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
+            "dayLength": world.game_rules["dayLength"], "gameRules": world.game_rules,
             "bossDefeated": world.boss_defeated,
             "isOperator": player.isOperator, "blocks": world.block_snapshot(),
             "playerState": world.player_profile(player) if restored and client_protocol >= 4 else None,
@@ -1016,6 +1077,7 @@ async def world_broadcast_loop() -> None:
         hosts_changed = world.recompute_mob_hosts()
         await broadcast({
             "type": "world_state", "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
+            "gameRules": world.game_rules,
             "bossDefeated": world.boss_defeated,
             "players": world.player_snapshot(),
             "mobs": world.mob_snapshot(), "items": world.item_snapshot(),
@@ -1195,6 +1257,42 @@ async def process_teleport_command(args: list[str]) -> str:
     return "Usage: /tp <player> <targetPlayer> OR /tp <player> <x> <y> <z> <dimension 1|2|3>"
 
 
+def game_rule_text(name: str) -> str:
+    value = world.game_rules[name]
+    return str(value).lower() if isinstance(value, bool) else str(value)
+
+
+async def process_gamerule_command(args: list[str]) -> str:
+    if not args:
+        return ", ".join(f"{name}={game_rule_text(name)}" for name in GAME_RULE_ORDER)
+    alias = re.sub(r"[_\s-]", "", args[0]).lower()
+    name = GAME_RULE_ALIASES.get(alias)
+    if name is None:
+        return "Unknown game rule. Available: " + ", ".join(GAME_RULE_ORDER)
+    if len(args) == 1:
+        return f"{name} = {game_rule_text(name)}"
+    raw_value = args[1].lower()
+    if name in BOOLEAN_GAME_RULES:
+        if raw_value in {"true", "on", "1", "yes"}:
+            value: bool | int = True
+        elif raw_value in {"false", "off", "0", "no"}:
+            value = False
+        else:
+            return f"Usage: /gamerule {name} <true|false>"
+    else:
+        minimum, maximum = (0, 200) if name == "mobCap" else (60, 3600)
+        try:
+            value = int(args[1])
+        except ValueError:
+            return f"Usage: /gamerule {name} <{minimum}-{maximum}>"
+        if value < minimum or value > maximum:
+            return f"Usage: /gamerule {name} <{minimum}-{maximum}>"
+    world.game_rules[name] = value
+    world.dirty = True
+    await broadcast({"type": "game_rules", "gameRules": dict(world.game_rules)})
+    return f"Set {name} to {game_rule_text(name)}."
+
+
 async def process_console_command(line: str) -> str:
     command = line.strip()
     if not command:
@@ -1220,6 +1318,8 @@ async def process_console_command(line: str) -> str:
     if name == "/mobs":
         counts = {dim: sum(1 for mob in world.mobs.values() if mob.dimension == dim) for dim in (0, 1, 2)}
         return f"Mobs: overworld={counts[0]}, timeless_void={counts[1]}, boss={counts[2]}"
+    if name == "/gamerule":
+        return await process_gamerule_command(args)
     if name in {"/gamemode", "/gm"}:
         if len(args) != 2:
             return "Usage: /gamemode <player> <survival|creative|spectator>"
@@ -1228,6 +1328,7 @@ async def process_console_command(line: str) -> str:
         return await process_teleport_command(args)
     if name in {"/help", "help"}:
         return ("Console commands: /op <username>, /deop <username>, /ops, /list, /mobs, "
+                "/gamerule [rule] [value], "
                 "/gamemode <player> <mode>, /tp <player> <targetPlayer>, "
                 "/tp <player> <x> <y> <z> <dimension 1|2|3>, /help")
     return "Unknown console command. Type /help."
@@ -1292,7 +1393,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.6.0 World Selection")
+    print("\nMellorCraft v1.6.1 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -1383,7 +1484,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.6.0 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.6.1 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -1407,7 +1508,7 @@ def main() -> None:
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.6.0 multiplayer server is running")
+    print("\nMellorCraft v1.6.1 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")
@@ -1416,7 +1517,7 @@ def main() -> None:
     print(f"  World seed:    {world.seed}")
     print(f"  Save file:     {save_path.relative_to(SCRIPT_DIR)}")
     print("Join this same world on the host PC using the Host PC address above.")
-    print("Console commands: /op, /deop, /ops, /list, /mobs, /gamemode <player> <mode>, /tp <player> <target|x y z dim>, /help")
+    print("Console commands: /op, /deop, /ops, /list, /mobs, /gamerule [rule] [value], /gamemode <player> <mode>, /tp <player> <target|x y z dim>, /help")
     print("Press Ctrl+C to stop.\n")
     if open_game:
         try:
