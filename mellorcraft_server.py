@@ -37,28 +37,67 @@ except ImportError:  # websockets 10/11 compatibility
 HTTP_PORT = 8000
 WEBSOCKET_PORT = 8765
 DAY_LENGTH_SECONDS = 600.0
-PROTOCOL_VERSION = 5
-SUPPORTED_PROTOCOLS = (5, 4, 3, 2)
+PROTOCOL_VERSION = 6
+SUPPORTED_PROTOCOLS = (6, 5, 4, 3, 2)
 WORLD_HEIGHT = 200
 PORTAL_BLOCK = 31
 RESPAWN_BLOCK = 48
 AIR_BLOCK = 0
 RAW_MEAT_ITEM = 106
-MOB_CAP_PER_DIMENSION = 25
+RAW_PORKCHOP_ITEM = 112
+RAW_BEEF_ITEM = 114
+RAW_MUTTON_ITEM = 116
+RAW_RABBIT_ITEM = 118
+RAW_FOX_ITEM = 120
+RAW_CAMEL_ITEM = 122
+WHITE_WOOL_ITEM = 124
+BLACK_WOOL_ITEM = 125
+GRAY_WOOL_ITEM = 126
+BROWN_WOOL_ITEM = 127
+RAW_GOAT_ITEM = 128
+COOKED_GOAT_ITEM = 129
+LIGHT_GRAY_WOOL_ITEM = 130
+PINK_WOOL_ITEM = 131
+MOB_CAP_PER_DIMENSION = 30
 MAX_INVENTORY_SLOTS = 30
 MAX_STACK_SIZE = 100
 ALLOWED_SKINS = {"steve", "alex", "mellorite", "ember", "frost", "forest"}
 SWORD_DAMAGE = {202: 4.0, 212: 5.0, 222: 6.0, 232: 5.0, 242: 8.0, 252: 10.0}
 MOB_DEFINITIONS: dict[str, dict[str, Any]] = {
-    "PIG": {"health": 10.0, "damage": 0.0, "hostile": False, "dropMeat": True},
-    "COW": {"health": 10.0, "damage": 0.0, "hostile": False, "dropMeat": True},
-    "CAMEL": {"health": 20.0, "damage": 0.0, "hostile": False, "dropMeat": True},
-    "BEAR": {"health": 30.0, "damage": 3.0, "hostile": True, "dropMeat": True},
-    "ZOMBIE": {"health": 20.0, "damage": 1.0, "hostile": True, "dropMeat": False},
-    "SKELETON": {"health": 20.0, "damage": 1.0, "hostile": True, "dropMeat": False},
-    "RED_ALT_ZOMBIE": {"health": 40.0, "damage": 3.0, "hostile": True, "dropMeat": False},
-    "MELLOR_BOSS": {"health": 200.0, "damage": 5.0, "hostile": True, "dropMeat": False},
+    "PIG": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "COW": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "CAMEL": {"health": 20.0, "damage": 0.0, "hostile": False},
+    "BEAR": {"health": 30.0, "damage": 3.0, "hostile": True},
+    "SHEEP_WHITE": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_BLACK": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_GRAY": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_LIGHT_GRAY": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_BROWN": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_PINK": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "GOAT": {"health": 12.0, "damage": 0.0, "hostile": False},
+    "RABBIT": {"health": 6.0, "damage": 0.0, "hostile": False},
+    "FOX": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SPIDER": {"health": 16.0, "damage": 1.5, "hostile": True},
+    "ZOMBIE": {"health": 20.0, "damage": 1.0, "hostile": True},
+    "SKELETON": {"health": 20.0, "damage": 1.0, "hostile": True},
+    "RED_ALT_ZOMBIE": {"health": 40.0, "damage": 3.0, "hostile": True},
+    "MELLOR_BOSS": {"health": 200.0, "damage": 5.0, "hostile": True},
 }
+MOB_LOOT: dict[str, list[tuple[int, int, int]]] = {
+    "PIG": [(RAW_PORKCHOP_ITEM, 1, 3)], "COW": [(RAW_BEEF_ITEM, 1, 3)],
+    "CAMEL": [(RAW_CAMEL_ITEM, 1, 2)], "GOAT": [(RAW_GOAT_ITEM, 1, 2)],
+    "RABBIT": [(RAW_RABBIT_ITEM, 1, 2)], "FOX": [(RAW_FOX_ITEM, 1, 2)],
+    "BEAR": [(RAW_MEAT_ITEM, 1, 2)],
+    "SHEEP_WHITE": [(RAW_MUTTON_ITEM, 1, 2), (WHITE_WOOL_ITEM, 1, 1)],
+    "SHEEP_BLACK": [(RAW_MUTTON_ITEM, 1, 2), (BLACK_WOOL_ITEM, 1, 1)],
+    "SHEEP_GRAY": [(RAW_MUTTON_ITEM, 1, 2), (GRAY_WOOL_ITEM, 1, 1)],
+    "SHEEP_LIGHT_GRAY": [(RAW_MUTTON_ITEM, 1, 2), (LIGHT_GRAY_WOOL_ITEM, 1, 1)],
+    "SHEEP_BROWN": [(RAW_MUTTON_ITEM, 1, 2), (BROWN_WOOL_ITEM, 1, 1)],
+    "SHEEP_PINK": [(RAW_MUTTON_ITEM, 1, 2), (PINK_WOOL_ITEM, 1, 1)],
+}
+FURNACE_RECIPES = {15: 101, 16: 102, 6: 24, 2: 25, 112: 113, 114: 115, 116: 117, 118: 119, 120: 121, 122: 123, 128: 129}
+FURNACE_FUEL_SECONDS = {100: 80.0, 18: 800.0, 4: 15.0, 10: 15.0, 50: 15.0, 52: 15.0, 54: 15.0, 56: 15.0, 58: 15.0, 60: 15.0, 104: 5.0}
+DIFFICULTY_DAMAGE_SCALE = {"peaceful": 0.0, "easy": 0.5, "normal": 1.0, "hard": 1.5, "hardcore": 1.5}
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_ -]{1,20}$")
 ENTITY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -67,12 +106,13 @@ LEGACY_SAVE_FILENAME = "mellorcraft_world.json"
 WORLDS_DIRNAME = "worlds"
 DEFAULT_WORLD_NAME = "World"
 WORLD_NAME_PATTERN = re.compile(r"^[A-Za-z0-9 _.-]{1,48}$")
-DEFAULT_GAME_RULES: dict[str, bool | int] = {
+DEFAULT_GAME_RULES: dict[str, bool | int | str] = {
     "doDaylightCycle": True,
     "doWeatherCycle": True,
     "keepInventory": True,
     "doMobSpawning": True,
     "pvp": True,
+    "difficulty": "normal",
     "mobCap": MOB_CAP_PER_DIMENSION,
     "dayLength": int(DAY_LENGTH_SECONDS),
 }
@@ -82,11 +122,11 @@ GAME_RULE_ALIASES = {
     "daylightcycle": "doDaylightCycle", "dodaylightcycle": "doDaylightCycle",
     "weathercycle": "doWeatherCycle", "doweathercycle": "doWeatherCycle",
     "keepinventory": "keepInventory", "mobspawning": "doMobSpawning", "domobspawning": "doMobSpawning",
-    "pvp": "pvp", "mobcap": "mobCap", "daylength": "dayLength",
+    "pvp": "pvp", "difficulty": "difficulty", "mobcap": "mobCap", "daylength": "dayLength",
 }
 
 
-def normalize_game_rules(value: Any) -> dict[str, bool | int]:
+def normalize_game_rules(value: Any) -> dict[str, bool | int | str]:
     raw = value if isinstance(value, dict) else {}
     normalized = dict(DEFAULT_GAME_RULES)
     for name in BOOLEAN_GAME_RULES:
@@ -100,12 +140,28 @@ def normalize_game_rules(value: Any) -> dict[str, bool | int]:
                     normalized[name] = False
             else:
                 normalized[name] = bool(incoming)
+    difficulty = str(raw.get("difficulty", normalized["difficulty"])).strip().lower()
+    normalized["difficulty"] = difficulty if difficulty in DIFFICULTY_DAMAGE_SCALE else "normal"
     for name, minimum, maximum in (("mobCap", 0, 200), ("dayLength", 60, 3600)):
         try:
             normalized[name] = max(minimum, min(maximum, round(float(raw.get(name, normalized[name])))))
         except (TypeError, ValueError):
             pass
     return normalized
+
+
+def sanitize_furnace_state(value: Any) -> dict[str, Any]:
+    raw = value if isinstance(value, dict) else {}
+    return {
+        "ingredientId": bounded_int(raw.get("ingredientId"), 0, 255), "ingredientCount": bounded_int(raw.get("ingredientCount"), 0, 100),
+        "fuelId": bounded_int(raw.get("fuelId"), 0, 255), "fuelCount": bounded_int(raw.get("fuelCount"), 0, 100),
+        "outputId": bounded_int(raw.get("outputId"), 0, 255), "outputCount": bounded_int(raw.get("outputCount"), 0, 100),
+        "progress": max(0.0, min(10.0, finite_number(raw.get("progress")))), "burnTime": max(0.0, min(1000.0, finite_number(raw.get("burnTime")))),
+    }
+
+
+def difficulty_damage_scale() -> float:
+    return float(DIFFICULTY_DAMAGE_SCALE.get(str(world.game_rules.get("difficulty", "normal")), 1.0)) if "world" in globals() else 1.0
 
 
 @dataclass
@@ -120,6 +176,7 @@ class PlayerState:
     pitch: float = 0.0
     dimension: int = 0
     health: float = 10.0
+    hunger: float = 20.0
     gamemode: str = "survival"
     heldItem: int = 0
     crouching: bool = False
@@ -173,6 +230,7 @@ class MellorCraftWorld:
         self.weather_seed = random.randint(0, 2_147_483_646)
         self.weather_phase = 0.0
         self.game_rules = dict(DEFAULT_GAME_RULES)
+        self.world_gen: dict[str, Any] = {"type": "normal"}
         self.boss_defeated = False
         self.blocks: dict[str, int] = {}
         self.players: dict[str, PlayerState] = {}
@@ -184,6 +242,7 @@ class MellorCraftWorld:
         self.player_profiles: dict[str, dict[str, Any]] = {}
         self.mobs: dict[str, MobState] = {}
         self.items: dict[str, DroppedItemState] = {}
+        self.furnaces: dict[str, dict[str, Any]] = {}
         self.mob_hosts: dict[int, str | None] = {0: None, 1: None, 2: None}
         self.damage_locks: dict[str, float] = {}
         self.teleport_locks: dict[str, float] = {}
@@ -246,7 +305,7 @@ class MellorCraftWorld:
             "id": player.id, "username": player.username, "skin": player.skin,
             "x": player.x, "y": player.y, "z": player.z,
             "yaw": player.yaw, "pitch": player.pitch, "dimension": player.dimension,
-            "health": player.health, "gamemode": player.gamemode,
+            "health": player.health, "hunger": player.hunger, "gamemode": player.gamemode,
             "heldItem": player.heldItem, "crouching": player.crouching, "isOperator": player.isOperator,
         }
 
@@ -256,7 +315,7 @@ class MellorCraftWorld:
             "username": player.username, "skin": player.skin,
             "x": player.x, "y": player.y, "z": player.z,
             "yaw": player.yaw, "pitch": player.pitch, "dimension": player.dimension,
-            "health": player.health, "gamemode": player.gamemode,
+            "health": player.health, "hunger": player.hunger, "gamemode": player.gamemode,
             "heldItem": player.heldItem, "selectedSlot": player.selectedSlot,
             "inventory": [{"id": slot["id"], "count": slot["count"]} for slot in player.inventory],
             "originalSpawn": dict(player.originalSpawn) if isinstance(player.originalSpawn, dict) else None,
@@ -279,6 +338,7 @@ class MellorCraftWorld:
         player.pitch = max(-math.pi / 2, min(math.pi / 2, finite_number(profile.get("pitch"), player.pitch)))
         player.dimension = bounded_int(profile.get("dimension"), 0, 2, player.dimension)
         player.health = max(0.0, min(10.0, finite_number(profile.get("health"), player.health)))
+        player.hunger = max(0.0, min(20.0, finite_number(profile.get("hunger"), player.hunger)))
         saved_mode = str(profile.get("gamemode", "survival"))
         player.gamemode = saved_mode if saved_mode in {"survival", "creative", "spectator"} else "survival"
         if not is_operator and player.gamemode != "survival":
@@ -343,6 +403,8 @@ class MellorCraftWorld:
             self.weather_seed = int(raw.get("weatherSeed", self.weather_seed)) % 2_147_483_647
             self.weather_phase = float(raw.get("weatherPhase", self.weather_phase))
             self.game_rules = normalize_game_rules(raw.get("gameRules"))
+            incoming_world_gen = raw.get("worldGen")
+            self.world_gen = dict(incoming_world_gen) if isinstance(incoming_world_gen, dict) else {"type": "normal"}
             self.boss_defeated = bool(raw.get("bossDefeated", False))
             blocks = raw.get("blocks")
             if not isinstance(blocks, dict):
@@ -400,6 +462,11 @@ class MellorCraftWorld:
                     self.items[item.id] = item
                 except (KeyError, TypeError, ValueError):
                     continue
+            raw_furnaces = raw.get("furnaces", {})
+            if isinstance(raw_furnaces, dict):
+                for key, value in raw_furnaces.items():
+                    if isinstance(value, dict):
+                        self.furnaces[str(key)] = sanitize_furnace_state(value)
             print(f"Loaded world '{self.world_name}': seed={self.seed}, edits={len(self.blocks)}, operators={len(self.operators)}, players={len(self.player_profiles)}, mobs={len(self.mobs)}")
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             print(f"Warning: could not load {self.save_path.name}: {exc}")
@@ -410,11 +477,12 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 8, "version": "1.6.1", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 10, "version": "1.7.0", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
-            "bossDefeated": self.boss_defeated, "gameRules": self.game_rules,
+            "bossDefeated": self.boss_defeated, "gameRules": self.game_rules, "worldGen": self.world_gen,
             "blocks": self.blocks, "operators": sorted(self.operators), "playerProfiles": profiles,
             "mobs": [asdict(mob) for mob in self.mobs.values()], "items": [asdict(item) for item in self.items.values()],
+            "furnaces": self.furnaces,
             "updatedAt": int(time.time() * 1000),
         }
         self.save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -722,8 +790,10 @@ async def remove_mob(
         {"type": "mob_removed", "mobId": mob.id, "reason": reason},
         minimum_protocol=3,
     )
-    if player_kill and definition.get("dropMeat"):
-        await spawn_dropped_item(RAW_MEAT_ITEM, 1, mob.x, mob.y + 0.4, mob.z, mob.dimension)
+    if player_kill:
+        for item_id, minimum, maximum in MOB_LOOT.get(mob.typeKey, []):
+            await spawn_dropped_item(item_id, random.randint(minimum, maximum), mob.x, mob.y + 0.4, mob.z, mob.dimension,
+                                     random.uniform(-0.7, 0.7), 1.0, random.uniform(-0.7, 0.7))
     if mob.typeKey == "MELLOR_BOSS" and player_kill:
         world.boss_defeated = True
         await broadcast({"type": "system", "message": "The Mellor Boss was defeated!"})
@@ -745,6 +815,8 @@ async def handle_mob_spawn(player_id: str, data: dict[str, Any]) -> None:
     requested_id = str(data.get("id", ""))
     mob_id = requested_id if ENTITY_ID_PATTERN.fullmatch(requested_id) and requested_id not in world.mobs else uuid.uuid4().hex
     definition = MOB_DEFINITIONS[type_key]
+    if str(world.game_rules.get("difficulty", "normal")) == "peaceful" and definition.get("hostile") and type_key != "MELLOR_BOSS":
+        return
     mob = MobState(
         id=mob_id, typeKey=type_key,
         x=max(-2_000_000.0, min(2_000_000.0, finite_number(data.get("x")))),
@@ -828,7 +900,7 @@ async def handle_mob_attack_player(player_id: str, data: dict[str, Any]) -> None
     if mob is None or victim is None or world.mob_hosts.get(mob.dimension) != player_id:
         return
     definition = MOB_DEFINITIONS[mob.typeKey]
-    if not definition["hostile"] or victim.dimension != mob.dimension:
+    if not definition["hostile"] or victim.dimension != mob.dimension or difficulty_damage_scale() <= 0:
         return
     now = time.monotonic()
     if now < world.mob_attack_cooldowns.get(mob.id, 0.0):
@@ -837,7 +909,78 @@ async def handle_mob_attack_player(player_id: str, data: dict[str, Any]) -> None
     if math.sqrt(dx * dx + dy * dy + dz * dz) > 2.2:
         return
     world.mob_attack_cooldowns[mob.id] = now + 1.25
-    await damage_player(victim, float(definition["damage"]), definition.get("name", mob.typeKey.replace("_", " ").title()), dx, dz)
+    await damage_player(victim, float(definition["damage"]) * difficulty_damage_scale(), definition.get("name", mob.typeKey.replace("_", " ").title()), dx, dz)
+
+
+async def handle_mob_projectile(player_id: str, data: dict[str, Any]) -> None:
+    projectile = data.get("projectile")
+    if not isinstance(projectile, dict):
+        return
+    mob = world.mobs.get(str(projectile.get("mobId", "")))
+    if mob is None or mob.typeKey != "SKELETON" or world.mob_hosts.get(mob.dimension) != player_id:
+        return
+    clean = {
+        "id": str(projectile.get("id", uuid.uuid4().hex))[:64], "mobId": mob.id, "targetId": str(projectile.get("targetId", ""))[:64],
+        "x": finite_number(projectile.get("x"), mob.x), "y": finite_number(projectile.get("y"), mob.y + 1.3), "z": finite_number(projectile.get("z"), mob.z),
+        "vx": max(-30.0, min(30.0, finite_number(projectile.get("vx")))), "vy": max(-30.0, min(30.0, finite_number(projectile.get("vy")))),
+        "vz": max(-30.0, min(30.0, finite_number(projectile.get("vz")))), "dimension": mob.dimension, "age": 0.0,
+    }
+    await broadcast({"type": "mob_projectile", "projectile": clean}, exclude_id=player_id, minimum_protocol=6)
+
+
+async def handle_mob_projectile_hit(player_id: str, data: dict[str, Any]) -> None:
+    mob = world.mobs.get(str(data.get("mobId", "")))
+    victim = world.players.get(str(data.get("targetId", "")))
+    if mob is None or victim is None or mob.typeKey != "SKELETON" or world.mob_hosts.get(mob.dimension) != player_id:
+        return
+    if victim.dimension != mob.dimension or difficulty_damage_scale() <= 0:
+        return
+    if math.dist((mob.x, mob.y, mob.z), (victim.x, victim.y, victim.z)) > 24.0:
+        return
+    now = time.monotonic()
+    key = f"arrow:{mob.id}"
+    if now < world.mob_attack_cooldowns.get(key, 0.0):
+        return
+    world.mob_attack_cooldowns[key] = now + 0.55
+    definition = MOB_DEFINITIONS[mob.typeKey]
+    await damage_player(victim, float(definition["damage"]) * difficulty_damage_scale(), "Skeleton", victim.x - mob.x, victim.z - mob.z, vertical=2.0)
+
+
+async def handle_furnace_update(player_id: str, data: dict[str, Any]) -> None:
+    if world.client_protocols.get(player_id, 1) < 6:
+        return
+    key = str(data.get("key", ""))[:96]
+    if not re.fullmatch(r"[0-2],-?\d+,-?\d+,-?\d+", key):
+        return
+    world.furnaces[key] = sanitize_furnace_state(data.get("state"))
+    world.dirty = True
+    await broadcast({"type": "furnace_state", "key": key, "state": world.furnaces[key]}, exclude_id=player_id, minimum_protocol=6)
+
+
+def tick_furnaces(elapsed: float) -> None:
+    if elapsed <= 0:
+        return
+    changed = False
+    for state in world.furnaces.values():
+        ingredient_id = int(state.get("ingredientId", 0)); count = int(state.get("ingredientCount", 0)); result = FURNACE_RECIPES.get(ingredient_id)
+        if not result or count <= 0:
+            state["progress"] = 0.0
+            continue
+        if int(state.get("outputCount", 0)) > 0 and int(state.get("outputId", 0)) != result:
+            state["progress"] = 0.0
+            continue
+        burn = float(state.get("burnTime", 0.0))
+        fuel_id = int(state.get("fuelId", 0)); fuel_count = int(state.get("fuelCount", 0))
+        if burn <= 0 and fuel_count > 0 and fuel_id in FURNACE_FUEL_SECONDS:
+            burn = FURNACE_FUEL_SECONDS[fuel_id]; fuel_count -= 1
+            state["fuelCount"] = fuel_count; state["fuelId"] = fuel_id if fuel_count > 0 else 0; changed = True
+        if burn > 0:
+            used = min(elapsed, burn); burn -= used; state["burnTime"] = burn; state["progress"] = float(state.get("progress", 0.0)) + used
+            while state["progress"] >= 10.0 and int(state.get("ingredientCount", 0)) > 0:
+                state["progress"] -= 10.0; state["ingredientCount"] -= 1; state["outputId"] = result; state["outputCount"] = min(100, int(state.get("outputCount", 0)) + 1); changed = True
+                if state["ingredientCount"] <= 0: state["ingredientId"] = 0
+    if changed:
+        world.dirty = True
 
 
 async def handle_drop_item(player_id: str, data: dict[str, Any]) -> None:
@@ -874,6 +1017,7 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         player.pitch = max(-math.pi / 2, min(math.pi / 2, finite_number(data.get("pitch"), player.pitch)))
         if time.monotonic() >= world.damage_locks.get(player.id, 0.0):
             player.health = max(0.0, min(10.0, finite_number(data.get("health"), player.health)))
+        player.hunger = 20.0 if str(world.game_rules.get("difficulty", "normal")) == "peaceful" else max(0.0, min(20.0, finite_number(data.get("hunger"), player.hunger)))
         player.heldItem = bounded_int(data.get("heldItem"), 0, 255)
         player.crouching = bool(data.get("crouching", False))
         if world.client_protocols.get(player_id, 1) >= 4:
@@ -910,6 +1054,12 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             requested_reason = str(data.get("reason", "despawn"))
             reason = requested_reason if requested_reason in {"despawn", "void", "admin"} else "despawn"
             await remove_mob(mob.id, reason=reason)
+    elif message_type == "mob_projectile" and world.client_protocols.get(player_id, 1) >= 6:
+        await handle_mob_projectile(player_id, data)
+    elif message_type == "mob_projectile_hit" and world.client_protocols.get(player_id, 1) >= 6:
+        await handle_mob_projectile_hit(player_id, data)
+    elif message_type == "furnace_update" and world.client_protocols.get(player_id, 1) >= 6:
+        await handle_furnace_update(player_id, data)
     elif message_type == "drop_item" and world.client_protocols.get(player_id, 1) >= 3:
         await handle_drop_item(player_id, data)
     elif message_type == "request_boss_spawn" and world.client_protocols.get(player_id, 1) >= 3:
@@ -1020,13 +1170,14 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
             "type": "welcome", "protocol": PROTOCOL_VERSION, "negotiatedProtocol": client_protocol,
             "clientId": player_id, "username": username, "seed": world.seed, "worldName": world.world_name,
             "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
-            "dayLength": world.game_rules["dayLength"], "gameRules": world.game_rules,
+            "dayLength": world.game_rules["dayLength"], "gameRules": world.game_rules, "worldGen": world.world_gen,
             "bossDefeated": world.boss_defeated,
             "isOperator": player.isOperator, "blocks": world.block_snapshot(),
             "playerState": world.player_profile(player) if restored and client_protocol >= 4 else None,
             "players": world.player_snapshot(),
             "mobs": world.mob_snapshot() if client_protocol >= 3 else [],
             "items": world.item_snapshot() if client_protocol >= 3 else [],
+            "furnaces": world.furnaces if client_protocol >= 6 else {},
             "mobHosts": {str(k): v for k, v in world.mob_hosts.items()} if client_protocol >= 3 else {},
         })
         await broadcast({"type": "player_joined", "player": world.public_player_state(player)}, exclude_id=player_id)
@@ -1073,14 +1224,19 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
 async def world_broadcast_loop() -> None:
     while True:
         await asyncio.sleep(0.1)
-        world.tick()
+        elapsed = world.tick()
+        tick_furnaces(elapsed)
+        if str(world.game_rules.get("difficulty", "normal")) == "peaceful":
+            for mob_id, mob in list(world.mobs.items()):
+                if MOB_DEFINITIONS.get(mob.typeKey, {}).get("hostile") and mob.typeKey != "MELLOR_BOSS":
+                    world.mobs.pop(mob_id, None); world.dirty = True
         hosts_changed = world.recompute_mob_hosts()
         await broadcast({
             "type": "world_state", "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
-            "gameRules": world.game_rules,
+            "gameRules": world.game_rules, "worldGen": world.world_gen,
             "bossDefeated": world.boss_defeated,
             "players": world.player_snapshot(),
-            "mobs": world.mob_snapshot(), "items": world.item_snapshot(),
+            "mobs": world.mob_snapshot(), "items": world.item_snapshot(), "furnaces": world.furnaces,
             "mobHosts": {str(k): v for k, v in world.mob_hosts.items()},
         })
         if hosts_changed:
@@ -1274,11 +1430,15 @@ async def process_gamerule_command(args: list[str]) -> str:
     raw_value = args[1].lower()
     if name in BOOLEAN_GAME_RULES:
         if raw_value in {"true", "on", "1", "yes"}:
-            value: bool | int = True
+            value: bool | int | str = True
         elif raw_value in {"false", "off", "0", "no"}:
             value = False
         else:
             return f"Usage: /gamerule {name} <true|false>"
+    elif name == "difficulty":
+        if raw_value not in DIFFICULTY_DAMAGE_SCALE:
+            return "Usage: /gamerule difficulty <peaceful|easy|normal|hard|hardcore>"
+        value = raw_value
     else:
         minimum, maximum = (0, 200) if name == "mobCap" else (60, 3600)
         try:
@@ -1288,6 +1448,9 @@ async def process_gamerule_command(args: list[str]) -> str:
         if value < minimum or value > maximum:
             return f"Usage: /gamerule {name} <{minimum}-{maximum}>"
     world.game_rules[name] = value
+    if name == "difficulty" and value == "peaceful":
+        for player in world.players.values():
+            player.hunger = 20.0
     world.dirty = True
     await broadcast({"type": "game_rules", "gameRules": dict(world.game_rules)})
     return f"Set {name} to {game_rule_text(name)}."
@@ -1393,7 +1556,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.6.1 World Selection")
+    print("\nMellorCraft v1.7.0 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -1484,7 +1647,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.6.1 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.7.0 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -1508,7 +1671,7 @@ def main() -> None:
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.6.1 multiplayer server is running")
+    print("\nMellorCraft v1.7.0 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")

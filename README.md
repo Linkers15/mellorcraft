@@ -1,10 +1,44 @@
-MellorCraft v1.6.1
+MellorCraft v1.7.0
 =========================================================
 
 Client variants
 ---------------
 - `mellorcraft.html` is the standard client and loads its MP3 soundtrack files from the same directory.
-- `mellorcraft_embedded_audio.html` is the optional self-contained client. It embeds all 12 MP3 tracks as Base64 `data:audio/mpeg` URLs, so no separate soundtrack files are required. This variant is approximately 100 MB because Base64 increases binary size.
+- `mellorcraft_embedded_audio.html` is the optional self-contained client when present in a release bundle.
+
+
+v1.7.0 world generator pass
+---------------------------
+- **Create World** now offers **Normal**, **Customized**, and **Flat** world types. Existing worlds default to Normal and keep their current terrain generator.
+- Customized worlds can independently enable/disable caves and ravines, set mineshaft concentration, toggle individual Overworld biomes, and assign each enabled biome a relative concentration weight. Customized biome regions use broad seeded cells with blended terrain heights so high/low terrain transitions remain gradual.
+- Customized and Flat worlds can independently toggle Mansions, Outposts, Cabins, and Dungeons and set a 0–100% spawn chance for each structure type.
+- Flat worlds provide an editable bottom-to-top layer stack. Each layer can use any block type and a custom thickness; the total generated height is limited to 199 blocks. Flat worlds also choose one biome and can optionally generate caves, ravines, mineshafts, vegetation, and structures.
+- World-generator settings are saved in exported browser worlds as world format 10 and are sent to LAN guests. The dedicated server preserves and sends `worldGen` data when it is present in a world save, while older saves remain Normal worlds.
+- Cabins, Mansions, and Outposts now choose their construction wood from the biome at the structure center: Savanna uses Acacia, Taiga uses Spruce, Jungle uses Jungle wood, and all other biomes use Oak. Mountain cabins therefore use Oak as the requested fallback.
+
+v1.7.0 finishing pass
+---------------------
+- Removed the experimental block/mob texture renderer from active use. MellorCraft is back on the stable color-based block renderer; mobs keep their species-specific geometry without texture sampling.
+- Leaving any active world now returns directly to the main menu after the save/disconnect completes instead of returning to the initial Start page. LAN-host loss and dedicated-server disconnects use the same main-menu return path.
+- Furnaces continue cooking when their menu is closed. Press **E** or **Escape**, tap/click **Close**, or leave the furnace screen while smelting continues. A furnace contributes warm point light while it is actively cooking a valid ingredient.
+- Added four tree families: **Oak**, **Acacia**, **Spruce**, and **Jungle**. Existing legacy Wood/Leaves/Planks IDs are treated as Oak so older saves remain compatible.
+- Natural trees now use Oak in plains/forests, Acacia in savannas, Spruce in taigas, and Jungle wood in jungles. Each family has matching logs, leaves, planks, and a placeable non-cubic sapling model.
+- Each log crafts into four matching planks. Existing recipes that require planks accept any of the four plank families. All logs/planks can be used as furnace fuel.
+- Mining any leaf block now uses the requested drop table: **10% apple**, **60% nothing**, **20% matching sapling**, **8% one stick**, and **2% two sticks**. Apples restore 4 hunger points.
+- The lightweight classic weather model remains active: 0–200 pressure directly controls cloud/rain/fog bands, cloud base remains Y=200, and cloud tiles drift with the pressure map while fading in/out.
+
+
+v1.7.0 update
+-------------
+- Expanded the Overworld mob roster with sheep (four wool colors), goats, rabbits, foxes, and spiders. Pigs, cows, camels, bears, and all new animals now have visible facial details.
+- Natural spawning is biome-aware. The default mob cap is now 30; passive mobs populate the surface while hostile mobs favor caves during the day and can also spawn on the surface at night.
+- Zombies and skeletons burn in daylight only with direct sky exposure, so cave mobs survive daytime. Skeletons now use ranged arrow attacks.
+- Added Peaceful, Easy, Normal, Hard, and Hardcore world difficulty. Hostile damage scales with difficulty, Peaceful removes/prevents normal hostile mobs, and Hardcore disables respawning after death.
+- Added a 20-point hunger system displayed as ten food pips beside health on desktop and below health on mobile. Sprinting and repeated jumping increase hunger drain; sufficient hunger slowly regenerates fractional hearts.
+- Sprint with a double-tap of W on desktop or the new Sprint control on mobile.
+- Mob food drops are species-specific: porkchop, beef, mutton, rabbit, fox, and camel meat, with the requested random drop counts and raw/cooked hunger values. Sheep also drop one wool item matching their color.
+- Removed direct smelting recipes from the Crafting menu. A Furnace is now crafted from eight cobblestone, opened by right-clicking it (or the mobile Place action), and cooks one item every 10 seconds using an ingredient and fuel slot. Ores, glass/brick inputs, and raw meats are furnace recipes.
+- Browser world format 10 (dedicated servers preserve the same generator field) and multiplayer protocol 6 synchronize the v1.7.0 survival systems while retaining compatibility with older v1.6.x world data.
 
 v1.6.1 update
 -------------

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MellorCraft v1.5.0 Seed Map</title>
+<title>MellorCraft v1.7.0 Seed Map</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#15171b;color:#eee;font-family:Arial,sans-serif}
@@ -13,6 +13,8 @@ button{cursor:pointer;background:#285b38}
 button:hover{filter:brightness(1.15)}
 label{font-size:13px;color:#ccc}
 #map{position:absolute;top:58px;left:0;width:100%;height:calc(100% - 58px);cursor:grab;image-rendering:pixelated}
+#weatherPlay.active{background:#8a5b22}
+.weather-readout{font-size:11px;color:#bcd7f4;white-space:nowrap}
 #map.dragging{cursor:grabbing}
 #tooltip{position:fixed;z-index:8;display:none;pointer-events:none;background:#111e;border:1px solid #aaa;padding:8px 10px;border-radius:5px;font-size:12px;line-height:1.45;max-width:270px}
 #legend{position:fixed;z-index:6;right:10px;bottom:10px;background:#111d;border:1px solid #777;border-radius:7px;padding:9px;font-size:11px;max-height:45vh;overflow:auto}
@@ -34,7 +36,12 @@ label{font-size:13px;color:#ccc}
   </select>
   <label><input type="checkbox" id="structures" checked> Structures</label>
   <label><input type="checkbox" id="grid" checked> Chunk grid</label>
+  <label><input type="checkbox" id="weather" checked> Weather simulation</label>
+  <button id="weatherPlay">▶ Play Weather</button>
+  <select id="weatherSpeed" title="Weather simulation speed"><option value="1">1×</option><option value="4">4×</option><option value="12">12×</option></select>
+  <button id="weatherReset">Reset Weather</button>
   <button id="home">Center 0,0</button>
+  <span id="weatherReadout" class="weather-readout"></span>
   <span id="status">Drag to pan • wheel to zoom</span>
 </div>
 <canvas id="map"></canvas>
@@ -148,6 +155,8 @@ const MOUNTAIN_XZ_SCALE=Math.SQRT1_2; // v1.4.1: half mountain land area, unchan
 const ALT_COLORS=['#9a3434','#344f9a','#397a47'];
 const WATER_LEVEL=32;
 let WORLD_SEED=12345;
+let weatherSeed=1,weatherPhase=0,weatherPlaying=false,weatherAnimationLast=0,weatherLastRender=0;
+const weatherCloudFade=new Map();
 let noise,biomeNoise,treeNoise,caveNoise,oreNoise,ravineNoise,structNoise,continentalNoise,lavaNoise;
 const mountainRegionCache=new Map();
 const mountainInfoCache=new Map();
@@ -160,7 +169,7 @@ function setSeed(value){
   treeNoise=new SimplexNoise(WORLD_SEED+2000);caveNoise=new SimplexNoise(WORLD_SEED+3000);
   oreNoise=new SimplexNoise(WORLD_SEED+4000);ravineNoise=new SimplexNoise(WORLD_SEED+5000);
   structNoise=new SimplexNoise(WORLD_SEED+6000);continentalNoise=new SimplexNoise(WORLD_SEED+7000);
-  lavaNoise=new SimplexNoise(WORLD_SEED+8000);mountainRegionCache.clear();mountainInfoCache.clear();
+  lavaNoise=new SimplexNoise(WORLD_SEED+8000);mountainRegionCache.clear();mountainInfoCache.clear();weatherSeed=weatherSeedForWorldSeed(WORLD_SEED);weatherPhase=0;weatherCloudFade.clear();
 }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
@@ -170,6 +179,22 @@ function smoothstep(edge0, edge1, value) {
         }
 
 function mix(a, b, amount) { return a + (b - a) * amount; }
+
+// Classic pressure-driven weather test model, matching the lightweight game client.
+const WEATHER_PRESSURE_MAX=200;
+function weatherSeedForWorldSeed(seed){let n=(Math.trunc(Number(seed)||0)^0x6d2b79f5)|0;n=Math.imul(n^(n>>>15),1|n);n^=n+Math.imul(n^(n>>>7),61|n);return ((n^(n>>>14))>>>0)%2147483647||1}
+function weatherHash(x,z){let n=(x*374761393+z*668265263+weatherSeed*69069)|0;n=(n^(n>>>13))*1274126177;return ((n^(n>>>16))>>>0)/4294967295}
+function weatherSmooth(t){return t*t*(3-2*t)}
+function weatherNoise(x,z){const ix=Math.floor(x),iz=Math.floor(z),fx=weatherSmooth(x-ix),fz=weatherSmooth(z-iz);const a=weatherHash(ix,iz),b=weatherHash(ix+1,iz),c=weatherHash(ix,iz+1),d=weatherHash(ix+1,iz+1);return (a+(b-a)*fx)+((c+(d-c)*fx)-(a+(b-a)*fx))*fz}
+function weatherPressureAtPhase(x,z,phase=weatherPhase){return Math.round(weatherNoise((x-phase*7)/360,(z-phase*2.6)/360)*WEATHER_PRESSURE_MAX)}
+function weatherPressureAt(x,z){return weatherPressureAtPhase(x,z,weatherPhase)}
+function weatherCloudFromPressure(p){return p>100?0:clamp(.35+(100-p)/50*.65,0,1)}
+function weatherRainFromPressure(p){if(p>=50)return 0;if(p>=30)return .18+(50-p)/20*.27;if(p>=15)return .45+(30-p)/15*.30;return .75+(15-p)/15*.25}
+function weatherFogFromPressure(p){return p>=50?0:clamp((50-p)/50,0,1)}
+function weatherCellAt(x,z,phase=weatherPhase){const pressure=weatherPressureAtPhase(x,z,phase);return{pressure,cloud:weatherCloudFromPressure(pressure),rain:weatherRainFromPressure(pressure),fog:weatherFogFromPressure(pressure)}}
+function weatherLabel(w){const p=w.pressure;return p>100?'Clear':p>=50?'Overcast':p>=30?'Light Rain':p>=15?'Moderate Rain':'Heavy Rain'}
+function pressureColor(p,alpha=.34){const t=clamp(p/WEATHER_PRESSURE_MAX,0,1),h=220-t*210,l=42+t*12;return`hsla(${h},78%,${l}%,${alpha})`}
+function seedCloudFadeAt(x,z,target){const key=`${Math.floor(x/32)},${Math.floor(z/32)}`,now=performance.now()/1000;let state=weatherCloudFade.get(key);if(!state){state={opacity:0,last:now,seen:now};weatherCloudFade.set(key,state)}const dt=Math.max(0,Math.min(1,now-state.last));state.last=now;state.seen=now;const rate=target>state.opacity?1.15:.32,ease=1-Math.exp(-dt*rate);state.opacity+=(target-state.opacity)*ease;if(state.opacity<.001&&target<=0)state.opacity=0;return state.opacity}
 
 function getClimate(x, z) {
             const scale = 0.0008;
@@ -464,7 +489,7 @@ function getAltStructuresInBounds(minX,minZ,maxX,maxZ){
 
 const canvas=document.getElementById('map'),ctx=canvas.getContext('2d');
 let centerX=0,centerZ=0,scale=1.8,drag=false,lastX=0,lastY=0,lastStructures=[];
-function resize(){canvas.width=innerWidth;canvas.height=Math.max(1,innerHeight-58);render()}
+function resize(){const th=document.getElementById('toolbar').offsetHeight||58;canvas.style.top=th+'px';canvas.style.height=`calc(100% - ${th}px)`;canvas.width=innerWidth;canvas.height=Math.max(1,innerHeight-th);render()}
 addEventListener('resize',resize);
 function worldFromScreen(sx,sy){return {x:centerX+(sx-canvas.width/2)/scale,z:centerZ+(sy-canvas.height/2)/scale}}
 function screenFromWorld(x,z){return {x:(x-centerX)*scale+canvas.width/2,y:(z-centerZ)*scale+canvas.height/2}}
@@ -478,6 +503,16 @@ function render(){
     else if(dim===1)color=ALT_COLORS[getAltBiome(Math.floor(w.x),Math.floor(w.z))];
     else color=Math.hypot(w.x,w.z)<=35?'#56176a':'#08030d';
     ctx.fillStyle=color;ctx.fillRect(sx,sy,cellPx+1,cellPx+1);
+  }
+  if(dim===0&&document.getElementById('weather').checked){
+    const weatherPx=18;
+    for(let sy=0;sy<canvas.height;sy+=weatherPx)for(let sx=0;sx<canvas.width;sx+=weatherPx){
+      const w=worldFromScreen(sx+weatherPx/2,sy+weatherPx/2),cell=weatherCellAt(w.x,w.z);
+      ctx.fillStyle=pressureColor(cell.pressure,.24);ctx.fillRect(sx,sy,weatherPx+1,weatherPx+1);
+      const cloudAlpha=Math.min(.52,seedCloudFadeAt(w.x,w.z,cell.cloud)*.52);if(cloudAlpha>.002){ctx.fillStyle=`rgba(225,230,235,${cloudAlpha})`;ctx.fillRect(sx,sy,weatherPx+1,weatherPx+1)}
+      if(cell.fog>.002){ctx.fillStyle=`rgba(170,190,210,${Math.min(.28,cell.fog*.28)})`;ctx.fillRect(sx,sy,weatherPx+1,weatherPx+1)}
+      if(cell.rain>.002){ctx.fillStyle=`rgba(50,125,220,${Math.min(.48,cell.rain*.48)})`;ctx.fillRect(sx,sy,weatherPx+1,weatherPx+1)}
+    }
   }
   const bounds={minX:centerX-canvas.width/(2*scale),maxX:centerX+canvas.width/(2*scale),minZ:centerZ-canvas.height/(2*scale),maxZ:centerZ+canvas.height/(2*scale)};
   if(document.getElementById('grid').checked&&scale>=.65){
@@ -498,7 +533,7 @@ function render(){
     }
   }
   ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(canvas.width/2-8,canvas.height/2);ctx.lineTo(canvas.width/2+8,canvas.height/2);ctx.moveTo(canvas.width/2,canvas.height/2-8);ctx.lineTo(canvas.width/2,canvas.height/2+8);ctx.stroke();
-  document.getElementById('status').textContent=`Seed ${WORLD_SEED} • Center ${Math.round(centerX)}, ${Math.round(centerZ)} • ${scale.toFixed(2)} px/block`;
+  const centerWeather=weatherCellAt(centerX,centerZ);document.getElementById('weatherReadout').textContent=dim===0&&document.getElementById('weather').checked?`${weatherLabel(centerWeather)} • P ${centerWeather.pressure}/200 • Cloud ${Math.round(centerWeather.cloud*100)}% • Rain ${Math.round(centerWeather.rain*100)}% • Fog ${Math.round(centerWeather.fog*100)}%`:'';document.getElementById('status').textContent=`Seed ${WORLD_SEED} • Center ${Math.round(centerX)}, ${Math.round(centerZ)} • ${scale.toFixed(2)} px/block • Weather t=${weatherPhase.toFixed(1)}`;
 }
 canvas.addEventListener('mousedown',e=>{drag=true;lastX=e.clientX;lastY=e.clientY;canvas.classList.add('dragging')});
 addEventListener('mouseup',()=>{drag=false;canvas.classList.remove('dragging')});
@@ -506,7 +541,7 @@ addEventListener('mousemove',e=>{
   if(drag){centerX-=(e.clientX-lastX)/scale;centerZ-=(e.clientY-lastY)/scale;lastX=e.clientX;lastY=e.clientY;render()}
   const rect=canvas.getBoundingClientRect(),w=worldFromScreen(e.clientX-rect.left,e.clientY-rect.top),x=Math.floor(w.x),z=Math.floor(w.z),dim=Number(document.getElementById('dimension').value);
   let lines=[`X: ${x} &nbsp; Z: ${z}`];
-  if(dim===0){const b=getBiome(x,z);lines.push(`Biome: ${BIOME_NAMES[b]}`,`Surface Y: ${getHeight(x,z,b)}`)}
+  if(dim===0){const b=getBiome(x,z);lines.push(`Biome: ${BIOME_NAMES[b]}`,`Surface Y: ${getHeight(x,z,b)}`);if(document.getElementById('weather').checked){const wx=weatherCellAt(x,z);lines.push(`Weather: ${weatherLabel(wx)}`,`Pressure: ${wx.pressure}/200`,`Cloud: ${Math.round(wx.cloud*100)}% • Rain: ${Math.round(wx.rain*100)}% • Fog: ${Math.round(wx.fog*100)}%`)}}
   else if(dim===1)lines.push(`Biome: ${ALT_NAMES[getAltBiome(x,z)]}`,`Alt Dimension height: 50 blocks (Y 0-49)`);
   else lines.push(Math.hypot(x,z)<=35?'Inside boss island':'Void');
   let near=null,dist=Infinity;for(const s of lastStructures){const d=Math.hypot(s.cx-x,s.cz-z);if(d<dist){dist=d;near=s}}
@@ -521,15 +556,19 @@ canvas.addEventListener('mouseleave',()=>document.getElementById('tooltip').styl
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect(),before=worldFromScreen(e.clientX-r.left,e.clientY-r.top);scale=clamp(scale*(e.deltaY<0?1.22:.82),.15,12);const after=worldFromScreen(e.clientX-r.left,e.clientY-r.top);centerX+=before.x-after.x;centerZ+=before.z-after.z;render()},{passive:false});
 document.getElementById('apply').onclick=()=>{setSeed(document.getElementById('seed').value);centerX=0;centerZ=0;render()};
 document.getElementById('home').onclick=()=>{centerX=0;centerZ=0;render()};
-document.getElementById('dimension').onchange=render;document.getElementById('structures').onchange=render;document.getElementById('grid').onchange=render;
+document.getElementById('dimension').onchange=()=>{buildLegend();render()};document.getElementById('structures').onchange=render;document.getElementById('grid').onchange=render;document.getElementById('weather').onchange=render;
+document.getElementById('weatherPlay').onclick=()=>{weatherPlaying=!weatherPlaying;const b=document.getElementById('weatherPlay');b.textContent=weatherPlaying?'⏸ Pause Weather':'▶ Play Weather';b.classList.toggle('active',weatherPlaying);weatherAnimationLast=performance.now()};
+document.getElementById('weatherReset').onclick=()=>{weatherPhase=0;weatherCloudFade.clear();weatherAnimationLast=performance.now();render()};
+document.getElementById('weatherSpeed').onchange=()=>{weatherAnimationLast=performance.now()};
 document.getElementById('seed').addEventListener('keypress',e=>{if(e.key==='Enter')document.getElementById('apply').click()});
+function weatherAnimationFrame(now){if(weatherPlaying){const dt=Math.min(.1,Math.max(0,(now-weatherAnimationLast)/1000)),speed=Number(document.getElementById('weatherSpeed').value)||1;weatherPhase+=dt*.35*speed;if(now-weatherLastRender>=125){weatherLastRender=now;render()}}weatherAnimationLast=now;requestAnimationFrame(weatherAnimationFrame)}
+requestAnimationFrame(weatherAnimationFrame);
 function buildLegend(){
  const dim=Number(document.getElementById('dimension').value),el=document.getElementById('legend');
  const active=[BIOMES.PLAINS,BIOMES.DESERT_BARREN,BIOMES.DESERT_CACTUS,BIOMES.FOREST,BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH,BIOMES.TAIGA,BIOMES.STONY_PEAKS,BIOMES.BADLANDS,BIOMES.JUNGLE,BIOMES.SAVANNA];
  const rows=dim===0?active.map(i=>[BIOME_NAMES[i],BIOME_COLORS[i]]):dim===1?ALT_NAMES.map((n,i)=>[n,ALT_COLORS[i]]):[['Boss island','#56176a'],['Void','#08030d']];
- el.innerHTML='<strong>Legend</strong>'+rows.map(r=>`<div class="legend-row"><span class="swatch" style="background:${r[1]}"></span>${r[0]}</div>`).join('')+'<hr><div>M Mansion • O Outpost • C Cabin<br>A Alt Maze • S Boss Shrine</div>';
+ el.innerHTML='<strong>Legend</strong>'+rows.map(r=>`<div class="legend-row"><span class="swatch" style="background:${r[1]}"></span>${r[0]}</div>`).join('')+'<hr><div>M Mansion • O Outpost • C Cabin<br>A Alt Maze • S Boss Shrine</div>'+(dim===0?'<hr><div><strong>Weather</strong><br><span style="color:#78a8ff">Low pressure</span> → <span style="color:#ff9a66">high pressure</span><br>Clouds fade in below pressure 100<br><span style="color:#8fc8ff">Blue</span> = rain/fog intensity<br>Overcast 50–100 • Light rain 30–50 • Moderate 15–30 • Heavy &lt;15</div>':'');
 }
-document.getElementById('dimension').addEventListener('change',buildLegend);
 setSeed('12345');buildLegend();resize();
 </script>
 </body>
