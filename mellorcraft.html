@@ -876,6 +876,7 @@
     <div id="deathScreen">
         <h1>You Died!</h1>
         <button class="menuBtn greenBtn" id="respawnBtn">Respawn</button>
+        <button class="menuBtn redBtn" id="hardcoreMainMenuBtn" style="display:none">Main Menu</button>
     </div>
     <canvas id="weatherCanvas" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:45;display:none"></canvas>
 
@@ -1341,6 +1342,7 @@
         let singleplayerNetworkMode = 'local'; // local | lan-host | lan-guest | dedicated
         let singleplayerLanProfiles = {};
         let singleplayerOperators = new Set();
+        let singleplayerBannedPlayers = new Set();
         let relaySocket = null;
         let relayWorldId = '';
         let relayGuestId = '';
@@ -1588,6 +1590,7 @@
             integratedSend(victim.id,{type:'player_hit',health:victim.health,attacker:sourceName,
                 knockback:{x:dx/horizontal*8,z:dz/horizontal*8,vertical,duration:0.35}});
             integratedBroadcast({type:'player_damaged',playerId:victim.id,health:victim.health});
+            if(victim.health<=0&&gameRules.difficulty==='hardcore'&&victim.id!==localClientId) integratedHardcoreBan(victim);
             singleplayerDirty=true;
         }
 
@@ -1642,6 +1645,51 @@
             return [...integratedPlayers.values()].find(p=>String(p.username||'').toLowerCase()===wanted)||null;
         }
 
+        function integratedDisconnectGuest(state,message='You were banned from this world.') {
+            if(!state||state.id===localClientId)return false;
+            integratedRememberProfile(state);
+            integratedSend(state.id,{type:'banned',message:String(message)});
+            integratedPlayers.delete(state.id);
+            integratedBroadcast({type:'player_left',playerId:state.id},state.id);
+            integratedRecomputeMobHosts();
+            if(singleplayerNetworkMode==='lan-host') relaySend({type:'host_disconnect',guestId:state.id,reason:String(message)});
+            singleplayerDirty=true;
+            return true;
+        }
+
+        function integratedBanUsername(username,requesterId,reason='Banned by an operator.') {
+            const cleaned=String(username||'').trim();
+            if(!cleaned){integratedSend(requesterId,{type:'error',message:'Usage: /ban <username>'});return;}
+            const target=integratedFindPlayerByUsername(cleaned);
+            if(target?.id===localClientId){integratedSend(requesterId,{type:'error',message:'The browser world host cannot be banned.'});return;}
+            const canonical=(target?.username||cleaned).slice(0,20),key=canonical.toLowerCase();
+            singleplayerBannedPlayers.add(key); singleplayerOperators.delete(key); singleplayerDirty=true;
+            if(target) integratedDisconnectGuest(target,reason);
+            integratedSend(requesterId,{type:'system',message:`Banned ${canonical}.`});
+        }
+
+        function integratedHardcoreBan(state) {
+            if(!state||state.id===localClientId)return;
+            const key=String(state.username||'').trim().toLowerCase();
+            if(key)singleplayerBannedPlayers.add(key);
+            integratedDisconnectGuest(state,'You died in Hardcore and are banned from this world.');
+        }
+
+        function integratedKillUsername(username,requesterId) {
+            const cleaned=String(username||'').trim();
+            if(!cleaned){integratedSend(requesterId,{type:'error',message:'Usage: /kill <username>'});return;}
+            const target=integratedFindPlayerByUsername(cleaned);
+            if(!target){integratedSend(requesterId,{type:'error',message:`Player not found: ${cleaned}`});return;}
+            if(target.health<=0){integratedSend(requesterId,{type:'system',message:`${target.username} is already dead.`});return;}
+            target.health=0;
+            if(!gameRules.keepInventory){target.inventory=Array.from({length:30},()=>({id:0,count:0}));target.heldItem=0;target.selectedSlot=0;integratedSend(target.id,{type:'inventory_reset',message:'Your inventory was cleared on death.'});}
+            integratedSend(target.id,{type:'player_hit',health:0,attacker:'Killed by an operator',knockback:{x:0,z:0,vertical:0,duration:0.1}});
+            integratedBroadcast({type:'player_damaged',playerId:target.id,health:0});
+            if(gameRules.difficulty==='hardcore'&&target.id!==localClientId) integratedHardcoreBan(target);
+            integratedSend(requesterId,{type:'system',message:`Killed ${target.username}.`});
+            singleplayerDirty=true;
+        }
+
         function integratedSetOperator(username,enabled,requesterId) {
             const cleaned=String(username||'').trim();
             if(!cleaned){integratedSend(requesterId,{type:'system',message:`Usage: /${enabled?'op':'deop'} <username>`});return;}
@@ -1686,15 +1734,18 @@
         }
 
         function integratedProcessServerCommand(actor,command) {
-            if(!actor || actor.id!==localClientId){integratedSend(actor?.id,{type:'error',message:'Only the LAN world host can run server-management commands.'});return;}
+            if(!actor || !actor.isOperator){integratedSend(actor?.id,{type:'error',message:'Only server operators can run server-management commands.'});return;}
             const parts=String(command||'').trim().split(/\s+/),name=(parts.shift()||'').toLowerCase(),arg=parts.join(' ');
+            if(name==='/ban')return integratedBanUsername(arg,actor.id);
+            if(name==='/kill')return integratedKillUsername(arg,actor.id);
+            if(actor.id!==localClientId){integratedSend(actor.id,{type:'error',message:'Only the LAN world host can run this server-management command.'});return;}
             if(name==='/op')return integratedSetOperator(arg,true,actor.id);
             if(name==='/deop')return integratedSetOperator(arg,false,actor.id);
             if(name==='/ops'){const ops=[...singleplayerOperators].sort();integratedSend(actor.id,{type:'system',message:`Operators: ${ops.length?ops.join(', '):'none'}`});return;}
             if(name==='/list'){const names=[...integratedPlayers.values()].map(p=>`${p.username}${p.isOperator?' [OP]':''}`);integratedSend(actor.id,{type:'system',message:`Players (${names.length}): ${names.join(', ')}`});return;}
             if(name==='/mobs'){const counts=[0,1,2].map(dim=>mobs.filter(m=>m.dimension===dim).length);integratedSend(actor.id,{type:'system',message:`Mobs: overworld=${counts[0]}, alternate=${counts[1]}, boss=${counts[2]}`});return;}
             if(name==='/gamerule')return integratedGameRuleCommand(actor,parts);
-            integratedSend(actor.id,{type:'system',message:'Server commands: /op <username>, /deop <username>, /ops, /list, /mobs, /gamerule [rule] [value]'});
+            integratedSend(actor.id,{type:'system',message:'Server commands: /ban <username>, /kill <username>, /op <username>, /deop <username>, /ops, /list, /mobs, /gamerule [rule] [value]'});
         }
 
         function integratedServerReceive(clientId,payload) {
@@ -1720,7 +1771,9 @@
                 if (state.inventory && state.inventory[state.selectedSlot]) state.heldItem=state.inventory[state.selectedSlot].count>0?state.inventory[state.selectedSlot].id:0;
                 if(payload.originalSpawn&&typeof payload.originalSpawn==='object')state.originalSpawn={...payload.originalSpawn};
                 if(payload.respawnPoint!==undefined)state.respawnPoint=payload.respawnPoint?{...payload.respawnPoint}:null;
-                integratedPlayers.set(clientId,state); integratedRecomputeMobHosts(); singleplayerDirty=true; return true;
+                integratedPlayers.set(clientId,state);
+                if(state.health<=0&&gameRules.difficulty==='hardcore'&&clientId!==localClientId){integratedHardcoreBan(state);return true;}
+                integratedRecomputeMobHosts(); singleplayerDirty=true; return true;
             }
             if (type==='block_change') {
                 const dim=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0))),x=Math.floor(Number(payload.x)),y=Math.floor(Number(payload.y)),z=Math.floor(Number(payload.z));
@@ -1844,7 +1897,13 @@
 
         function integratedGuestJoined(info) {
             if (singleplayerNetworkMode!=='lan-host' || !info?.guestId) return;
-            const username=integratedUniqueUsername(info.username||'Player');
+            const requested=String(info.username||'Player').trim().slice(0,20)||'Player';
+            if(singleplayerBannedPlayers.has(requested.toLowerCase())){
+                integratedSend(info.guestId,{type:'banned',message:'You are banned from this world.'});
+                relaySend({type:'host_disconnect',guestId:info.guestId,reason:'Banned from this world'});
+                return;
+            }
+            const username=integratedUniqueUsername(requested);
             const profile=singleplayerLanProfiles[String(username).toLowerCase()];
             const isOp=singleplayerOperators.has(String(username).toLowerCase());
             const state={id:info.guestId,username,skin:PLAYER_SKINS[info.skin]?info.skin:'steve',x:0.5,y:50,z:0.5,yaw:0,pitch:0,dimension:0,health:10,hunger:20,gamemode:'survival',heldItem:0,selectedSlot:0,inventory:Array.from({length:30},()=>({id:0,count:0})),originalSpawn:null,respawnPoint:null,isOperator:isOp,deviceClass:info.deviceClass==='mobile'?'mobile':'desktop'};
@@ -2193,6 +2252,18 @@
                 if (['survival', 'creative', 'spectator'].includes(mode)) applyServerGamemode(mode);
                 return;
             }
+            if (data.type === 'banned') {
+                const message=String(data.message||'You are banned from this world.');
+                if(singleplayerNetworkMode==='lan-guest'){exitLanGuestToMenu(message);return;}
+                if(singleplayerNetworkMode==='dedicated'){
+                    safeStorageSet('mellorcraftServerExitNotice',message);
+                    try{sessionStorage.setItem('mellorcraftReturnMainMenu','1');}catch(_){}
+                    try{socket?.close(4003,'Banned');}catch(_){}
+                    setTimeout(()=>window.location.reload(),50);
+                    return;
+                }
+                addChatMessage(message,'chatError');return;
+            }
             if (data.type === 'player_hit') {
                 if (Number.isFinite(Number(data.health))) player.health = Math.max(0, Math.min(player.maxHealth, Number(data.health)));
                 const knockback = data.knockback || {};
@@ -2472,8 +2543,9 @@
             if(data.lanPlayerProfiles&&typeof data.lanPlayerProfiles==='object')for(const [k,v] of Object.entries(data.lanPlayerProfiles))if(v&&typeof v==='object')profiles[String(k).toLowerCase()]={...v};
             if(data.playerState&&typeof data.playerState==='object'&&!profiles.player)profiles.player={username:'Player',skin:'steve',...data.playerState};
             const operators=Array.isArray(data.operators)?data.operators.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
+            const bannedPlayers=Array.isArray(data.bannedPlayers)?data.bannedPlayers.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
             const seed=Number(data.seed)||0;
-            return {format:'MellorCraftWorld',formatVersion:10,version:'1.7.0',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],furnaces:(data.furnaces&&typeof data.furnaces==='object')?data.furnaces:{},updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
+            return {format:'MellorCraftWorld',formatVersion:11,version:'1.7.0',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],bannedPlayers:[...new Set(bannedPlayers)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],furnaces:(data.furnaces&&typeof data.furnaces==='object')?data.furnaces:{},updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
         }
         function canonicalPlayerProfilesForSave() {
             const profiles=JSON.parse(JSON.stringify(singleplayerLanProfiles||{}));
@@ -2485,7 +2557,7 @@
         function saveSingleplayerWorld(force=false) {
             if (!singleplayerWorldName || !gameStarted || (singleplayerNetworkMode!=='local' && singleplayerNetworkMode!=='lan-host')) return false;
             if (!force && !singleplayerDirty) return true;
-            const data={format:'MellorCraftWorld',formatVersion:10,version:'1.7.0',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),updatedAt:Date.now()};
+            const data={format:'MellorCraftWorld',formatVersion:11,version:'1.7.0',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),bannedPlayers:[...singleplayerBannedPlayers].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),updatedAt:Date.now()};
             try {localStorage.setItem(singleplayerStorageKey(singleplayerWorldName),JSON.stringify(data));singleplayerDirty=false;listSingleplayerWorlds();return true;}catch(error){addChatMessage(`Autosave failed: ${error.message}`,'chatError');return false;}
         }
         function launchSingleplayerWorld(rawData) {
@@ -2496,7 +2568,7 @@
             localClientId='singleplayer';localUsername=identity.username;localSkin=identity.skin;
             const hostKey=String(localUsername).toLowerCase();
             singleplayerWorldName=String(data.name);WORLD_SEED=Number(data.seed)||0;worldTime=Number(data.worldTime)||0.25;weatherSeed=Math.trunc(Number(data.weatherSeed))||weatherSeedForWorldSeed(WORLD_SEED);weatherPhase=Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0;bossDefeated=Boolean(data.bossDefeated);applyGameRules(data.gameRules);applyWorldGenSettings(data.worldGen);
-            singleplayerOperators=new Set((data.operators||[]).map(v=>String(v).toLowerCase()));singleplayerOperators.add(hostKey);
+            singleplayerOperators=new Set((data.operators||[]).map(v=>String(v).toLowerCase()));singleplayerOperators.add(hostKey);singleplayerBannedPlayers=new Set((data.bannedPlayers||[]).map(v=>String(v).toLowerCase()));singleplayerBannedPlayers.delete(hostKey);
             const profiles=(data.playerProfiles&&typeof data.playerProfiles==='object')?data.playerProfiles:{};
             pendingPlayerState=profiles[hostKey]&&typeof profiles[hostKey]==='object'?{...profiles[hostKey]}:null;
             // Older browser-only worlds stored the local player under the literal "player" key.
@@ -7569,7 +7641,7 @@
                 sendNetwork({type:'server_command',command:`/gamerule mobCap ${args.join(' ')}`.trim()});
                 return;
             }
-            if (['op','deop','ops','list','mobs','gamerule'].includes(cmd) || (singleplayerNetworkMode==='dedicated' && ['gamemode','gm','tp'].includes(cmd))) {
+            if (['op','deop','ops','list','mobs','gamerule','ban','kill'].includes(cmd) || (singleplayerNetworkMode==='dedicated' && ['gamemode','gm','tp'].includes(cmd))) {
                 sendNetwork({type:'server_command',command:cmdStr});
                 return;
             }
@@ -7593,6 +7665,7 @@
                     addChatMessage("/gamerule [rule] [value] - View or change world rules", "chatSystem");
                     addChatMessage("Rules: doDaylightCycle, doWeatherCycle, keepInventory, doMobSpawning, pvp, mobCap, dayLength", "chatSystem");
                     addChatMessage("/mobcap [value] - Alias for /gamerule mobCap", "chatSystem");
+                    addChatMessage("/ban <username>, /kill <username> - Ban or kill a player", "chatSystem");
                     addChatMessage("/op <username>, /deop <username>, /ops, /list, /mobs - Server commands", "chatSystem");
                     break;
                 case 'gamemode':
@@ -8290,9 +8363,11 @@
             updateHungerBar();
             if(player.health<=0&&!deathScreenOpen){
                 if(!gameRules.keepInventory){player.inventory=Array.from({length:30},()=>({id:0,count:0}));player.selectedSlot=0;updateInventoryUI();singleplayerDirty=true;}
-                const respawn=document.getElementById('respawnBtn');respawn.style.display=gameRules.difficulty==='hardcore'?'none':'';
+                const hardcore=gameRules.difficulty==='hardcore';
+                const respawn=document.getElementById('respawnBtn');respawn.style.display=hardcore?'none':'';
+                const hardcoreMenu=document.getElementById('hardcoreMainMenuBtn');hardcoreMenu.style.display=(hardcore&&(singleplayerNetworkMode==='local'||singleplayerNetworkMode==='lan-host'))?'':'none';
                 const death=document.getElementById('deathScreen');death.style.display='flex';
-                if(gameRules.difficulty==='hardcore'){const h=death.querySelector('h1');if(h)h.textContent='Hardcore Death';}
+                const h=death.querySelector('h1');if(h)h.textContent=hardcore?'Hardcore Death':'You Died!';
                 if(!isMobilePlaying)document.exitPointerLock();deathScreenOpen=true;updateMobileControlsVisibility();
             }
         }
@@ -8305,6 +8380,18 @@
             sendNetwork({ type: 'respawn', x: player.x, y: player.y, z: player.z, dimension: currentDimension });
             if (!isMobilePlaying) canvas.requestPointerLock();
             updateMobileControlsVisibility();
+        });
+
+        document.getElementById('hardcoreMainMenuBtn').addEventListener('click',()=>{
+            if(gameRules.difficulty!=='hardcore'||!singleplayerWorldName)return;
+            const doomedName=singleplayerWorldName, doomedKey=singleplayerStorageKey(doomedName);
+            singleplayerWorldName=''; singleplayerDirty=false;
+            try{localStorage.removeItem(doomedKey);}catch(_){}
+            stopMusicPlayback();
+            try{sessionStorage.setItem('mellorcraftReturnMainMenu','1');}catch(_){}
+            try{relaySocket?.close(4000,'Hardcore world deleted');}catch(_){}
+            try{socket?.close();}catch(_){}
+            window.location.reload();
         });
 
         function toggleSettings() {

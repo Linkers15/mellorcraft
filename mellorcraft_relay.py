@@ -75,6 +75,15 @@ async def host_message(ws: Any, room: Room, data: dict[str, Any]) -> None:
                 dead.append(guest_id)
         for guest_id in dead:
             room.guests.pop(guest_id, None)
+    elif kind == "host_disconnect":
+        guest_id = str(data.get("guestId", ""))
+        guest = room.guests.get(guest_id)
+        if guest is not None:
+            reason = str(data.get("reason", "Disconnected by world host."))[:120]
+            try:
+                await guest.close(code=4003, reason=reason)
+            except Exception:
+                pass
 
 async def handler(ws: Any, *_args: Any) -> None:
     role = "viewer"

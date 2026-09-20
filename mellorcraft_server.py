@@ -238,6 +238,7 @@ class MellorCraftWorld:
         self.client_device_classes: dict[str, str] = {}
         self.client_last_updates: dict[str, float] = {}
         self.operators: set[str] = set()
+        self.banned_players: set[str] = set()
         self.player_profiles: dict[str, dict[str, Any]] = {}
         self.mobs: dict[str, MobState] = {}
         self.items: dict[str, DroppedItemState] = {}
@@ -411,6 +412,9 @@ class MellorCraftWorld:
             operators = raw.get("operators", [])
             if isinstance(operators, list):
                 self.operators = {str(name).strip().casefold() for name in operators if str(name).strip()}
+            banned_players = raw.get("bannedPlayers", [])
+            if isinstance(banned_players, list):
+                self.banned_players = {str(name).strip().casefold() for name in banned_players if str(name).strip()}
             profiles = raw.get("playerProfiles", {})
             if not isinstance(profiles, dict):
                 profiles = {}
@@ -464,7 +468,7 @@ class MellorCraftWorld:
                 for key, value in raw_furnaces.items():
                     if isinstance(value, dict):
                         self.furnaces[str(key)] = sanitize_furnace_state(value)
-            print(f"Loaded world '{self.world_name}': seed={self.seed}, edits={len(self.blocks)}, operators={len(self.operators)}, players={len(self.player_profiles)}, mobs={len(self.mobs)}")
+            print(f"Loaded world '{self.world_name}': seed={self.seed}, edits={len(self.blocks)}, operators={len(self.operators)}, bans={len(self.banned_players)}, players={len(self.player_profiles)}, mobs={len(self.mobs)}")
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             print(f"Warning: could not load {self.save_path.name}: {exc}")
 
@@ -474,10 +478,10 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 9, "version": "1.7.0", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 11, "version": "1.7.0", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
             "bossDefeated": self.boss_defeated, "gameRules": self.game_rules,
-            "blocks": self.blocks, "operators": sorted(self.operators), "playerProfiles": profiles,
+            "blocks": self.blocks, "operators": sorted(self.operators), "bannedPlayers": sorted(self.banned_players), "playerProfiles": profiles,
             "mobs": [asdict(mob) for mob in self.mobs.values()], "items": [asdict(item) for item in self.items.values()],
             "furnaces": self.furnaces,
             "updatedAt": int(time.time() * 1000),
@@ -699,6 +703,70 @@ async def handle_block_batch(player_id: str, data: dict[str, Any]) -> None:
     await broadcast({"type": "block_batch_update", "playerId": player_id, "changes": sanitized}, exclude_id=player_id)
 
 
+async def ban_player_state(player: PlayerState, reason: str = "Banned by an operator.") -> None:
+    key = world.profile_key(player.username)
+    world.banned_players.add(key)
+    world.operators.discard(key)
+    world.dirty = True
+    websocket = world.connections.get(player.id)
+    if websocket is not None:
+        try:
+            await send_json(websocket, {"type": "banned", "message": reason})
+        except Exception:
+            pass
+        try:
+            await websocket.close(code=4003, reason=reason[:120])
+        except Exception:
+            pass
+
+
+async def ban_username(username: str, reason: str = "Banned by an operator.") -> str:
+    cleaned = username.strip()
+    if not cleaned:
+        return "Usage: /ban <username>"
+    if not USERNAME_PATTERN.fullmatch(cleaned):
+        return "Invalid username."
+    player = next((p for p in world.players.values() if p.username.casefold() == cleaned.casefold()), None)
+    canonical = player.username if player is not None else cleaned
+    key = world.profile_key(canonical)
+    world.banned_players.add(key)
+    world.operators.discard(key)
+    world.dirty = True
+    if player is not None:
+        await ban_player_state(player, reason)
+    return f"Banned {canonical}."
+
+
+async def force_kill_player(username: str) -> str:
+    cleaned = username.strip()
+    if not cleaned:
+        return "Usage: /kill <username>"
+    player = next((p for p in world.players.values() if p.username.casefold() == cleaned.casefold()), None)
+    if player is None:
+        return f"Player not found: {cleaned}"
+    if player.health <= 0:
+        return f"{player.username} is already dead."
+    player.health = 0.0
+    if not bool(world.game_rules["keepInventory"]):
+        player.inventory = [{"id": 0, "count": 0} for _ in range(MAX_INVENTORY_SLOTS)]
+        player.selectedSlot = 0
+        player.heldItem = 0
+        websocket = world.connections.get(player.id)
+        if websocket is not None:
+            await send_json(websocket, {"type": "inventory_reset", "message": "Your inventory was cleared on death."})
+    websocket = world.connections.get(player.id)
+    if websocket is not None:
+        await send_json(websocket, {
+            "type": "player_hit", "health": 0.0, "attacker": "Killed by an operator",
+            "knockback": {"x": 0.0, "z": 0.0, "vertical": 0.0, "duration": 0.1},
+        })
+    await broadcast({"type": "player_damaged", "playerId": player.id, "health": 0.0})
+    world.dirty = True
+    if str(world.game_rules.get("difficulty", "normal")) == "hardcore":
+        await ban_player_state(player, "You died in Hardcore and are banned from this server.")
+    return f"Killed {player.username}."
+
+
 async def damage_player(
     victim: PlayerState,
     damage: float,
@@ -734,6 +802,8 @@ async def damage_player(
             "knockback": {"x": knockback_x, "z": knockback_z, "vertical": vertical, "duration": 0.35},
         })
     await broadcast({"type": "player_damaged", "playerId": victim.id, "health": victim.health})
+    if victim.health <= 0 and str(world.game_rules.get("difficulty", "normal")) == "hardcore":
+        await ban_player_state(victim, "You died in Hardcore and are banned from this server.")
 
 
 async def handle_player_attack(attacker_id: str, data: dict[str, Any]) -> None:
@@ -1025,6 +1095,9 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             selected = player.inventory[player.selectedSlot]
             player.heldItem = selected["id"] if selected["count"] > 0 else 0
         world.dirty = True
+        if player.health <= 0 and str(world.game_rules.get("difficulty", "normal")) == "hardcore":
+            await ban_player_state(player, "You died in Hardcore and are banned from this server.")
+            return
         if world.recompute_mob_hosts():
             await broadcast_mob_hosts()
         return
@@ -1145,6 +1218,14 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
         requested_username = str(join.get("username", "")).strip()
         if not USERNAME_PATTERN.fullmatch(requested_username):
             await send_json(websocket, {"type": "error", "message": "Invalid username."})
+            return
+        if world.profile_key(requested_username) in world.banned_players:
+            message = "You are banned from this server."
+            await send_json(websocket, {"type": "banned", "message": message})
+            try:
+                await websocket.close(code=4003, reason=message)
+            except Exception:
+                pass
             return
         skin = str(join.get("skin", "steve"))
         if skin not in ALLOWED_SKINS:
@@ -1463,6 +1544,10 @@ async def process_console_command(line: str) -> str:
     name = tokens[0].lower()
     args = tokens[1:]
     argument = " ".join(args)
+    if name == "/ban":
+        return await ban_username(argument)
+    if name == "/kill":
+        return await force_kill_player(argument)
     if name == "/op":
         return await set_operator(argument, True)
     if name == "/deop":
@@ -1484,7 +1569,7 @@ async def process_console_command(line: str) -> str:
     if name == "/tp":
         return await process_teleport_command(args)
     if name in {"/help", "help"}:
-        return ("Console commands: /op <username>, /deop <username>, /ops, /list, /mobs, "
+        return ("Console commands: /ban <username>, /kill <username>, /op <username>, /deop <username>, /ops, /list, /mobs, "
                 "/gamerule [rule] [value], "
                 "/gamemode <player> <mode>, /tp <player> <targetPlayer>, "
                 "/tp <player> <x> <y> <z> <dimension 1|2|3>, /help")
@@ -1674,7 +1759,7 @@ def main() -> None:
     print(f"  World seed:    {world.seed}")
     print(f"  Save file:     {save_path.relative_to(SCRIPT_DIR)}")
     print("Join this same world on the host PC using the Host PC address above.")
-    print("Console commands: /op, /deop, /ops, /list, /mobs, /gamerule [rule] [value], /gamemode <player> <mode>, /tp <player> <target|x y z dim>, /help")
+    print("Console commands: /ban <player>, /kill <player>, /op, /deop, /ops, /list, /mobs, /gamerule [rule] [value], /gamemode <player> <mode>, /tp <player> <target|x y z dim>, /help")
     print("Press Ctrl+C to stop.\n")
     if open_game:
         try:

@@ -1,6 +1,16 @@
 MellorCraft v1.7.0
 =========================================================
 
+Hardcore death and administration pass
+--------------------------------------
+- Browser-saved Hardcore worlds now show a **Main Menu** button on the death screen instead of Respawn. Using it permanently deletes that browser world before returning to the main menu, and a LAN-hosted Hardcore world closes for connected guests when its host deletes it.
+- Dedicated-server Hardcore deaths now permanently add that username to the world's `bannedPlayers` list and disconnect the player. Banned usernames are rejected on later joins, including after server restarts.
+- Relay-hosted browser worlds persist the same `bannedPlayers` list in the browser world save. A Hardcore death by a relay guest bans that username, disconnects the guest, and rejects later attempts to rejoin that world.
+- Added `/ban <username>` and `/kill <username>` administration commands. Dedicated-server operators can use both; relay-world operators can use `/ban` and `/kill`, while the existing host-only restrictions remain for the other relay server-management commands.
+- `/kill` uses the normal death rules. In Hardcore, killing a remote/server player therefore bans that player as part of the death.
+- Browser/exported world saves and dedicated-server saves now use world format 11 for the persistent ban list; older worlds load with an empty ban list.
+
+
 Furnace shared-inventory fix
 ----------------------------
 - Furnace inventory now uses the exact same shared move / merge / swap routine as the normal Inventory screen instead of maintaining a separate transfer implementation.
@@ -57,7 +67,7 @@ v1.7.0 world generator pass
 - Customized worlds can independently enable/disable caves and ravines, set mineshaft concentration, toggle individual Overworld biomes, and assign each enabled biome a relative concentration weight. Customized biome regions use broad seeded cells with blended terrain heights so high/low terrain transitions remain gradual.
 - Customized and Flat worlds can independently toggle Mansions, Outposts, Cabins, and Dungeons and set a 0–100% spawn chance for each structure type.
 - Flat worlds provide an editable bottom-to-top layer stack. Each layer can use any block type and a custom thickness; the total generated height is limited to 199 blocks. Flat worlds also choose one biome and can optionally generate caves, ravines, mineshafts, vegetation, and structures.
-- World-generator settings are saved in exported browser worlds as world format 10 and are sent to LAN guests. The dedicated server preserves and sends `worldGen` data when it is present in a world save, while older saves remain Normal worlds.
+- World-generator settings are saved in exported browser worlds; current saves use world format 11 and are sent to LAN guests. The dedicated server preserves and sends `worldGen` data when it is present in a world save, while older saves remain Normal worlds.
 - Cabins, Mansions, and Outposts now choose their construction wood from the biome at the structure center: Savanna uses Acacia, Taiga uses Spruce, Jungle uses Jungle wood, and all other biomes use Oak. Mountain cabins therefore use Oak as the requested fallback.
 
 v1.7.0 finishing pass
