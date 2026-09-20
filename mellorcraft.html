@@ -641,7 +641,10 @@
         html.mobile-mode #inventoryGrid { grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 10px; }
         html.mobile-mode #inventoryHotbar { grid-template-columns: repeat(9, 1fr); gap: 4px; padding-top: 10px; }
         html.mobile-mode .inv-slot { width: auto; height: auto; aspect-ratio: 1; }
-        html.mobile-mode #furnaceMenu { width:94%; max-width:520px; max-height:90vh; overflow-y:auto; touch-action:pan-y; -webkit-overflow-scrolling:touch; }
+        html.mobile-mode #furnaceMenu { width:94%; max-width:520px; max-height:90vh; overflow-y:auto; touch-action:pan-y; -webkit-overflow-scrolling:touch; z-index:360; }
+        html.mobile-mode #furnaceMenu .furnace-slot,
+        html.mobile-mode #furnaceMenu .inv-slot,
+        html.mobile-mode #closeFurnaceBtn { pointer-events:auto; touch-action:manipulation; -webkit-tap-highlight-color:rgba(255,255,255,.14); }
         html.mobile-mode #furnaceInventoryGrid { grid-template-columns:repeat(6, 1fr); }
         html.mobile-mode #furnaceInventoryGrid .inv-slot { width:auto; height:auto; aspect-ratio:1; min-width:0; }
         html.mobile-mode #trashSlot { width: 45px; height: 45px; font-size: 20px; flex-shrink: 0; }
@@ -654,10 +657,11 @@
             height: auto; max-height: none; overflow-y: auto; overflow-x: hidden;
             touch-action: pan-y; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
         }
-        html.mobile-mode .creative-items { grid-template-columns: repeat(7, 1fr); gap: 4px; }
-        html.mobile-mode .creative-slot { width: auto; height: auto; aspect-ratio: 1; font-size: 7px; user-select: none; -webkit-user-select: none; }
+        html.mobile-mode .creative-category { overflow-x:auto; overflow-y:hidden; touch-action:pan-x pan-y; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
+        html.mobile-mode .creative-items { grid-template-columns: repeat(10, 50px); gap: 4px; width:max-content; min-width:max-content; }
+        html.mobile-mode .creative-slot { width: 50px; height: 50px; aspect-ratio: 1; font-size: 7px; user-select: none; -webkit-user-select: none; touch-action:pan-x pan-y; }
         html.mobile-mode .creative-slot .slot-icon { font-size: 16px; }
-        html.mobile-mode #creativeHotbar { grid-template-columns: repeat(9, 1fr); gap: 4px; padding-top: 10px; margin-top: 10px; }
+        html.mobile-mode #creativeHotbar { grid-template-columns: repeat(9, 50px); gap: 4px; padding-top: 10px; margin-top: 10px; max-width:100%; overflow-x:auto; overflow-y:hidden; touch-action:pan-x; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; }
         html.mobile-mode #settingsMenu {
             padding: 20px; gap: 15px; width: 90%; max-width: 320px;
             max-height: calc(100dvh - max(24px, env(safe-area-inset-top)) - max(24px, env(safe-area-inset-bottom)));
@@ -3218,6 +3222,20 @@
         const PLANK_BLOCKS=[BLOCKS.PLANKS,BLOCKS.ACACIA_PLANKS,BLOCKS.SPRUCE_PLANKS,BLOCKS.JUNGLE_PLANKS];
         const isLeafBlock=id=>LEAF_BLOCKS.has(id),isSaplingBlock=id=>SAPLING_BLOCKS.has(id);
         function saplingForLeaves(id){return id===BLOCKS.ACACIA_LEAVES?BLOCKS.ACACIA_SAPLING:id===BLOCKS.SPRUCE_LEAVES?BLOCKS.SPRUCE_SAPLING:id===BLOCKS.JUNGLE_LEAVES?BLOCKS.JUNGLE_SAPLING:BLOCKS.OAK_SAPLING;}
+        const knownSaplings=new Map();
+        function saplingKey(dim,x,y,z){return `${dim},${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;}
+        function trackSaplingBlock(dim,x,y,z,type){
+            const key=saplingKey(dim,x,y,z);
+            if(isSaplingBlock(type)){
+                if(!knownSaplings.has(key))knownSaplings.set(key,{dim:Math.floor(dim),x:Math.floor(x),y:Math.floor(y),z:Math.floor(z),age:0,target:45+Math.random()*75});
+            } else knownSaplings.delete(key);
+        }
+        function saplingTreeInfo(id){
+            if(id===BLOCKS.ACACIA_SAPLING)return {wood:BLOCKS.ACACIA_WOOD,leaves:BLOCKS.ACACIA_LEAVES,style:'acacia'};
+            if(id===BLOCKS.SPRUCE_SAPLING)return {wood:BLOCKS.SPRUCE_WOOD,leaves:BLOCKS.SPRUCE_LEAVES,style:'spruce'};
+            if(id===BLOCKS.JUNGLE_SAPLING)return {wood:BLOCKS.JUNGLE_WOOD,leaves:BLOCKS.JUNGLE_LEAVES,style:'jungle'};
+            return {wood:BLOCKS.WOOD,leaves:BLOCKS.LEAVES,style:'oak'};
+        }
         const MOB_LOOT={
             PIG:[{id:ITEMS.RAW_PORKCHOP,min:1,max:3}],COW:[{id:ITEMS.RAW_BEEF,min:1,max:3}],CAMEL:[{id:ITEMS.RAW_CAMEL,min:1,max:2}],
             SHEEP_WHITE:[{id:ITEMS.RAW_MUTTON,min:1,max:2},{id:ITEMS.WHITE_WOOL,min:1,max:1}],SHEEP_BLACK:[{id:ITEMS.RAW_MUTTON,min:1,max:2},{id:ITEMS.BLACK_WOOL,min:1,max:1}],
@@ -4180,6 +4198,7 @@
 
         function applySharedBlockWithoutGenerating(x, y, z, blockType, dim, dirtyKeys) {
             recordSharedBlockEdit(dim, x, y, z, blockType);
+            trackSaplingBlock(dim,x,y,z,blockType);
             if (isSingleplayerEdition) singleplayerDirty = true;
 
             const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
@@ -4215,6 +4234,10 @@
                 // Legacy water/lava edits are discarded because liquids were removed.
                 const appliedType = isLiquidBlock(blockType) ? BLOCKS.AIR : blockType;
                 chunk[index] = appliedType;
+                const lz=Math.floor(index/(CHUNK_SIZE*WORLD_HEIGHT));
+                const rem=index-lz*CHUNK_SIZE*WORLD_HEIGHT;
+                const lx=rem-y*CHUNK_SIZE;
+                trackSaplingBlock(dim,cx*CHUNK_SIZE+lx,y,cz*CHUNK_SIZE+lz,appliedType);
                 if (appliedType !== BLOCKS.AIR) chunk.generatedMaxY = Math.max(Number(chunk.generatedMaxY) || 1, y);
             }
             return chunk;
@@ -5582,6 +5605,70 @@
             }
         }
 
+        function saplingGrowthSpaceClear(x,y,z,dim,height,style){
+            const maxRadius=style==='jungle'?3:2;
+            for(let yy=y;yy<=y+height+2;yy++){
+                const center=getBlock(x,yy,z,dim);
+                if(!(center===BLOCKS.AIR||isSaplingBlock(center)||isLeafBlock(center)))return false;
+            }
+            for(let yy=y+Math.max(2,height-3);yy<=y+height+2;yy++){
+                for(let dx=-maxRadius;dx<=maxRadius;dx++)for(let dz=-maxRadius;dz<=maxRadius;dz++){
+                    if(Math.abs(dx)+Math.abs(dz)>maxRadius*2)continue;
+                    const b=getBlock(x+dx,yy,z+dz,dim);
+                    if(b!==BLOCKS.AIR&&!isLeafBlock(b)&&!isSaplingBlock(b))return false;
+                }
+            }
+            return true;
+        }
+        function growSaplingTree(entry,saplingId){
+            const {dim,x,y,z}=entry,info=saplingTreeInfo(saplingId);
+            const ground=getBlock(x,y-1,z,dim);
+            if(![BLOCKS.GRASS,BLOCKS.DIRT,BLOCKS.SNOW].includes(ground))return false;
+            let height=4+Math.floor(Math.random()*2);
+            if(info.style==='spruce')height=6+Math.floor(Math.random()*3);
+            else if(info.style==='jungle')height=7+Math.floor(Math.random()*4);
+            else if(info.style==='acacia')height=5+Math.floor(Math.random()*2);
+            if(y+height+3>=getDimensionHeight(dim)||!saplingGrowthSpaceClear(x,y,z,dim,height,info.style))return false;
+            const putLeaf=(lx,ly,lz)=>{const b=getBlock(lx,ly,lz,dim);if(b===BLOCKS.AIR||isLeafBlock(b)||isSaplingBlock(b))setBlock(lx,ly,lz,info.leaves,dim);};
+            setBlock(x,y,z,info.wood,dim);
+            for(let yy=1;yy<height;yy++)setBlock(x,y+yy,z,info.wood,dim);
+            const top=y+height-1;
+            if(info.style==='spruce'){
+                for(let yy=top-4;yy<=top+1;yy++){
+                    const fromTop=top+1-yy,r=fromTop>=4?2:fromTop>=2?2:1;
+                    for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++)if(Math.abs(dx)+Math.abs(dz)<=r+1)putLeaf(x+dx,yy,z+dz);
+                }
+                putLeaf(x,top+2,z);
+            } else if(info.style==='acacia'){
+                const dirs=[[1,0],[-1,0],[0,1],[0,-1]],dir=dirs[Math.floor(Math.random()*dirs.length)];
+                setBlock(x+dir[0],top,z+dir[1],info.wood,dim);
+                const centers=[[x,top,z],[x+dir[0],top,z+dir[1]]];
+                for(const [cx,cy,cz] of centers)for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++)if(Math.abs(dx)+Math.abs(dz)<=3)putLeaf(cx+dx,cy+1,cz+dz);
+                for(const [cx,cy,cz] of centers)for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)putLeaf(cx+dx,cy+2,cz+dz);
+            } else {
+                const radius=info.style==='jungle'?3:2;
+                for(let yy=top-2;yy<=top+1;yy++){
+                    const r=yy===top+1?1:(yy===top-2?Math.max(1,radius-1):radius);
+                    for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++)if(dx*dx+dz*dz<=r*r+1)putLeaf(x+dx,yy,z+dz);
+                }
+                putLeaf(x,top+2,z);
+            }
+            return true;
+        }
+        function updateSaplingGrowth(dt){
+            if(!gameStarted||!isMobHostForDimension(currentDimension)||knownSaplings.size===0)return;
+            for(const [key,entry] of [...knownSaplings]){
+                if(entry.dim!==currentDimension)continue;
+                const loaded=peekLoadedBlock(entry.x,entry.y,entry.z,entry.dim);
+                if(loaded===null)continue;
+                if(!isSaplingBlock(loaded)){knownSaplings.delete(key);continue;}
+                entry.age+=dt;
+                if(entry.age<entry.target)continue;
+                if(growSaplingTree(entry,loaded))knownSaplings.delete(key);
+                else {entry.age=Math.max(0,entry.target-12);entry.target+=8+Math.random()*10;}
+            }
+        }
+
         function setBlock(x, y, z, type, dim = currentDimension) {
             x = Math.floor(Number(x)); y = Math.floor(Number(y)); z = Math.floor(Number(z));
             type = Math.floor(Number(type)); dim = Math.floor(Number(dim));
@@ -5605,6 +5692,7 @@
             const previousType = chunk[index];
             if (previousType === type) return;
             chunk[index] = type;
+            trackSaplingBlock(dim,x,y,z,type);
             if (type !== BLOCKS.AIR) chunk.generatedMaxY = Math.max(Number(chunk.generatedMaxY) || 1, y);
             recordSharedBlockEdit(dim, x, y, z, type);
             if (isSingleplayerEdition) singleplayerDirty = true;
@@ -5727,7 +5815,7 @@
                             for (let f=0; f<6; f++) {
                                 const d=dirs[f];
                                 const neighbor=voxel(x+d[0],y+d[1],z+d[2]);
-                                const visible = neighbor !== BLOCKS.GLASS && (neighbor === BLOCKS.AIR || isLiquidBlock(neighbor) || isLeafBlock(neighbor) || neighbor === BLOCKS.TORCH || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL);
+                                const visible = neighbor !== BLOCKS.GLASS && (neighbor === BLOCKS.AIR || isLiquidBlock(neighbor) || isLeafBlock(neighbor) || isSaplingBlock(neighbor) || neighbor === BLOCKS.TORCH || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL);
                                 if (!visible) continue;
                                 const faceColor = f===0 ? [0.86,0.96,1.0] : f===1 ? [0.62,0.76,0.82] : [0.70,0.88,0.95];
                                 pushFace(glassPos, glassCol, glassNor, glassUv, faces[f], faceColor, norms[f], wx, y, wz, blockTextureTile(block,f));
@@ -5743,7 +5831,7 @@
                                 // A torch occupies only a narrow custom cuboid. Keep the
                                 // supporting wall/floor face behind it instead of cutting
                                 // a full-block hole that exposes the terrain interior.
-                                neighbor === BLOCKS.TORCH || neighbor === BLOCKS.GLASS || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL;
+                                neighbor === BLOCKS.TORCH || isSaplingBlock(neighbor) || neighbor === BLOCKS.GLASS || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL;
                             if (!visible) continue;
                             const faceColor = f === 0 ? colors.top : f === 1 ? colors.bottom : colors.side;
                             pushFace(pos, col, nor, uv, faces[f], faceColor, norms[f], wx, y, wz, blockTextureTile(block,f));
@@ -7104,11 +7192,17 @@
         function openFurnace(x,y,z){openFurnaceKey=furnaceKey(currentDimension,x,y,z);furnaceState(openFurnaceKey);craftingOpen=false;document.getElementById('craftingMenu').style.display='none';document.getElementById('furnaceMenu').style.display='block';if(!isMobilePlaying)document.exitPointerLock();updateFurnaceUI();updateMobileControlsVisibility();}
         function closeFurnace(){openFurnaceKey=null;document.getElementById('furnaceMenu').style.display='none';if(!isMobilePlaying&&gameStarted)canvas.requestPointerLock();updateMobileControlsVisibility();}
         function furnaceSlotText(id,count,fallback){return count>0?`${ITEM_ICONS[id]||''} ${getItemName(id)} x${count}`:fallback;}
+        function bindMenuTap(element,handler){
+            if(!element)return;let lastTouch=0,startX=0,startY=0;
+            element.addEventListener('touchstart',e=>{if(!isMobilePlaying)return;const t=e.changedTouches&&e.changedTouches[0];if(t){startX=t.clientX;startY=t.clientY;}e.stopPropagation();},{passive:true});
+            element.addEventListener('touchend',e=>{if(!isMobilePlaying)return;const t=e.changedTouches&&e.changedTouches[0];e.stopPropagation();if(!t||Math.hypot(t.clientX-startX,t.clientY-startY)<=12){lastTouch=performance.now();e.preventDefault();handler(e);}},{passive:false});
+            element.addEventListener('click',e=>{if(performance.now()-lastTouch<500)return;e.stopPropagation();handler(e);});
+        }
         function renderFurnaceInventory(){
             const grid=document.getElementById('furnaceInventoryGrid');if(!grid)return;grid.innerHTML='';
             for(let i=0;i<player.inventory.length;i++){const slot=player.inventory[i]||{id:0,count:0},d=document.createElement('div');d.className='inv-slot';
                 if(i===player.selectedSlot)d.style.boxShadow='inset 0 0 0 1px white';
-                if(slot.count>0){const ingredient=Boolean(FURNACE_RECIPES[slot.id]),fuel=Boolean(FURNACE_FUEL_SECONDS[slot.id]);if(ingredient)d.classList.add('compatible');else if(fuel)d.classList.add('fuel-compatible');d.style.backgroundColor=getSlotColor(slot.id);d.innerHTML=ITEM_ICONS[slot.id]?`<span class="slot-icon" style="font-size:16px">${ITEM_ICONS[slot.id]}</span><span class="slot-count">${slot.count}</span>`:`<span style="font-size:7px">${getItemName(slot.id)}</span><span class="slot-count">${slot.count}</span>`;d.title=ingredient&&fuel?`${getItemName(slot.id)} — ingredient or fuel`:ingredient?`${getItemName(slot.id)} — ingredient`:fuel?`${getItemName(slot.id)} — fuel`:`${getItemName(slot.id)} — not usable here`;d.addEventListener('click',()=>clickFurnaceInventory(i));}
+                if(slot.count>0){const ingredient=Boolean(FURNACE_RECIPES[slot.id]),fuel=Boolean(FURNACE_FUEL_SECONDS[slot.id]);if(ingredient)d.classList.add('compatible');else if(fuel)d.classList.add('fuel-compatible');d.style.backgroundColor=getSlotColor(slot.id);d.innerHTML=ITEM_ICONS[slot.id]?`<span class="slot-icon" style="font-size:16px">${ITEM_ICONS[slot.id]}</span><span class="slot-count">${slot.count}</span>`:`<span style="font-size:7px">${getItemName(slot.id)}</span><span class="slot-count">${slot.count}</span>`;d.title=ingredient&&fuel?`${getItemName(slot.id)} — ingredient or fuel`:ingredient?`${getItemName(slot.id)} — ingredient`:fuel?`${getItemName(slot.id)} — fuel`:`${getItemName(slot.id)} — not usable here`;bindMenuTap(d,()=>clickFurnaceInventory(i));}
                 grid.appendChild(d);
             }
         }
@@ -7118,7 +7212,13 @@
         function clickFurnaceInventory(slotIndex){if(!openFurnaceKey)return;const f=furnaceState(openFurnaceKey),slot=player.inventory[slotIndex];if(!slot||slot.count<=0)return;const canIngredient=Boolean(FURNACE_RECIPES[slot.id]),canFuel=Boolean(FURNACE_FUEL_SECONDS[slot.id]);let kind=null;if(canIngredient&&(f.ingredientCount<=0||f.ingredientId===slot.id))kind='ingredient';else if(canFuel&&(f.fuelCount<=0||f.fuelId===slot.id))kind='fuel';else if(canIngredient)kind='ingredient';else if(canFuel)kind='fuel';else return;const idKey=kind==='ingredient'?'ingredientId':'fuelId',countKey=kind==='ingredient'?'ingredientCount':'fuelCount';if(f[countKey]>0&&f[idKey]!==slot.id)return;const room=MAX_STACK_SIZE-f[countKey];if(room<=0)return;const amount=player.gamemode==='creative'?Math.min(room,slot.count):Math.min(room,slot.count);f[idKey]=slot.id;f[countKey]+=amount;if(player.gamemode==='survival'){slot.count-=amount;if(slot.count<=0){slot.id=0;slot.count=0;}}updateInventoryUI();updateFurnaceUI();singleplayerDirty=true;syncFurnace(openFurnaceKey);}
         function takeFurnaceOutput(){if(!openFurnaceKey)return;const f=furnaceState(openFurnaceKey);if(f.outputCount>0&&addToInventory(f.outputId,f.outputCount)){f.outputId=0;f.outputCount=0;updateInventoryUI();updateFurnaceUI();singleplayerDirty=true;syncFurnace(openFurnaceKey);}}
         function updateFurnaces(dt){if(singleplayerNetworkMode==='lan-guest'||singleplayerNetworkMode==='dedicated')return;for(const [key,f0] of furnaceStates){const f=normalizeFurnaceState(f0);Object.assign(f0,f);const result=FURNACE_RECIPES[f.ingredientId];if(!result||f.ingredientCount<=0){f.progress=0;continue;}if(f.outputCount>0&&f.outputId!==result){f.progress=0;continue;}if(f.burnTime<=0&&f.fuelCount>0&&FURNACE_FUEL_SECONDS[f.fuelId]){f.burnTime=FURNACE_FUEL_SECONDS[f.fuelId];f.fuelCount--;if(f.fuelCount<=0)f.fuelId=0;singleplayerDirty=true;}if(f.burnTime>0){const used=Math.min(dt,f.burnTime);f.burnTime-=used;f.progress+=used;if(f.progress>=10){f.progress-=10;f.ingredientCount--;if(f.ingredientCount<=0)f.ingredientId=0;f.outputId=result;f.outputCount++;singleplayerDirty=true;}}}if(openFurnaceKey)updateFurnaceUI();}
-        document.getElementById('furnaceIngredient').addEventListener('click',()=>clickFurnaceInput('ingredient'));document.getElementById('furnaceFuel').addEventListener('click',()=>clickFurnaceInput('fuel'));document.getElementById('furnaceOutput').addEventListener('click',takeFurnaceOutput);document.getElementById('closeFurnaceBtn').addEventListener('click',closeFurnace);
+        bindMenuTap(document.getElementById('furnaceIngredient'),()=>clickFurnaceInput('ingredient'));
+        bindMenuTap(document.getElementById('furnaceFuel'),()=>clickFurnaceInput('fuel'));
+        bindMenuTap(document.getElementById('furnaceOutput'),takeFurnaceOutput);
+        bindMenuTap(document.getElementById('closeFurnaceBtn'),closeFurnace);
+        document.getElementById('furnaceMenu').addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+        document.getElementById('furnaceMenu').addEventListener('touchmove',e=>e.stopPropagation(),{passive:true});
+        document.getElementById('furnaceMenu').addEventListener('touchend',e=>e.stopPropagation(),{passive:true});
 
         function performRightClick() {
             if (!gameStarted || isChatOpen || deathScreenOpen || player.gamemode === 'spectator') return;
@@ -8502,6 +8602,7 @@
                 updatePlayer(dt, !settingsOpen);
                 processFluidUpdates(dt);
                 updateDungeonSpawners(dt);
+                updateSaplingGrowth(dt);
                 updateRemotePlayers(dt);
                 updateDroppedItems(dt);
                 updateFurnaces(dt);
@@ -8847,6 +8948,7 @@
             chunks.clear();
             chunkMeshes.clear();
             sharedChunkEdits.clear();
+            knownSaplings.clear();
             mountainRegionCache.clear(); mountainInfoCache.clear();
             megaCaveCache.clear();
             lavaPoolCache.clear();

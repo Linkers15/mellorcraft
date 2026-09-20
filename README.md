@@ -7,6 +7,13 @@ Client variants
 - `mellorcraft_embedded_audio.html` is the optional self-contained client when present in a release bundle.
 
 
+v1.7.0 mobile/sapling polish
+-----------------------------
+- Fixed the mobile Furnace menu so ingredient/fuel/output slots, inventory slots, and the Close button respond directly to touch instead of relying on delayed synthetic click events. The furnace panel now sits above gameplay touch layers while retaining vertical scrolling.
+- Planted Oak, Acacia, Spruce, and Jungle saplings now mature after roughly 45–120 seconds while their chunk is loaded. Growth uses the matching wood/leaves family, retries later if there is not enough room, and produces species-specific tree shapes.
+- Saplings are treated like narrow custom geometry for face culling: adjacent wall/glass faces remain rendered behind them, preventing saplings from creating see-through holes into neighboring blocks.
+- Mobile Creative categories can now be swiped horizontally through the full ten-column item grid, and the Creative hotbar also supports horizontal touch scrolling while the menu keeps its normal vertical scroll.
+
 v1.7.0 world generator pass
 ---------------------------
 - **Create World** now offers **Normal**, **Customized**, and **Flat** world types. Existing worlds default to Normal and keep their current terrain generator.

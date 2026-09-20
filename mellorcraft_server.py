@@ -96,7 +96,7 @@ MOB_LOOT: dict[str, list[tuple[int, int, int]]] = {
     "SHEEP_PINK": [(RAW_MUTTON_ITEM, 1, 2), (PINK_WOOL_ITEM, 1, 1)],
 }
 FURNACE_RECIPES = {15: 101, 16: 102, 6: 24, 2: 25, 112: 113, 114: 115, 116: 117, 118: 119, 120: 121, 122: 123, 128: 129}
-FURNACE_FUEL_SECONDS = {100: 80.0, 18: 800.0, 4: 15.0, 10: 15.0, 50: 15.0, 52: 15.0, 54: 15.0, 56: 15.0, 58: 15.0, 60: 15.0, 104: 5.0}
+FURNACE_FUEL_SECONDS = {100: 80.0, 18: 800.0, 4: 15.0, 10: 15.0, 104: 5.0}
 DIFFICULTY_DAMAGE_SCALE = {"peaceful": 0.0, "easy": 0.5, "normal": 1.0, "hard": 1.5, "hardcore": 1.5}
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_ -]{1,20}$")
 ENTITY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -230,7 +230,6 @@ class MellorCraftWorld:
         self.weather_seed = random.randint(0, 2_147_483_646)
         self.weather_phase = 0.0
         self.game_rules = dict(DEFAULT_GAME_RULES)
-        self.world_gen: dict[str, Any] = {"type": "normal"}
         self.boss_defeated = False
         self.blocks: dict[str, int] = {}
         self.players: dict[str, PlayerState] = {}
@@ -403,8 +402,6 @@ class MellorCraftWorld:
             self.weather_seed = int(raw.get("weatherSeed", self.weather_seed)) % 2_147_483_647
             self.weather_phase = float(raw.get("weatherPhase", self.weather_phase))
             self.game_rules = normalize_game_rules(raw.get("gameRules"))
-            incoming_world_gen = raw.get("worldGen")
-            self.world_gen = dict(incoming_world_gen) if isinstance(incoming_world_gen, dict) else {"type": "normal"}
             self.boss_defeated = bool(raw.get("bossDefeated", False))
             blocks = raw.get("blocks")
             if not isinstance(blocks, dict):
@@ -477,9 +474,9 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 10, "version": "1.7.0", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 9, "version": "1.7.0", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
-            "bossDefeated": self.boss_defeated, "gameRules": self.game_rules, "worldGen": self.world_gen,
+            "bossDefeated": self.boss_defeated, "gameRules": self.game_rules,
             "blocks": self.blocks, "operators": sorted(self.operators), "playerProfiles": profiles,
             "mobs": [asdict(mob) for mob in self.mobs.values()], "items": [asdict(item) for item in self.items.values()],
             "furnaces": self.furnaces,
@@ -1017,7 +1014,7 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         player.pitch = max(-math.pi / 2, min(math.pi / 2, finite_number(data.get("pitch"), player.pitch)))
         if time.monotonic() >= world.damage_locks.get(player.id, 0.0):
             player.health = max(0.0, min(10.0, finite_number(data.get("health"), player.health)))
-        player.hunger = 20.0 if str(world.game_rules.get("difficulty", "normal")) == "peaceful" else max(0.0, min(20.0, finite_number(data.get("hunger"), player.hunger)))
+        player.hunger = max(0.0, min(20.0, finite_number(data.get("hunger"), player.hunger)))
         player.heldItem = bounded_int(data.get("heldItem"), 0, 255)
         player.crouching = bool(data.get("crouching", False))
         if world.client_protocols.get(player_id, 1) >= 4:
@@ -1170,7 +1167,7 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
             "type": "welcome", "protocol": PROTOCOL_VERSION, "negotiatedProtocol": client_protocol,
             "clientId": player_id, "username": username, "seed": world.seed, "worldName": world.world_name,
             "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
-            "dayLength": world.game_rules["dayLength"], "gameRules": world.game_rules, "worldGen": world.world_gen,
+            "dayLength": world.game_rules["dayLength"], "gameRules": world.game_rules,
             "bossDefeated": world.boss_defeated,
             "isOperator": player.isOperator, "blocks": world.block_snapshot(),
             "playerState": world.player_profile(player) if restored and client_protocol >= 4 else None,
@@ -1233,7 +1230,7 @@ async def world_broadcast_loop() -> None:
         hosts_changed = world.recompute_mob_hosts()
         await broadcast({
             "type": "world_state", "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
-            "gameRules": world.game_rules, "worldGen": world.world_gen,
+            "gameRules": world.game_rules,
             "bossDefeated": world.boss_defeated,
             "players": world.player_snapshot(),
             "mobs": world.mob_snapshot(), "items": world.item_snapshot(), "furnaces": world.furnaces,
@@ -1448,9 +1445,6 @@ async def process_gamerule_command(args: list[str]) -> str:
         if value < minimum or value > maximum:
             return f"Usage: /gamerule {name} <{minimum}-{maximum}>"
     world.game_rules[name] = value
-    if name == "difficulty" and value == "peaceful":
-        for player in world.players.values():
-            player.hunger = 20.0
     world.dirty = True
     await broadcast({"type": "game_rules", "gameRules": dict(world.game_rules)})
     return f"Set {name} to {game_rule_text(name)}."
