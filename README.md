@@ -1,6 +1,43 @@
 MellorCraft v1.7.0
 =========================================================
 
+Furnace shared-inventory fix
+----------------------------
+- Furnace inventory now uses the exact same shared move / merge / swap routine as the normal Inventory screen instead of maintaining a separate transfer implementation.
+- Ingredient, Fuel, Output, and player-inventory stacks can be selected and moved back out using the same select-source / select-destination behavior as Inventory. Ingredient/Fuel still enforce valid-item rules and Output remains read-only as a destination.
+- Fixed the singleplayer furnace tick bug that normalized into a temporary state object and discarded the updated burn/progress values. Fuel time and cooking progress now actually decrement, one item cooks in 10 seconds, and the output is produced normally.
+- The furnace status now shows the 10-second cooking countdown separately from remaining fuel time, e.g. `Cooking: 8.0s • Fuel: 78.0s`, instead of presenting the 80-second coal burn duration as though it were the cooking timer.
+
+
+Furnace pointer-transfer hotfix
+--------------------------------
+- Furnace transfers now use one capture-phase Pointer Events controller for the entire furnace panel instead of separate child touch/click handlers. This prevents gameplay touch handlers, synthesized clicks, or child element updates from swallowing the second tap.
+- The intended two-step behavior remains: select an inventory item then Ingredient/Fuel, or select Ingredient/Fuel then the inventory item.
+- The transfer hint now changes after the first selection so it is immediately visible whether the furnace registered the tap.
+- Pointer movement is ignored as a transfer when the user is scrolling the furnace inventory, so normal mobile vertical scrolling remains available.
+
+
+Furnace two-step selection hotfix
+---------------------------------
+- Furnace input is now explicit: tap/click an inventory stack and then **Ingredient** or **Fuel**, or select the furnace slot first and then tap/click the inventory stack.
+- The first selection stays highlighted until a compatible second selection completes the transfer, preventing automatic routing to the wrong furnace slot.
+- Tapping the same selected, occupied Ingredient/Fuel slot a second time returns that slot to the player inventory; Output remains a direct collect action.
+- The two-step selection uses the same persistent touch controls on mobile and mouse/keyboard controls on desktop.
+
+
+Furnace ignition hotfix
+-----------------------
+- Furnaces now ignite immediately when both a valid ingredient and valid fuel are present, rather than waiting for a later simulation tick to notice the completed input pair.
+- Inserting Iron Ore + Coal (and all other supported recipe/fuel combinations) consumes one fuel item, starts the fuel countdown, and begins the 10-second cooking timer immediately.
+- The same ignition state is synchronized to LAN guests and dedicated multiplayer so the local UI does not remain stuck on “No fuel burning.”
+
+
+Furnace interaction hotfix
+--------------------------
+- Furnace inventory slots are now persistent DOM controls instead of being destroyed and recreated every render frame. This fixes ingredient/fuel transfers failing on touch and mouse input.
+- Furnace progress and fuel countdown updates no longer rebuild the clickable inventory grid.
+- Furnace inventory slots support tap/click and keyboard activation, and cooked output remains capped to the normal stack size.
+
 Client variants
 ---------------
 - `mellorcraft.html` is the standard client and loads its MP3 soundtrack files from the same directory.

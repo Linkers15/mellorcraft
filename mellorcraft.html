@@ -85,6 +85,8 @@
         #furnaceMenu h2 { text-align:center; margin-bottom:14px; color:#ffb347; }
         .furnace-grid { display:grid; grid-template-columns:1fr 44px 1fr; align-items:center; gap:12px; }
         .furnace-slot { min-height:74px; padding:8px; border:2px solid #666; background:#181818; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; font-size:11px; cursor:pointer; }
+        .furnace-slot.selected-transfer { border-color:#ffd166; box-shadow:0 0 0 2px rgba(255,209,102,.22), inset 0 0 18px rgba(255,209,102,.08); }
+        #furnaceInventoryGrid .inv-slot.selected-transfer { border-color:#fff; box-shadow:0 0 0 2px rgba(255,255,255,.28); transform:translateY(-1px); }
         .furnace-arrow { text-align:center; font-size:26px; }
         .furnace-progress { margin:14px 0 8px; height:12px; background:#151515; border:1px solid #666; }
         #furnaceProgressFill { height:100%; width:0%; background:#ff9f43; }
@@ -1052,7 +1054,7 @@
             </div>
             <div class="furnace-progress"><div id="furnaceProgressFill"></div></div>
             <div id="furnaceFuelText">No fuel burning</div>
-            <div class="furnace-inventory-label">Inventory — click an ingredient or fuel to load it into the furnace</div>
+            <div id="furnaceTransferHint" class="furnace-inventory-label">Tap an inventory item, then Ingredient/Fuel — or tap Ingredient/Fuel first, then the item</div>
             <div id="furnaceInventoryGrid"></div>
             <button class="menuBtn blueBtn close-menu-btn" id="closeFurnaceBtn" style="width:100%;margin:14px 0 0">Close</button>
         </div>
@@ -7184,41 +7186,171 @@
         });
 
 
-        const furnaceStates=new Map();let openFurnaceKey=null;
+        const furnaceStates=new Map();let openFurnaceKey=null;let furnaceTransferSelection=null;
         function furnaceKey(dim,x,y,z){return `${dim},${x},${y},${z}`;}
         function normalizeFurnaceState(v){v=v&&typeof v==='object'?v:{};return {ingredientId:Number(v.ingredientId)||0,ingredientCount:Math.max(0,Number(v.ingredientCount)||0),fuelId:Number(v.fuelId)||0,fuelCount:Math.max(0,Number(v.fuelCount)||0),outputId:Number(v.outputId)||0,outputCount:Math.max(0,Number(v.outputCount)||0),progress:Math.max(0,Number(v.progress)||0),burnTime:Math.max(0,Number(v.burnTime)||0)};}
         function furnaceState(key){if(!furnaceStates.has(key))furnaceStates.set(key,normalizeFurnaceState(null));return furnaceStates.get(key);}
         function syncFurnace(key){if(!key)return;if(singleplayerNetworkMode==='dedicated'||singleplayerNetworkMode==='lan-guest')sendNetwork({type:'furnace_update',key,state:{...furnaceState(key)}});}
-        function openFurnace(x,y,z){openFurnaceKey=furnaceKey(currentDimension,x,y,z);furnaceState(openFurnaceKey);craftingOpen=false;document.getElementById('craftingMenu').style.display='none';document.getElementById('furnaceMenu').style.display='block';if(!isMobilePlaying)document.exitPointerLock();updateFurnaceUI();updateMobileControlsVisibility();}
-        function closeFurnace(){openFurnaceKey=null;document.getElementById('furnaceMenu').style.display='none';if(!isMobilePlaying&&gameStarted)canvas.requestPointerLock();updateMobileControlsVisibility();}
+        function openFurnace(x,y,z){openFurnaceKey=furnaceKey(currentDimension,x,y,z);furnaceTransferSelection=null;furnaceState(openFurnaceKey);craftingOpen=false;document.getElementById('craftingMenu').style.display='none';document.getElementById('furnaceMenu').style.display='block';if(!isMobilePlaying)document.exitPointerLock();updateFurnaceUI();updateMobileControlsVisibility();}
+        function closeFurnace(){furnaceTransferSelection=null;openFurnaceKey=null;document.getElementById('furnaceMenu').style.display='none';if(!isMobilePlaying&&gameStarted)canvas.requestPointerLock();updateMobileControlsVisibility();}
         function furnaceSlotText(id,count,fallback){return count>0?`${ITEM_ICONS[id]||''} ${getItemName(id)} x${count}`:fallback;}
+        function updateFurnaceTransferHint(){
+            const hint=document.getElementById('furnaceTransferHint');if(!hint)return;
+            if(!furnaceTransferSelection){hint.textContent='Tap/click any occupied slot, then tap/click its destination — same move, merge, and swap rules as Inventory';return;}
+            const ref=furnaceTransferSelection.type==='inventory'?makeInventorySlotRef(furnaceTransferSelection.index):makeFurnaceSlotRef(furnaceTransferSelection.kind);
+            const slot=ref?.read?.();
+            hint.textContent=slot&&slot.count>0?`Selected ${getItemName(slot.id)} x${slot.count} — choose a destination`:'Choose a destination';
+        }
         function bindMenuTap(element,handler){
             if(!element)return;let lastTouch=0,startX=0,startY=0;
             element.addEventListener('touchstart',e=>{if(!isMobilePlaying)return;const t=e.changedTouches&&e.changedTouches[0];if(t){startX=t.clientX;startY=t.clientY;}e.stopPropagation();},{passive:true});
             element.addEventListener('touchend',e=>{if(!isMobilePlaying)return;const t=e.changedTouches&&e.changedTouches[0];e.stopPropagation();if(!t||Math.hypot(t.clientX-startX,t.clientY-startY)<=12){lastTouch=performance.now();e.preventDefault();handler(e);}},{passive:false});
             element.addEventListener('click',e=>{if(performance.now()-lastTouch<500)return;e.stopPropagation();handler(e);});
         }
-        function renderFurnaceInventory(){
-            const grid=document.getElementById('furnaceInventoryGrid');if(!grid)return;grid.innerHTML='';
-            for(let i=0;i<player.inventory.length;i++){const slot=player.inventory[i]||{id:0,count:0},d=document.createElement('div');d.className='inv-slot';
-                if(i===player.selectedSlot)d.style.boxShadow='inset 0 0 0 1px white';
-                if(slot.count>0){const ingredient=Boolean(FURNACE_RECIPES[slot.id]),fuel=Boolean(FURNACE_FUEL_SECONDS[slot.id]);if(ingredient)d.classList.add('compatible');else if(fuel)d.classList.add('fuel-compatible');d.style.backgroundColor=getSlotColor(slot.id);d.innerHTML=ITEM_ICONS[slot.id]?`<span class="slot-icon" style="font-size:16px">${ITEM_ICONS[slot.id]}</span><span class="slot-count">${slot.count}</span>`:`<span style="font-size:7px">${getItemName(slot.id)}</span><span class="slot-count">${slot.count}</span>`;d.title=ingredient&&fuel?`${getItemName(slot.id)} — ingredient or fuel`:ingredient?`${getItemName(slot.id)} — ingredient`:fuel?`${getItemName(slot.id)} — fuel`:`${getItemName(slot.id)} — not usable here`;bindMenuTap(d,()=>clickFurnaceInventory(i));}
+        function ensureFurnaceInventoryGrid(){
+            const grid=document.getElementById('furnaceInventoryGrid');if(!grid)return null;
+            const needed=player.inventory.length;
+            while(grid.children.length<needed){
+                const i=grid.children.length,d=document.createElement('div');
+                d.className='inv-slot';d.dataset.slotIndex=String(i);d.setAttribute('role','button');d.tabIndex=0;
+                d.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();clickFurnaceInventory(i);}});
                 grid.appendChild(d);
             }
+            while(grid.children.length>needed)grid.lastElementChild.remove();
+            return grid;
         }
-        function updateFurnaceUI(){if(!openFurnaceKey)return;const f=furnaceState(openFurnaceKey);document.getElementById('furnaceIngredient').textContent=furnaceSlotText(f.ingredientId,f.ingredientCount,'Ingredient');document.getElementById('furnaceFuel').textContent=furnaceSlotText(f.fuelId,f.fuelCount,'Fuel');document.getElementById('furnaceOutput').textContent=furnaceSlotText(f.outputId,f.outputCount,'Output');document.getElementById('furnaceProgressFill').style.width=`${Math.min(100,f.progress/10*100)}%`;document.getElementById('furnaceFuelText').textContent=f.burnTime>0?`Fuel: ${f.burnTime.toFixed(1)}s remaining`:'No fuel burning';renderFurnaceInventory();}
-        function returnFurnaceSlot(kind){if(!openFurnaceKey)return;const f=furnaceState(openFurnaceKey),idKey=kind==='ingredient'?'ingredientId':'fuelId',countKey=kind==='ingredient'?'ingredientCount':'fuelCount';if(f[countKey]>0&&addToInventory(f[idKey],f[countKey])){f[idKey]=0;f[countKey]=0;f.progress=kind==='ingredient'?0:f.progress;updateInventoryUI();updateFurnaceUI();singleplayerDirty=true;syncFurnace(openFurnaceKey);}}
-        function clickFurnaceInput(kind){returnFurnaceSlot(kind);}
-        function clickFurnaceInventory(slotIndex){if(!openFurnaceKey)return;const f=furnaceState(openFurnaceKey),slot=player.inventory[slotIndex];if(!slot||slot.count<=0)return;const canIngredient=Boolean(FURNACE_RECIPES[slot.id]),canFuel=Boolean(FURNACE_FUEL_SECONDS[slot.id]);let kind=null;if(canIngredient&&(f.ingredientCount<=0||f.ingredientId===slot.id))kind='ingredient';else if(canFuel&&(f.fuelCount<=0||f.fuelId===slot.id))kind='fuel';else if(canIngredient)kind='ingredient';else if(canFuel)kind='fuel';else return;const idKey=kind==='ingredient'?'ingredientId':'fuelId',countKey=kind==='ingredient'?'ingredientCount':'fuelCount';if(f[countKey]>0&&f[idKey]!==slot.id)return;const room=MAX_STACK_SIZE-f[countKey];if(room<=0)return;const amount=player.gamemode==='creative'?Math.min(room,slot.count):Math.min(room,slot.count);f[idKey]=slot.id;f[countKey]+=amount;if(player.gamemode==='survival'){slot.count-=amount;if(slot.count<=0){slot.id=0;slot.count=0;}}updateInventoryUI();updateFurnaceUI();singleplayerDirty=true;syncFurnace(openFurnaceKey);}
-        function takeFurnaceOutput(){if(!openFurnaceKey)return;const f=furnaceState(openFurnaceKey);if(f.outputCount>0&&addToInventory(f.outputId,f.outputCount)){f.outputId=0;f.outputCount=0;updateInventoryUI();updateFurnaceUI();singleplayerDirty=true;syncFurnace(openFurnaceKey);}}
-        function updateFurnaces(dt){if(singleplayerNetworkMode==='lan-guest'||singleplayerNetworkMode==='dedicated')return;for(const [key,f0] of furnaceStates){const f=normalizeFurnaceState(f0);Object.assign(f0,f);const result=FURNACE_RECIPES[f.ingredientId];if(!result||f.ingredientCount<=0){f.progress=0;continue;}if(f.outputCount>0&&f.outputId!==result){f.progress=0;continue;}if(f.burnTime<=0&&f.fuelCount>0&&FURNACE_FUEL_SECONDS[f.fuelId]){f.burnTime=FURNACE_FUEL_SECONDS[f.fuelId];f.fuelCount--;if(f.fuelCount<=0)f.fuelId=0;singleplayerDirty=true;}if(f.burnTime>0){const used=Math.min(dt,f.burnTime);f.burnTime-=used;f.progress+=used;if(f.progress>=10){f.progress-=10;f.ingredientCount--;if(f.ingredientCount<=0)f.ingredientId=0;f.outputId=result;f.outputCount++;singleplayerDirty=true;}}}if(openFurnaceKey)updateFurnaceUI();}
-        bindMenuTap(document.getElementById('furnaceIngredient'),()=>clickFurnaceInput('ingredient'));
-        bindMenuTap(document.getElementById('furnaceFuel'),()=>clickFurnaceInput('fuel'));
-        bindMenuTap(document.getElementById('furnaceOutput'),takeFurnaceOutput);
-        bindMenuTap(document.getElementById('closeFurnaceBtn'),closeFurnace);
-        document.getElementById('furnaceMenu').addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
-        document.getElementById('furnaceMenu').addEventListener('touchmove',e=>e.stopPropagation(),{passive:true});
-        document.getElementById('furnaceMenu').addEventListener('touchend',e=>e.stopPropagation(),{passive:true});
+        function renderFurnaceInventory(){
+            const grid=ensureFurnaceInventoryGrid();if(!grid)return;
+            for(let i=0;i<player.inventory.length;i++){
+                const slot=player.inventory[i]||{id:0,count:0},d=grid.children[i];
+                d.className='inv-slot';d.style.boxShadow=i===player.selectedSlot?'inset 0 0 0 1px white':'';d.style.backgroundColor='';d.innerHTML='';d.title='Empty slot';
+                if(furnaceTransferSelection?.type==='inventory'&&furnaceTransferSelection.index===i)d.classList.add('selected-transfer');
+                if(slot.count>0){
+                    const ingredient=Boolean(FURNACE_RECIPES[slot.id]),fuel=Boolean(FURNACE_FUEL_SECONDS[slot.id]);
+                    if(ingredient)d.classList.add('compatible');if(fuel)d.classList.add('fuel-compatible');
+                    d.style.backgroundColor=getSlotColor(slot.id);
+                    d.innerHTML=ITEM_ICONS[slot.id]?`<span class="slot-icon" style="font-size:16px">${ITEM_ICONS[slot.id]}</span><span class="slot-count">${slot.count}</span>`:`<span style="font-size:7px">${getItemName(slot.id)}</span><span class="slot-count">${slot.count}</span>`;
+                    d.title=ingredient&&fuel?`${getItemName(slot.id)} — ingredient or fuel`:ingredient?`${getItemName(slot.id)} — ingredient`:fuel?`${getItemName(slot.id)} — fuel`:`${getItemName(slot.id)}`;
+                }
+            }
+        }
+        function updateFurnaceStatusUI(){
+            if(!openFurnaceKey)return;const f=furnaceState(openFurnaceKey);
+            const ingredientEl=document.getElementById('furnaceIngredient'),fuelEl=document.getElementById('furnaceFuel'),outputEl=document.getElementById('furnaceOutput');
+            ingredientEl.textContent=furnaceSlotText(f.ingredientId,f.ingredientCount,'Ingredient');
+            fuelEl.textContent=furnaceSlotText(f.fuelId,f.fuelCount,'Fuel');
+            outputEl.textContent=furnaceSlotText(f.outputId,f.outputCount,'Output');
+            ingredientEl.classList.toggle('selected-transfer',furnaceTransferSelection?.type==='furnace'&&furnaceTransferSelection.kind==='ingredient');
+            fuelEl.classList.toggle('selected-transfer',furnaceTransferSelection?.type==='furnace'&&furnaceTransferSelection.kind==='fuel');
+            outputEl.classList.toggle('selected-transfer',furnaceTransferSelection?.type==='furnace'&&furnaceTransferSelection.kind==='output');
+            document.getElementById('furnaceProgressFill').style.width=`${Math.min(100,f.progress/10*100)}%`;
+            const result=FURNACE_RECIPES[Number(f.ingredientId)],activelyCooking=Boolean(result&&f.ingredientCount>0&&f.burnTime>0&&(f.outputCount<=0||f.outputId===result));
+            const cookRemaining=Math.max(0,10-Math.min(10,Number(f.progress)||0));
+            document.getElementById('furnaceFuelText').textContent=activelyCooking?`Cooking: ${cookRemaining.toFixed(1)}s • Fuel: ${f.burnTime.toFixed(1)}s`:(f.burnTime>0?`Fuel burning: ${f.burnTime.toFixed(1)}s`:'No fuel burning');
+            updateFurnaceTransferHint();
+        }
+        function updateFurnaceUI(){if(!openFurnaceKey)return;updateFurnaceStatusUI();renderFurnaceInventory();}
+        function igniteFurnaceIfReady(f){
+            if(!f)return false;
+            const result=FURNACE_RECIPES[Number(f.ingredientId)];
+            if(!result||Number(f.ingredientCount)<=0)return false;
+            if(Number(f.outputCount)>0&&Number(f.outputId)!==Number(result))return false;
+            const fuelSeconds=FURNACE_FUEL_SECONDS[Number(f.fuelId)];
+            if(Number(f.burnTime)>0||Number(f.fuelCount)<=0||!fuelSeconds)return false;
+            f.burnTime=Number(fuelSeconds);
+            f.fuelCount=Math.max(0,Number(f.fuelCount)-1);
+            if(f.fuelCount<=0)f.fuelId=0;
+            singleplayerDirty=true;
+            return true;
+        }
+        function furnaceKindKeys(kind){
+            if(kind==='ingredient')return ['ingredientId','ingredientCount'];
+            if(kind==='fuel')return ['fuelId','fuelCount'];
+            return ['outputId','outputCount'];
+        }
+        function itemFitsFurnaceKind(id,kind){
+            if(kind==='ingredient')return Boolean(FURNACE_RECIPES[Number(id)]);
+            if(kind==='fuel')return Boolean(FURNACE_FUEL_SECONDS[Number(id)]);
+            return false;
+        }
+        function makeFurnaceSlotRef(kind){
+            if(!['ingredient','fuel','output'].includes(kind)||!openFurnaceKey)return null;
+            const [idKey,countKey]=furnaceKindKeys(kind);
+            return {
+                key:`furnace:${openFurnaceKey}:${kind}`,
+                accepts:id=>itemFitsFurnaceKind(id,kind),
+                read(){const f=furnaceState(openFurnaceKey);return {id:Number(f[idKey])||0,count:Math.max(0,Number(f[countKey])||0)};},
+                write(id,count){const f=furnaceState(openFurnaceKey);f[idKey]=count>0?Number(id)||0:0;f[countKey]=Math.max(0,Math.min(MAX_STACK_SIZE,Number(count)||0));if(f[countKey]<=0)f[idKey]=0;if(kind==='ingredient'&&f[countKey]<=0)f.progress=0;}
+            };
+        }
+        function furnaceSelectionRef(selection){
+            if(!selection)return null;
+            return selection.type==='inventory'?makeInventorySlotRef(selection.index):makeFurnaceSlotRef(selection.kind);
+        }
+        function finishFurnaceTransfer(){
+            const f=openFurnaceKey?furnaceState(openFurnaceKey):null;
+            if(f)igniteFurnaceIfReady(f);
+            furnaceTransferSelection=null;updateInventoryUI();updateFurnaceUI();singleplayerDirty=true;syncFurnace(openFurnaceKey);
+        }
+        function clickFurnaceSlot(kind){
+            if(!openFurnaceKey)return;const target=makeFurnaceSlotRef(kind);if(!target)return;
+            if(!furnaceTransferSelection){const slot=target.read();if(slot.count>0){furnaceTransferSelection={type:'furnace',kind};updateFurnaceUI();}return;}
+            const source=furnaceSelectionRef(furnaceTransferSelection);
+            if(source?.key===target.key){furnaceTransferSelection=null;updateFurnaceUI();return;}
+            if(transferStacksLikeInventory(source,target)){finishFurnaceTransfer();return;}
+            updateFurnaceUI();
+        }
+        function clickFurnaceInventory(slotIndex){
+            if(!openFurnaceKey)return;const target=makeInventorySlotRef(slotIndex);
+            if(!furnaceTransferSelection){const slot=target.read();if(slot.count>0){furnaceTransferSelection={type:'inventory',index:slotIndex};updateFurnaceUI();}return;}
+            const source=furnaceSelectionRef(furnaceTransferSelection);
+            if(source?.key===target.key){furnaceTransferSelection=null;updateFurnaceUI();return;}
+            if(transferStacksLikeInventory(source,target)){finishFurnaceTransfer();return;}
+            updateFurnaceUI();
+        }
+        function updateFurnaces(dt){if(singleplayerNetworkMode==='lan-guest'||singleplayerNetworkMode==='dedicated'){if(openFurnaceKey)updateFurnaceStatusUI();return;}let inventoryChanged=false;for(const [key,f0] of furnaceStates){Object.assign(f0,normalizeFurnaceState(f0));const f=f0;const result=FURNACE_RECIPES[f.ingredientId];if(!result||f.ingredientCount<=0){f.progress=0;continue;}if(f.outputCount>0&&f.outputId!==result){f.progress=0;continue;}if(igniteFurnaceIfReady(f))inventoryChanged=true;if(f.burnTime>0){const used=Math.min(dt,f.burnTime);f.burnTime-=used;f.progress+=used;if(f.progress>=10){f.progress-=10;f.ingredientCount--;if(f.ingredientCount<=0)f.ingredientId=0;f.outputId=result;f.outputCount=Math.min(MAX_STACK_SIZE,f.outputCount+1);singleplayerDirty=true;inventoryChanged=true;}}}if(openFurnaceKey){updateFurnaceStatusUI();if(inventoryChanged)renderFurnaceInventory();}}
+        // Furnace input is handled by one capture-phase Pointer Events controller.
+        // This avoids mobile game touch handlers, synthesized click timing, and child-node
+        // replacement from swallowing the second half of an inventory->slot transfer.
+        const furnaceMenuEl=document.getElementById('furnaceMenu');
+        let furnacePointerStart=null;
+        furnaceMenuEl.addEventListener('pointerdown',e=>{
+            if(!openFurnaceKey)return;
+            furnacePointerStart={id:e.pointerId,x:e.clientX,y:e.clientY};
+            e.stopPropagation();
+        },true);
+        furnaceMenuEl.addEventListener('pointermove',e=>{
+            if(furnacePointerStart&&furnacePointerStart.id===e.pointerId&&Math.hypot(e.clientX-furnacePointerStart.x,e.clientY-furnacePointerStart.y)>14)furnacePointerStart.moved=true;
+            e.stopPropagation();
+        },true);
+        furnaceMenuEl.addEventListener('pointercancel',e=>{if(furnacePointerStart?.id===e.pointerId)furnacePointerStart=null;e.stopPropagation();},true);
+        furnaceMenuEl.addEventListener('pointerup',e=>{
+            if(!openFurnaceKey){furnacePointerStart=null;return;}
+            const start=furnacePointerStart;furnacePointerStart=null;
+            e.stopPropagation();
+            if(start&&start.id===e.pointerId&&start.moved)return;
+            const target=e.target instanceof Element?e.target:null;if(!target)return;
+            const inv=target.closest('#furnaceInventoryGrid .inv-slot');
+            const ingredient=target.closest('#furnaceIngredient');
+            const fuel=target.closest('#furnaceFuel');
+            const output=target.closest('#furnaceOutput');
+            const close=target.closest('#closeFurnaceBtn');
+            if(!(inv||ingredient||fuel||output||close))return;
+            e.preventDefault();
+            if(close){closeFurnace();return;}
+            if(output){clickFurnaceSlot('output');return;}
+            if(ingredient){clickFurnaceSlot('ingredient');return;}
+            if(fuel){clickFurnaceSlot('fuel');return;}
+            if(inv){const i=Number(inv.dataset.slotIndex);if(Number.isInteger(i)&&i>=0&&i<player.inventory.length)clickFurnaceInventory(i);}
+        },true);
+        furnaceMenuEl.addEventListener('click',e=>{
+            // Prevent a synthesized click from repeating the already handled pointerup.
+            const target=e.target instanceof Element?e.target:null;
+            if(target?.closest('#furnaceInventoryGrid .inv-slot,#furnaceIngredient,#furnaceFuel,#furnaceOutput,#closeFurnaceBtn')){e.preventDefault();e.stopPropagation();}
+        },true);
+        furnaceMenuEl.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+        furnaceMenuEl.addEventListener('touchmove',e=>e.stopPropagation(),{passive:true});
+        furnaceMenuEl.addEventListener('touchend',e=>e.stopPropagation(),{passive:true});
 
         function performRightClick() {
             if (!gameStarted || isChatOpen || deathScreenOpen || player.gamemode === 'spectator') return;
@@ -7992,23 +8124,41 @@
             updateMobileControlsVisibility();
         }
 
+        function makeInventorySlotRef(slotIndex) {
+            return {
+                key:`inventory:${slotIndex}`,
+                accepts:()=>true,
+                read(){ const slot=player.inventory[slotIndex]||{id:0,count:0}; return {id:Number(slot.id)||0,count:Math.max(0,Number(slot.count)||0)}; },
+                write(id,count){ const slot=player.inventory[slotIndex]; if(!slot)return; slot.id=count>0?Number(id)||0:0; slot.count=Math.max(0,Math.min(MAX_STACK_SIZE,Number(count)||0)); if(slot.count<=0)slot.id=0; }
+            };
+        }
+
+        // Shared by the normal inventory and furnace. This is the canonical MellorCraft
+        // click-slot behavior: move into an empty slot, merge matching stacks, otherwise swap.
+        function transferStacksLikeInventory(fromRef,toRef) {
+            if(!fromRef||!toRef||fromRef.key===toRef.key)return false;
+            const from=fromRef.read(),to=toRef.read();
+            if(from.count<=0||from.id<=0)return false;
+            if(to.count<=0){
+                if(!toRef.accepts(from.id))return false;
+                toRef.write(from.id,from.count);fromRef.write(0,0);return true;
+            }
+            if(to.id===from.id&&to.count<MAX_STACK_SIZE){
+                if(!toRef.accepts(from.id))return false;
+                const amount=Math.min(MAX_STACK_SIZE-to.count,from.count);if(amount<=0)return false;
+                toRef.write(to.id,to.count+amount);fromRef.write(from.id,from.count-amount);return true;
+            }
+            if(!toRef.accepts(from.id)||!fromRef.accepts(to.id))return false;
+            toRef.write(from.id,from.count);fromRef.write(to.id,to.count);return true;
+        }
+
         function handleInventoryClick(slotIndex) {
             if (selectedInventorySlot === -1) {
                 if (player.inventory[slotIndex].count > 0) { selectedInventorySlot = slotIndex; updateFullInventoryUI(); }
             } else {
                 if (selectedInventorySlot === slotIndex) selectedInventorySlot = -1;
                 else {
-                    const fromSlot = player.inventory[selectedInventorySlot], toSlot = player.inventory[slotIndex];
-                    if (toSlot.count === 0) { toSlot.id = fromSlot.id; toSlot.count = fromSlot.count; fromSlot.id = 0; fromSlot.count = 0; } 
-                    else if (toSlot.id === fromSlot.id && toSlot.count < MAX_STACK_SIZE) {
-                        const transfer = Math.min(MAX_STACK_SIZE - toSlot.count, fromSlot.count);
-                        toSlot.count += transfer; fromSlot.count -= transfer;
-                        if (fromSlot.count === 0) fromSlot.id = 0;
-                    } else {
-                        const tempId = toSlot.id, tempCount = toSlot.count;
-                        toSlot.id = fromSlot.id; toSlot.count = fromSlot.count;
-                        fromSlot.id = tempId; fromSlot.count = tempCount;
-                    }
+                    transferStacksLikeInventory(makeInventorySlotRef(selectedInventorySlot),makeInventorySlotRef(slotIndex));
                     selectedInventorySlot = -1;
                 }
                 updateFullInventoryUI(); updateInventoryUI();
