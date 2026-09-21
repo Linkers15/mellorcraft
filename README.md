@@ -1,5 +1,19 @@
-MellorCraft v1.7.0
+MellorCraft v1.7.1
 =========================================================
+
+
+v1.7.1 water rollback + mob/network fixes
+------------------------------------------
+- Removed the experimental water expansion completely from active gameplay: no Ocean or River generation, no water/flow simulation, no buckets, no boats, and no Salmon/Shark aquatic mobs. Terrain generation is restored to the stable pre-water v1.7.1 system.
+- The Seed Map is restored to the pre-water terrain generator as well, so it no longer displays river/ocean hydrology from the experimental builds.
+- Kept the Customized-world terrain blending fix that prevents the former 50+ block biome-junction cliffs.
+- Kept default Overworld spawning at block coordinate **0,0**.
+- Kept seed-dependent ravines and mega-caves. Mega-cave placement and shape rolls now include the world seed instead of repeating in the same locations on every seed.
+- Kept the Bear and Camel model fix: their head/neck geometry is built into the body mesh so the head cannot visually detach during movement.
+- Kept the new natural-mob spawn distribution. Spawn attempts are spread around all active players from exactly **2 to 6 chunks** away and reject crowded chunks or positions too close to another natural mob.
+- Kept distance-based natural-mob cleanup. A non-boss mob despawns as soon as it becomes more than **7 chunks away from every active player**, freeing space under the mob cap for replacement spawns in the 2–6 chunk band. Browser-hosted worlds and the dedicated server both enforce this rule.
+- Kept the multiplayer orientation corrections: remote players turn in the same yaw direction as the local camera and observer head pitch uses the corrected up/down convention.
+- Multiplayer protocol 6 and world format 11 remain unchanged.
 
 Hardcore death and administration pass
 --------------------------------------
@@ -259,12 +273,9 @@ Reset one world:
 Current world-generation rules
 ------------------------------
 - The Overworld remains 200 blocks tall.
-- Ocean, Beach, and Swamp biomes have been removed from new generation.
-- Natural water and lava generation has been removed. Legacy liquid block edits
-  are treated as air, and buckets are no longer available through normal
-  crafting or the Creative inventory.
-- Plains, Forest, Taiga, Stony Peaks, Jungle, Savanna, deserts, Badlands, and all
-  three Mountain biomes remain available.
+- Ocean, Beach, and River biomes are generated alongside Plains, Forest, Taiga, Stony Peaks, Jungle, Savanna, deserts, Badlands, and all three Mountain biomes. Swamp remains unavailable in new generation.
+- Ocean water sits at Y=45. Ocean floors are sealed against cave and ravine carving. Rivers use seeded continuous channels whose surface descends from higher inland elevations to Y=45 at the ocean boundary.
+- Water source and flowing blocks are active again. Buckets can collect source water and place new sources; natural lava generation remains disabled.
 - Mountain-region occurrence remains at the v1.4.0 frequency. In v1.4.1 each seeded range keeps its shape and height bands while its horizontal footprint is compressed to 50% of its former land area, producing steeper slopes.
 - Taiga and Stony Peaks remain centered near Y=80.
 - Normal caves and varied ravines remain. Rare mega-caves are approximately

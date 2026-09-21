@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MellorCraft v1.7.0</title>
+    <title>MellorCraft v1.7.1</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Courier New', monospace; background: #000; }
@@ -733,7 +733,7 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2 id="versionSubtitle">v1.7.0</h2>
+        <h2 id="versionSubtitle">v1.7.1</h2>
         <div id="startupPage" class="main-menu-panel start-page active">
             <p class="startup-copy">Press Start to enable the soundtrack and open the main menu.</p>
             <button class="menuBtn greenBtn" id="startClientBtn">Start MellorCraft</button>
@@ -1107,7 +1107,7 @@
         const isIPhonePlaying = /iPhone|iPod/i.test(navigator.userAgent);
         document.documentElement.classList.toggle('mobile-mode', isMobilePlaying);
         if (isMobilePlaying) {
-            document.getElementById('versionSubtitle').textContent = 'v1.7.0';
+            document.getElementById('versionSubtitle').textContent = 'v1.7.1';
             document.getElementById('positionLabel').textContent = 'Pos:';
             document.getElementById('gamemodeLabel').textContent = 'Mode:';
             const mobileDefaultDistance = isIOSDevice ? 2 : 4;
@@ -1497,7 +1497,7 @@
         function integratedPublicPlayer(state) {
             return { id:state.id, username:state.username, skin:state.skin, x:state.x, y:state.y, z:state.z,
                 yaw:state.yaw, pitch:state.pitch, dimension:state.dimension, health:state.health, hunger:Number.isFinite(Number(state.hunger))?Number(state.hunger):20,
-                gamemode:state.gamemode, heldItem:state.heldItem, crouching:Boolean(state.crouching), isOperator:Boolean(state.isOperator) };
+                gamemode:state.gamemode, heldItem:state.heldItem, crouching:Boolean(state.crouching), renderDistance:Math.max(2,Math.min(32,Number(state.renderDistance)||6)), isOperator:Boolean(state.isOperator) };
         }
 
         function integratedLocalState() {
@@ -1507,7 +1507,7 @@
                 x:Number(player?.x)||0.5, y:Number(player?.y)||50, z:Number(player?.z)||0.5,
                 yaw:Number(player?.yaw)||0, pitch:Number(player?.pitch)||0, dimension:currentDimension,
                 health:Number(player?.health)||10, hunger:Number.isFinite(Number(player?.hunger))?Number(player.hunger):20, gamemode:player?.gamemode||'survival', heldItem:slot?Number(slot.id)||0:0,
-                crouching:Boolean(player?.crouching),
+                crouching:Boolean(player?.crouching), renderDistance:RENDER_DISTANCE,
                 selectedSlot:Number(player?.selectedSlot)||0,
                 inventory:(player?.inventory||[]).map(item=>({id:Number(item?.id)||0,count:Number(item?.count)||0})),
                 originalSpawn:playerOriginalSpawn?{...playerOriginalSpawn}:null,
@@ -1765,7 +1765,7 @@
                 if (now >= (integratedDamageLocks.get(clientId)||0)) state.health=Math.max(0,Math.min(10,Number(payload.health)||state.health||10));
                 state.hunger=gameRules.difficulty==='peaceful'?20:Math.max(0,Math.min(20,Number.isFinite(Number(payload.hunger))?Number(payload.hunger):(Number.isFinite(Number(state.hunger))?Number(state.hunger):20)));
                 state.heldItem=Math.max(0,Math.min(255,Math.floor(Number(payload.heldItem)||0)));
-                state.crouching=Boolean(payload.crouching);
+                state.crouching=Boolean(payload.crouching);state.renderDistance=Math.max(2,Math.min(32,Number(payload.renderDistance)||Number(state.renderDistance)||6));
                 if (Array.isArray(payload.inventory)) state.inventory=payload.inventory.slice(0,30).map(v=>({id:Math.max(0,Math.min(255,Number(v?.id)||0)),count:Math.max(0,Math.min(100,Number(v?.count)||0))}));
                 state.selectedSlot=Math.max(0,Math.min(8,Math.floor(Number(payload.selectedSlot)||0)));
                 if (state.inventory && state.inventory[state.selectedSlot]) state.heldItem=state.inventory[state.selectedSlot].count>0?state.inventory[state.selectedSlot].id:0;
@@ -1930,6 +1930,18 @@
                 else if(item.age>=.75){for(const p of integratedPlayers.values()){if(p.dimension!==item.dimension||p.health<=0||p.gamemode==='spectator')continue;const dx=p.x-item.x,dy=(p.y+.8)-item.y,dz=p.z-item.z;if(dx*dx+dy*dy+dz*dz<=2.25){integratedSend(p.id,{type:'give_item',itemId:item.itemId,count:item.count});remove=true;break;}}}
                 if(remove){droppedItems.delete(item.id);integratedBroadcast({type:'item_removed',itemId:item.id});singleplayerDirty=true;}
             }
+            // Natural mobs despawn immediately once they are more than seven chunks from every active player.
+            for(const mob of [...mobs]){
+                if(!mob||mob.health<=0||mob.type?.isBoss)continue;
+                let visible=false;
+                for(const p of integratedPlayers.values()){
+                    if(p.dimension!==mob.dimension||p.health<=0||p.gamemode==='spectator')continue;
+                    const range=7*CHUNK_SIZE,dx=mob.x-p.x,dz=mob.z-p.z;
+                    if(dx*dx+dz*dz<=range*range){visible=true;break;}
+                }
+                mob.authorityOutOfRangeTime=visible?0:(Number(mob.authorityOutOfRangeTime)||0)+dt;
+                if(!visible)integratedRemoveMob(mob,'despawn');
+            }
             integratedStateBroadcastTimer+=dt;
             if(integratedStateBroadcastTimer>=.1){integratedStateBroadcastTimer=0;integratedRecomputeMobHosts();integratedBroadcast({type:'world_state',worldTime,weatherSeed,weatherPhase,gameRules:{...gameRules},bossDefeated:Boolean(bossDefeated),players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});}
         }
@@ -2037,7 +2049,7 @@
                     dimension: Number.isInteger(data.dimension) ? data.dimension : 0,
                     health: Number.isFinite(Number(data.health)) ? Number(data.health) : 10,
                     gamemode: data.gamemode || 'survival', heldItem: Number(data.heldItem) || 0,
-                    crouching: Boolean(data.crouching), walkPhase:0, moveSpeed:0
+                    crouching: Boolean(data.crouching), renderDistance:Math.max(2,Math.min(32,Number(data.renderDistance)||6)), walkPhase:0, moveSpeed:0
                 };
                 remotePlayers.set(data.id, rp);
             } else {
@@ -2053,6 +2065,7 @@
                 rp.gamemode = data.gamemode || rp.gamemode;
                 rp.heldItem = Number(data.heldItem) || 0;
                 rp.crouching = Boolean(data.crouching);
+                rp.renderDistance=Math.max(2,Math.min(32,Number(data.renderDistance)||rp.renderDistance||6));
             }
         }
 
@@ -2162,7 +2175,7 @@
                 localClientId = data.clientId;
                 localUsername = data.username || localUsername;
                 WORLD_SEED = Number(data.seed) || 0;
-                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.7.0 - ${data.worldName}`; }
+                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.7.1 - ${data.worldName}`; }
                 worldTime = Number(data.worldTime) || 0.25;
                 if(Number.isFinite(data.weatherSeed))weatherSeed=data.weatherSeed|0;if(Number.isFinite(data.weatherPhase))weatherPhase=Number(data.weatherPhase);
                 applyGameRules(data.gameRules);
@@ -2545,7 +2558,7 @@
             const operators=Array.isArray(data.operators)?data.operators.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
             const bannedPlayers=Array.isArray(data.bannedPlayers)?data.bannedPlayers.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
             const seed=Number(data.seed)||0;
-            return {format:'MellorCraftWorld',formatVersion:11,version:'1.7.0',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],bannedPlayers:[...new Set(bannedPlayers)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],furnaces:(data.furnaces&&typeof data.furnaces==='object')?data.furnaces:{},updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
+            return {format:'MellorCraftWorld',formatVersion:11,version:'1.7.1',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],bannedPlayers:[...new Set(bannedPlayers)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],furnaces:(data.furnaces&&typeof data.furnaces==='object')?data.furnaces:{},updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
         }
         function canonicalPlayerProfilesForSave() {
             const profiles=JSON.parse(JSON.stringify(singleplayerLanProfiles||{}));
@@ -2557,7 +2570,7 @@
         function saveSingleplayerWorld(force=false) {
             if (!singleplayerWorldName || !gameStarted || (singleplayerNetworkMode!=='local' && singleplayerNetworkMode!=='lan-host')) return false;
             if (!force && !singleplayerDirty) return true;
-            const data={format:'MellorCraftWorld',formatVersion:11,version:'1.7.0',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),bannedPlayers:[...singleplayerBannedPlayers].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),updatedAt:Date.now()};
+            const data={format:'MellorCraftWorld',formatVersion:11,version:'1.7.1',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),bannedPlayers:[...singleplayerBannedPlayers].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),updatedAt:Date.now()};
             try {localStorage.setItem(singleplayerStorageKey(singleplayerWorldName),JSON.stringify(data));singleplayerDirty=false;listSingleplayerWorlds();return true;}catch(error){addChatMessage(`Autosave failed: ${error.message}`,'chatError');return false;}
         }
         function launchSingleplayerWorld(rawData) {
@@ -2576,7 +2589,7 @@
             singleplayerLanProfiles={};for(const [key,value] of Object.entries(profiles)){const profileKey=String(key).toLowerCase();if(profileKey!==hostKey&&value&&typeof value==='object')singleplayerLanProfiles[profileKey]={...value};}
             pendingBlockSnapshot=snapshotFromBlocksDict(data.blocks);pendingMobSnapshot=(Array.isArray(data.mobs)?data.mobs:[]).filter(m=>!(bossDefeated&&m&&m.typeKey==='MELLOR_BOSS'));pendingItemSnapshot=Array.isArray(data.items)?data.items:[];furnaceStates.clear();for(const [k,v] of Object.entries(data.furnaces||{}))furnaceStates.set(k,normalizeFurnaceState(v));
             playerOriginalSpawn=pendingPlayerState?.originalSpawn?{...pendingPlayerState.originalSpawn}:null;playerRespawnPoint=normalizePlayerSpawnPoint(pendingPlayerState?.respawnPoint);
-            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.7.0 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
+            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.7.1 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
         }
         let gameConfirmResolver = null;
         function showGameConfirm(message, options={}) {
@@ -4528,6 +4541,31 @@
                 default:return 59+broad*9+detail*3;
             }
         }
+        // Customized worlds use jittered biome cells. Blending only the two nearest
+        // cells made the chosen "second" biome change abruptly at three-way borders,
+        // which could create 50+ block vertical seams. Blend every nearby cell with
+        // a smooth radial kernel instead. Far cells contribute essentially nothing,
+        // while mountain-to-lowland transitions stretch across a broad foothill band.
+        function customTerrainHeight(x,z,broad,detail,ridge){
+            const grid=260,baseX=Math.floor(x/grid),baseZ=Math.floor(z/grid),blendRadius=190;
+            let weightedHeight=0,totalWeight=0;
+            for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++){
+                const cx=baseX+ox,cz=baseZ+oz;
+                const sx=cx*grid+grid*(.16+.68*coordHash(cx,cz,7022));
+                const sz=cz*grid+grid*(.16+.68*coordHash(cx,cz,7023));
+                const dist=Math.hypot(x-sx,z-sz);
+                const ratio=dist/blendRadius;
+                // Fourth-power falloff keeps biome interiors recognizable but makes
+                // the transition itself continuous even where 3+ cells meet.
+                const weight=Math.exp(-(ratio*ratio*ratio*ratio));
+                if(weight<.00005)continue;
+                const biome=customBiomeForCell(cx,cz);
+                weightedHeight+=biomeTerrainHeight(biome,x,z,broad,detail,ridge)*weight;
+                totalWeight+=weight;
+            }
+            if(totalWeight<=.00001)return biomeTerrainHeight(getCustomBiomeInfo(x,z).biome,x,z,broad,detail,ridge);
+            return weightedHeight/totalWeight;
+        }
         function flatWorldHeight(){const cfg=activeWorldGen();return Math.max(0,Math.min(WORLD_HEIGHT-1,(cfg.flatLayers||[]).reduce((n,l)=>n+Math.max(0,Number(l.count)||0),0)-1));}
         function flatBlockAtY(y){let cursor=0;for(const l of (activeWorldGen().flatLayers||[])){const count=Math.max(0,Math.floor(Number(l.count)||0));if(y>=cursor&&y<cursor+count)return Number(l.blockId)||BLOCKS.AIR;cursor+=count;}return BLOCKS.AIR;}
         function getBiome(x, z) {
@@ -4569,7 +4607,7 @@
             const detail = noise.octave(x * 0.022 + 400, z * 0.022 - 400, 3, 0.48);
             const ridge = 1 - Math.abs(noise.octave(x * 0.0022 + 1200, z * 0.0022 + 1200, 4, 0.55));
             const { temp, moist } = getClimate(x, z);
-            if(cfg.type==='custom'){const info=getCustomBiomeInfo(x,z);const h1=biomeTerrainHeight(info.biome,x,z,broad,detail,ridge),h2=biomeTerrainHeight(info.secondBiome,x,z,broad,detail,ridge);return clamp(Math.floor(mix(h2,h1,info.nearestWeight)),8,190);}
+            if(cfg.type==='custom')return clamp(Math.floor(customTerrainHeight(x,z,broad,detail,ridge)),8,190);
 
             const cold = smoothstep(0.02, 0.34, -temp);
             const hot = smoothstep(0.16, 0.52, temp);
@@ -4636,20 +4674,23 @@
         function getMegaCaveCell(cellX, cellZ) {
             const key = `${cellX},${cellZ}`;
             if (megaCaveCache.has(key)) return megaCaveCache.get(key);
-            if (coordHash(cellX, cellZ, 1180) >= 0.26) {
+            // Mega-cave placement used to use only cell coordinates, so every seed shared
+            // the same huge chambers. Fold WORLD_SEED into every placement/shape roll.
+            const megaHash=(salt)=>coordHash(cellX,cellZ,salt,WORLD_SEED+salt*1597);
+            if (megaHash(1180) >= 0.26) {
                 megaCaveCache.set(key, null);
                 return null;
             }
             const grid = 320;
-            const cx = cellX * grid + 55 + coordHash(cellX, cellZ, 1181) * (grid - 110);
-            const cz = cellZ * grid + 55 + coordHash(cellX, cellZ, 1182) * (grid - 110);
+            const cx = cellX * grid + 55 + megaHash(1181) * (grid - 110);
+            const cz = cellZ * grid + 55 + megaHash(1182) * (grid - 110);
             const cave = {
                 cx, cz,
-                cy: 24 + coordHash(cellX, cellZ, 1183) * 25,
-                rx: 46 + coordHash(cellX, cellZ, 1184) * 38,
-                rz: 42 + coordHash(cellX, cellZ, 1185) * 42,
-                ry: 15 + coordHash(cellX, cellZ, 1186) * 13,
-                angle: coordHash(cellX, cellZ, 1187) * Math.PI * 2
+                cy: 24 + megaHash(1183) * 25,
+                rx: 46 + megaHash(1184) * 38,
+                rz: 42 + megaHash(1185) * 42,
+                ry: 15 + megaHash(1186) * 13,
+                angle: megaHash(1187) * Math.PI * 2
             };
             megaCaveCache.set(key, cave);
             return cave;
@@ -4696,14 +4737,15 @@
             const cellSize = 112;
             const cellX = Math.floor(x / cellSize), cellZ = Math.floor(z / cellSize);
             let best = null;
+            const ravineHash=(cx,cz,salt)=>coordHash(cx,cz,salt,WORLD_SEED+salt*977);
             for (let ox = -1; ox <= 1; ox++) {
                 for (let oz = -1; oz <= 1; oz++) {
                     const cx = cellX + ox, cz = cellZ + oz;
-                    if (coordHash(cx, cz, 901) > 0.22) continue;
-                    const centerX = cx * cellSize + 12 + coordHash(cx, cz, 902) * (cellSize - 24);
-                    const centerZ = cz * cellSize + 12 + coordHash(cx, cz, 903) * (cellSize - 24);
-                    const angle = coordHash(cx, cz, 904) * Math.PI * 2;
-                    const length = 55 + coordHash(cx, cz, 905) * 95;
+                    if (ravineHash(cx, cz, 901) > 0.22) continue;
+                    const centerX = cx * cellSize + 12 + ravineHash(cx, cz, 902) * (cellSize - 24);
+                    const centerZ = cz * cellSize + 12 + ravineHash(cx, cz, 903) * (cellSize - 24);
+                    const angle = ravineHash(cx, cz, 904) * Math.PI * 2;
+                    const length = 55 + ravineHash(cx, cz, 905) * 95;
                     const half = length * 0.5;
                     const ax = centerX - Math.cos(angle) * half, az = centerZ - Math.sin(angle) * half;
                     const bx = centerX + Math.cos(angle) * half, bz = centerZ + Math.sin(angle) * half;
@@ -4713,17 +4755,17 @@
                     t = Math.max(0, Math.min(1, t));
                     const px = ax + abx * t, pz = az + abz * t;
                     const dist = Math.hypot(x - px, z - pz);
-                    const width = 2.8 + coordHash(cx, cz, 906) * 6.8;
+                    const width = 2.8 + ravineHash(cx, cz, 906) * 6.8;
                     const taper = Math.pow(Math.sin(Math.PI * t), 0.72);
                     const localWidth = width * Math.max(0.12, taper);
                     if (dist > localWidth) continue;
 
-                    const depth = 18 + coordHash(cx, cz, 907) * 35;
-                    const surfaceOpen = coordHash(cx, cz, 908) < 0.62;
-                    const undergroundOnly = coordHash(cx, cz, 909) < 0.22;
-                    let top = undergroundOnly ? 30 + coordHash(cx, cz, 910) * 28 : terrainHeight + (surfaceOpen ? 2 : -2);
-                    const longitudinalSlope = coordHash(cx, cz, 911) < 0.78
-                        ? (t - 0.5) * (10 + coordHash(cx, cz, 912) * 32)
+                    const depth = 18 + ravineHash(cx, cz, 907) * 35;
+                    const surfaceOpen = ravineHash(cx, cz, 908) < 0.62;
+                    const undergroundOnly = ravineHash(cx, cz, 909) < 0.22;
+                    let top = undergroundOnly ? 30 + ravineHash(cx, cz, 910) * 28 : terrainHeight + (surfaceOpen ? 2 : -2);
+                    const longitudinalSlope = ravineHash(cx, cz, 911) < 0.78
+                        ? (t - 0.5) * (10 + ravineHash(cx, cz, 912) * 32)
                         : 0;
                     const sideInset = Math.pow(dist / Math.max(0.1, localWidth), 1.7) * (depth * 0.70);
                     const floorNoise = ravineNoise.noise2D(x * 0.055 + cx * 3, z * 0.055 + cz * 3) * 2.5;
@@ -5509,7 +5551,7 @@
             if (typeof Worker === 'undefined') return;
             const workerFunctions = [
                 SimplexNoise, clamp, smoothstep, mix, activeWorldGen, getClimate, getContinentValue, getBaseBiome,
-                coordHash, getMountainRegion, getMountainInfo, customBiomeForCell, getCustomBiomeInfo, biomeTerrainHeight, flatWorldHeight, flatBlockAtY, getBiome, getAltBiome, getHeight,
+                coordHash, getMountainRegion, getMountainInfo, customBiomeForCell, getCustomBiomeInfo, biomeTerrainHeight, customTerrainHeight, flatWorldHeight, flatBlockAtY, getBiome, getAltBiome, getHeight,
                 posRand, posRand3D, isCave, getMegaCaveCell, isMegaCave, getRavineRange, isRavine,
                 storageLootBlock, oreLootBlock, generatorStructureChance, woodFamilyForBiome, getDungeonStructure, getSurfaceStructure,
                 getAltMazeAt, getAltStructure, stairStepAt, getOreType, getPlainsTreeSpot,
@@ -6125,38 +6167,8 @@
         }
 
         function calculateWorldSpawnPosition() {
-            const spawnBiomes = [
-                BIOMES.PLAINS, BIOMES.DESERT_BARREN, BIOMES.DESERT_CACTUS,
-                BIOMES.FOREST, BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID,
-                BIOMES.MOUNTAINS_HIGH, BIOMES.TAIGA, BIOMES.STONY_PEAKS,
-                BIOMES.BADLANDS, BIOMES.JUNGLE, BIOMES.SAVANNA
-            ];
-            const desiredBiome = spawnBiomes[Math.floor(coordHash(WORLD_SEED, 17, 31, 1100) * spawnBiomes.length) % spawnBiomes.length];
-            let best = null;
-            for (let i = 0; i < 6200 && !best; i++) {
-                const x = Math.floor((coordHash(WORLD_SEED, i, 53, 1103) - 0.5) * 18000);
-                const z = Math.floor((coordHash(WORLD_SEED, i, 59, 1104) - 0.5) * 18000);
-                const biome = getBiome(x, z);
-                if (biome !== desiredBiome) continue;
-                const h = getHeight(x, z, biome);
-                if (h < 3 || h > 191 || isRavine(x, h, z)) continue;
-                const nearby = [getHeight(x + 3, z, getBiome(x + 3, z)), getHeight(x - 3, z, getBiome(x - 3, z)), getHeight(x, z + 3, getBiome(x, z + 3)), getHeight(x, z - 3, getBiome(x, z - 3))];
-                const maxDelta = Math.max(...nearby.map(v => Math.abs(v - h)));
-                const mountainBiome = [BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID, BIOMES.MOUNTAINS_HIGH].includes(biome);
-                if (maxDelta > (mountainBiome ? 8 : 4)) continue;
-                if (getBlock(x, h + 1, z, 0) !== BLOCKS.AIR || getBlock(x, h + 2, z, 0) !== BLOCKS.AIR) continue;
-                best = { x, z, h };
-            }
-            if (!best) {
-                for (let i = 0; i < 3000 && !best; i++) {
-                    const x = Math.floor((coordHash(WORLD_SEED, i, 61, 1110) - 0.5) * 18000);
-                    const z = Math.floor((coordHash(WORLD_SEED, i, 67, 1111) - 0.5) * 18000);
-                    const biome = getBiome(x, z), h = getHeight(x, z, biome);
-                    if (!isRavine(x, h, z)) best = { x, z, h };
-                }
-            }
-            const spawn = best || { x: 0, z: 0, h: getHeight(0, 0, getBiome(0, 0)) };
-            return {x:spawn.x+0.5,y:spawn.h+3,z:spawn.z+0.5,dimension:0};
+            const x=0,z=0,biome=getBiome(x,z),h=getHeight(x,z,biome);
+            return {x:0.5,y:Math.min(WORLD_HEIGHT-2,h+3),z:0.5,dimension:0};
         }
 
         function spawnPlayer() {
@@ -6703,8 +6715,15 @@
             } else if (type.model==='bear') {
                 addBox(-.58,.38,-.68,1.16,.72,1.30,bc);
                 addBox(-.62,.55,-.58,1.24,.58,.72,bc);
+                // Bear head is part of the body mesh so turning/wandering can never
+                // rotate it away from the neck and make it look detached.
+                addBox(-.34,.70,.40,.68,.48,.42,bc);
+                addBox(-.25,.94,.66,.50,.42,.50,type.headColor);
+                addBox(-.15,.98,1.12,.30,.17,.18,[type.headColor[0]*.72,type.headColor[1]*.66,type.headColor[2]*.58]);
+                addBox(-.24,1.25,.72,.15,.15,.12,type.headColor);addBox(.09,1.25,.72,.15,.15,.12,type.headColor);
+                addBox(-.15,1.18,1.165,.08,.08,.025,[.03,.03,.03]);addBox(.07,1.18,1.165,.08,.08,.025,[.03,.03,.03]);
                 for(const x of [-.50,.26])for(const z of [-.50,.28])addBox(x,0,z,.24,.46,.24,[bc[0]*.88,bc[1]*.88,bc[2]*.88]);
-                addBox(-.13,.52,.58,.26,.22,.25,bc);
+                addBox(-.13,.52,-.85,.26,.22,.25,bc);
             } else if(type.model==='rabbit'){
                 addBox(-.22,.17,-.20,.44,.30,.52,bc);
                 addBox(-.29,.14,.12,.22,.24,.28,bc);addBox(.07,.14,.12,.22,.24,.28,bc);
@@ -6716,10 +6735,15 @@
             } else if (type.model === 'camel') {
                 addBox(-.54,.88,-.72,1.08,.62,1.38,bc);
                 for(const x of [-.46,.28])for(const z of [-.57,.38])addBox(x,0,z,.18,.94,.18,[bc[0]*.86,bc[1]*.86,bc[2]*.86]);
-                // Hump and tall neck make the camel recognizable at distance.
+                // Hump, neck and head are one connected mesh; this avoids the old
+                // separate-head pivot visibly pulling the camel's head off its neck.
                 addBox(-.30,1.38,-.16,.60,.42,.62,[bc[0]*.96,bc[1]*.96,bc[2]*.96]);
-                addBox(-.18,1.18,-.76,.36,.78,.34,bc);
-                addBox(-.05,.96,.58,.10,.10,.42,[bc[0]*.76,bc[1]*.70,bc[2]*.62]);
+                addBox(-.18,1.18,.42,.36,.82,.34,bc);
+                addBox(-.20,1.82,.62,.40,.40,.50,type.headColor);
+                addBox(-.11,1.88,1.09,.22,.12,.18,[type.headColor[0]*.76,type.headColor[1]*.70,type.headColor[2]*.60]);
+                addBox(-.20,2.10,.68,.12,.12,.08,type.headColor);addBox(.08,2.10,.68,.12,.12,.08,type.headColor);
+                addBox(-.15,2.04,1.125,.08,.08,.025,[.03,.03,.03]);addBox(.07,2.04,1.125,.08,.08,.025,[.03,.03,.03]);
+                addBox(-.05,.96,-.94,.10,.10,.42,[bc[0]*.76,bc[1]*.70,bc[2]*.62]);
             } else if (type.model === 'boss') {
                 addBox(-0.75, 1.5, -0.5, 1.5, 1.5, 1.0, bc); 
                 addBox(-0.75, 0, -0.5, 0.5, 1.5, 1.0, bc); 
@@ -6999,11 +7023,15 @@
                 if (rp.dimension !== currentDimension || rp.gamemode === 'spectator' || rp.health <= 0) continue;
                 const distance = Math.hypot(rp.x - player.x, rp.z - player.z);
                 if (distance > (RENDER_DISTANCE + 1) * CHUNK_SIZE) continue;
-                // Camera yaw increases in the opposite direction from the model matrix rotation.
-                const modelYaw = -rp.yaw;
+                // The humanoid's visible face (eyes/mouth) is built on local -Z.
+                // Player yaw uses that same -Z-forward convention, so the model must
+                // use the transmitted yaw directly. Adding PI made remote players face
+                // backward and made their turns appear reversed to other players.
+                // modelMatrixPitch's X rotation is opposite the camera pitch sign.
+                const modelYaw = rp.yaw;
                 const walk=rp.crouching?0:Math.sin(rp.walkPhase||0)*Math.min(.10,(rp.moveSpeed||0)*.025);
                 drawMesh(getRemotePlayerBodyMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+Math.abs(walk)*.35, rp.z, modelYaw, walk), false);
-                drawMesh(getRemotePlayerHeadMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+1.4+Math.abs(walk)*.35, rp.z, modelYaw, Math.max(-0.75,Math.min(0.75,rp.pitch))), false);
+                drawMesh(getRemotePlayerHeadMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+1.4+Math.abs(walk)*.35, rp.z, modelYaw, -Math.max(-0.75,Math.min(0.75,rp.pitch))), false);
             }
         }
 
@@ -7014,11 +7042,15 @@
         function findUndergroundSpawnY(x,z,surface){const bx=Math.floor(x),bz=Math.floor(z),top=Math.max(6,Math.floor(surface)-5);for(let tries=0;tries<18;tries++){const y=4+Math.floor(Math.random()*Math.max(2,top-4));if(SOLID_BLOCKS.has(getBlock(bx,y-1,bz,0))&&getBlock(bx,y,bz,0)===BLOCKS.AIR&&getBlock(bx,y+1,bz,0)===BLOCKS.AIR&&!weatherColumnHasSky(x,z,y+1.5))return y;}return null;}
         function chooseNaturalSpawn(x,z){const biome=getBiome(Math.floor(x),Math.floor(z)),surface=getHeight(Math.floor(x),Math.floor(z),biome);if(isRavine(x,surface-1,z))return null;const night=isNight();if(hostileSpawningAllowed()&&(night?Math.random()<.62:Math.random()<.72)){const underground=!night||Math.random()<.35;const y=underground?findUndergroundSpawnY(x,z,surface):surface+1;if(y!==null)return {typeKey:hostileMobKey(),y};}const passive=passiveMobForBiome(biome);return passive?{typeKey:passive,y:surface+1}:null;}
 
+        
+        function mobSpawnAnchors(dimension){const out=[];if(currentDimension===dimension&&player.health>0)out.push({x:player.x,z:player.z,renderDistance:RENDER_DISTANCE});for(const rp of remotePlayers.values())if(rp.dimension===dimension&&rp.health>0&&rp.gamemode!=='spectator')out.push({x:rp.x,z:rp.z,renderDistance:rp.renderDistance||6});return out;}
+        function chooseDistributedMobSpawnPoint(dimension){const anchors=mobSpawnAnchors(dimension);if(!anchors.length)return null;for(let tries=0;tries<18;tries++){const a=anchors[Math.floor(Math.random()*anchors.length)],angle=Math.random()*Math.PI*2,d=CHUNK_SIZE*(2+Math.sqrt(Math.random())*4),x=a.x+Math.cos(angle)*d,z=a.z+Math.sin(angle)*d,cx=Math.floor(x/CHUNK_SIZE),cz=Math.floor(z/CHUNK_SIZE);let sameChunk=0,near=0;for(const m of mobs){if(m.dimension!==dimension||m.type.isBoss)continue;if(Math.floor(m.x/CHUNK_SIZE)===cx&&Math.floor(m.z/CHUNK_SIZE)===cz)sameChunk++;if(Math.hypot(m.x-x,m.z-z)<8)near++;}if(sameChunk<2&&near===0)return{x,z};}return null;}
+
         function spawnInitialMobs(dimension=currentDimension){
             if(!gameRules.doMobSpawning||MOB_CAP<=0||!isMobHostForDimension(dimension))return;
             if(gameRules.difficulty==='peaceful')for(const m of [...mobs])if(m.dimension===dimension&&m.type.hostile&&!m.type.isBoss)requestRemoveSharedMob(m,'despawn');
             const existing=mobs.filter(m=>m.dimension===dimension).length,target=dimension===2?0:Math.min(MOB_CAP,dimension===0?Math.min(18,MOB_CAP):8);
-            for(let i=existing;i<target;i++){const a=Math.random()*Math.PI*2,d=15+Math.random()*40,x=player.x+Math.cos(a)*d,z=player.z+Math.sin(a)*d;if(dimension===0){const pick=chooseNaturalSpawn(x,z);if(pick)spawnSharedMob(pick.typeKey,x,pick.y,z,0);}else if(dimension===1){const floorY=findAltFloorY(x,z,29);if(floorY!==null)spawnSharedMob('RED_ALT_ZOMBIE',x,floorY+1,z,1);}}
+            for(let i=existing;i<target;i++){const spot=chooseDistributedMobSpawnPoint(dimension);if(!spot)continue;const {x,z}=spot;if(dimension===0){const pick=chooseNaturalSpawn(x,z);if(pick)spawnSharedMob(pick.typeKey,x,pick.y,z,0);}else if(dimension===1){const floorY=findAltFloorY(x,z,29);if(floorY!==null)spawnSharedMob('RED_ALT_ZOMBIE',x,floorY+1,z,1);}}
         }
 
         function showDamage() {
@@ -8629,7 +8661,7 @@
                 dimension: currentDimension,
                 health: player.health, hunger:player.hunger, gamemode: player.gamemode,
                 heldItem: slot ? slot.id : 0,
-                crouching: Boolean(player.crouching)
+                crouching: Boolean(player.crouching), renderDistance:RENDER_DISTANCE
             };
             if (activeJoinProtocol >= 4) {
                 payload.selectedSlot = player.selectedSlot;
@@ -8862,27 +8894,24 @@
                     const hostingMobs=isMobHostForDimension(currentDimension);
                     if(hostingMobs&&gameRules.difficulty==='peaceful')for(const m of [...mobs])if(m.dimension===currentDimension&&m.type.hostile&&!m.type.isBoss)requestRemoveSharedMob(m,'despawn');
                     if (hostingMobs && gameRules.doMobSpawning && dimensionMobCount === 0) spawnInitialMobs(currentDimension);
-                    // Equivalent roughly to the old per-frame spawn pressure, without doing
-                    // biome/height/despawn scans sixty times per second.
+                    // Spread new spawns around all active players from two through six chunks away.
                     if (hostingMobs && gameRules.doMobSpawning && dimensionMobCount < MOB_CAP && Math.random() < 0.75) {
-                        const a = Math.random() * Math.PI * 2, d = 15 + Math.random() * 40;
-                        const x = player.x + Math.cos(a) * d, z = player.z + Math.sin(a) * d;
-                        let typeKey = null, h = 50;
-                        if(currentDimension===0){const pick=chooseNaturalSpawn(x,z);if(pick){typeKey=pick.typeKey;h=pick.y-1;}}
-                        else if (currentDimension === 1) {
-                            typeKey = 'RED_ALT_ZOMBIE';
-                            const floorY = findAltFloorY(x, z, 29);
-                            if (floorY === null) typeKey = null;
-                            else h = floorY;
+                        const spot=chooseDistributedMobSpawnPoint(currentDimension);
+                        if(spot){
+                            const x=spot.x,z=spot.z; let typeKey=null,h=50;
+                            if(currentDimension===0){const pick=chooseNaturalSpawn(x,z);if(pick){typeKey=pick.typeKey;h=pick.y-1;}}
+                            else if(currentDimension===1){typeKey='RED_ALT_ZOMBIE';const floorY=findAltFloorY(x,z,29);if(floorY===null)typeKey=null;else h=floorY;}
+                            if(typeKey&&getBlock(Math.floor(x),Math.floor(h+1),Math.floor(z),currentDimension)===BLOCKS.AIR)spawnSharedMob(typeKey,x,h+1,z,currentDimension);
                         }
-                        if (typeKey && getBlock(Math.floor(x), Math.floor(h + 1), Math.floor(z), currentDimension) === BLOCKS.AIR) spawnSharedMob(typeKey, x, h + 1, z, currentDimension);
                     }
                     if (hostingMobs) {
-                        const despawnDist=RENDER_DISTANCE * CHUNK_SIZE + 10, despawnDistSq=despawnDist*despawnDist;
+                        const anchors=mobSpawnAnchors(currentDimension);
                         for (const m of [...mobs]) {
                             if (m.dimension !== currentDimension || m.type.isBoss) continue;
-                            const dx = m.x - player.x, dz = m.z - player.z;
-                            if (dx*dx + dz*dz > despawnDistSq) requestRemoveSharedMob(m, 'despawn');
+                            let visible=false;
+                            for(const a of anchors){const r=7*CHUNK_SIZE,dx=m.x-a.x,dz=m.z-a.z;if(dx*dx+dz*dz<=r*r){visible=true;break;}}
+                            m.outOfRangeTime=visible?0:(Number(m.outOfRangeTime)||0)+0.5;
+                            if(!visible)requestRemoveSharedMob(m,'despawn');
                         }
                     }
                 }
@@ -9038,7 +9067,7 @@
                     const bMesh = getMobBodyMesh(m.type);
                     if (bMesh) drawMesh(bMesh, modelMatrix(m.x, m.y, m.z, m.bodyRotation + humanoidFacingOffset), false);
                     
-                    const hMesh = getMobHeadMesh(m.type);
+                    const hMesh = (m.type.model==='bear'||m.type.model==='camel')?null:getMobHeadMesh(m.type);
                     if (hMesh) {
                         let headYOffset=m.type.model==='humanoid'?1.4:(m.type.model==='rabbit'?.28:(m.type.model==='spider'?.16:m.type.height-.4));
                         if (m.type.model === 'camel') headYOffset = m.type.height - 0.2;

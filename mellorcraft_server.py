@@ -180,6 +180,7 @@ class PlayerState:
     gamemode: str = "survival"
     heldItem: int = 0
     crouching: bool = False
+    renderDistance: int = 6
     selectedSlot: int = 0
     inventory: list[dict[str, int]] = field(
         default_factory=lambda: [{"id": 0, "count": 0} for _ in range(MAX_INVENTORY_SLOTS)]
@@ -249,6 +250,7 @@ class MellorCraftWorld:
         self.attack_cooldowns: dict[str, float] = {}
         self.mob_attack_cooldowns: dict[str, float] = {}
         self.mob_environment_cooldowns: dict[str, float] = {}
+        self.mob_out_of_range_since: dict[str, float] = {}
         self.last_tick = time.monotonic()
         self.dirty = False
         self.load()
@@ -306,7 +308,7 @@ class MellorCraftWorld:
             "x": player.x, "y": player.y, "z": player.z,
             "yaw": player.yaw, "pitch": player.pitch, "dimension": player.dimension,
             "health": player.health, "hunger": player.hunger, "gamemode": player.gamemode,
-            "heldItem": player.heldItem, "crouching": player.crouching, "isOperator": player.isOperator,
+            "heldItem": player.heldItem, "crouching": player.crouching, "renderDistance": player.renderDistance, "isOperator": player.isOperator,
         }
 
     @staticmethod
@@ -478,7 +480,7 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 11, "version": "1.7.0", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 11, "version": "1.7.1", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
             "bossDefeated": self.boss_defeated, "gameRules": self.game_rules,
             "blocks": self.blocks, "operators": sorted(self.operators), "bannedPlayers": sorted(self.banned_players), "playerProfiles": profiles,
@@ -1087,6 +1089,7 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         player.hunger = max(0.0, min(20.0, finite_number(data.get("hunger"), player.hunger)))
         player.heldItem = bounded_int(data.get("heldItem"), 0, 255)
         player.crouching = bool(data.get("crouching", False))
+        player.renderDistance = bounded_int(data.get("renderDistance"), 2, 32, player.renderDistance)
         if world.client_protocols.get(player_id, 1) >= 4:
             inventory = world.sanitize_inventory(data.get("inventory"))
             if inventory is not None:
@@ -1308,6 +1311,26 @@ async def world_broadcast_loop() -> None:
             for mob_id, mob in list(world.mobs.items()):
                 if MOB_DEFINITIONS.get(mob.typeKey, {}).get("hostile") and mob.typeKey != "MELLOR_BOSS":
                     world.mobs.pop(mob_id, None); world.dirty = True
+        # Despawn natural mobs immediately once they are more than seven chunks from every active player.
+        now = time.monotonic()
+        for mob_id, mob in list(world.mobs.items()):
+            if mob.typeKey == "MELLOR_BOSS":
+                world.mob_out_of_range_since.pop(mob_id, None)
+                continue
+            visible = False
+            for player in world.players.values():
+                if player.dimension != mob.dimension or player.health <= 0 or player.gamemode == "spectator":
+                    continue
+                radius = 7.0 * 16.0
+                dx, dz = mob.x - player.x, mob.z - player.z
+                if dx * dx + dz * dz <= radius * radius:
+                    visible = True
+                    break
+            if visible:
+                world.mob_out_of_range_since.pop(mob_id, None)
+            else:
+                world.mob_out_of_range_since.pop(mob_id, None)
+                await remove_mob(mob_id, reason="despawn")
         hosts_changed = world.recompute_mob_hosts()
         await broadcast({
             "type": "world_state", "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
@@ -1635,7 +1658,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.7.0 World Selection")
+    print("\nMellorCraft v1.7.1 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -1726,7 +1749,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.7.0 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.7.1 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -1750,7 +1773,7 @@ def main() -> None:
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.7.0 multiplayer server is running")
+    print("\nMellorCraft v1.7.1 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")
