@@ -12,7 +12,7 @@ v1.7.1 water rollback + mob/network fixes
 - Kept the Bear and Camel model fix: their head/neck geometry is built into the body mesh so the head cannot visually detach during movement.
 - Kept the new natural-mob spawn distribution. Spawn attempts are spread around all active players from exactly **2 to 6 chunks** away and reject crowded chunks or positions too close to another natural mob.
 - Kept distance-based natural-mob cleanup. A non-boss mob despawns as soon as it becomes more than **7 chunks away from every active player**, freeing space under the mob cap for replacement spawns in the 2–6 chunk band. Browser-hosted worlds and the dedicated server both enforce this rule.
-- Kept the multiplayer orientation corrections: remote players turn in the same yaw direction as the local camera and observer head pitch uses the corrected up/down convention.
+- Kept the multiplayer yaw correction and fixed remote head pitch again: remote heads now use the same pitch sign as the local camera, so positive pitch looks up and negative pitch looks down for observers.
 - Multiplayer protocol 6 and world format 11 remain unchanged.
 
 Hardcore death and administration pass

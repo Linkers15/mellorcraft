@@ -7027,11 +7027,12 @@
                 // Player yaw uses that same -Z-forward convention, so the model must
                 // use the transmitted yaw directly. Adding PI made remote players face
                 // backward and made their turns appear reversed to other players.
-                // modelMatrixPitch's X rotation is opposite the camera pitch sign.
+                // The remote head mesh uses the same pitch sign as the local camera:
+                // positive pitch looks upward and negative pitch looks downward.
                 const modelYaw = rp.yaw;
                 const walk=rp.crouching?0:Math.sin(rp.walkPhase||0)*Math.min(.10,(rp.moveSpeed||0)*.025);
                 drawMesh(getRemotePlayerBodyMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+Math.abs(walk)*.35, rp.z, modelYaw, walk), false);
-                drawMesh(getRemotePlayerHeadMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+1.4+Math.abs(walk)*.35, rp.z, modelYaw, -Math.max(-0.75,Math.min(0.75,rp.pitch))), false);
+                drawMesh(getRemotePlayerHeadMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+1.4+Math.abs(walk)*.35, rp.z, modelYaw, Math.max(-0.75,Math.min(0.75,rp.pitch))), false);
             }
         }
 
