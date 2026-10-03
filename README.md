@@ -1,3 +1,12 @@
+MellorCraft v1.8.0 server disconnect + /tp fix
+================================================
+- Dedicated multiplayer now uses protocol 13 so the corrected client/server pair cannot silently mix with protocol-12 builds.
+- Fixed dedicated-server `/tp`: the client now handles the server's authoritative `teleport_position` packet, updates dimension/coordinates immediately, clears velocity and knockback, resets nearby chunk streaming, and applies a short portal cooldown so the player's next movement update cannot snap the teleport back.
+- `/stop` now broadcasts a `server_shutdown` message after saving and before WebSocket/HTTP shutdown. Connected clients immediately leave gameplay and return to the server login screen.
+- Unexpected dedicated-server WebSocket loss uses the same in-page exit path. Server-hosted clients no longer try to reload `http://SERVER-IP:8000` after that HTTP server has already gone offline.
+- Leaving a stopped/offline server clears movement/touch/mining state, releases pointer lock, hides gameplay menus, removes remote-player state, and disables mobile controls while preserving the already-loaded login page for a later reconnect.
+- The main render loop is now single-instance and idles while no world is active, allowing a player to reconnect after a server restart without creating duplicate animation loops.
+
 MellorCraft v1.8.0 mobile performance + armor-slot pass
 ========================================================
 - Kept the restored v1.7.1 mobile controls and device-detection path intact while optimizing the heavier v1.8.0 renderer around it. No gameplay systems, textures, mobs, weather, drops, crafting, flowers, armor, or multiplayer features are disabled.

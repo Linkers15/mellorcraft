@@ -41,8 +41,8 @@ except ImportError:  # websockets 10/11 compatibility
 HTTP_PORT = 8000
 WEBSOCKET_PORT = 8765
 DAY_LENGTH_SECONDS = 600.0
-PROTOCOL_VERSION = 12
-SUPPORTED_PROTOCOLS = (12,)
+PROTOCOL_VERSION = 13
+SUPPORTED_PROTOCOLS = (13,)
 WORLD_HEIGHT = 200
 PORTAL_BLOCK = 31
 RESPAWN_BLOCK = 48
@@ -2236,6 +2236,13 @@ async def process_console_command(line: str) -> str:
             world.save()
         except OSError as exc:
             return f"Could not save before stopping: {exc}"
+        # Tell connected clients to leave gameplay before the HTTP/WebSocket services vanish.
+        # This lets a server-hosted browser stay on its already-loaded login page instead of
+        # trying to reload a URL that is about to become unavailable.
+        try:
+            await broadcast({"type": "server_shutdown", "message": "Server stopped by the operator. Your world state was saved."})
+        except Exception:
+            pass
         if _server_stop_event is not None:
             _server_stop_event.set()
         return "World saved. Stopping server..."

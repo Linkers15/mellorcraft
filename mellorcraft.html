@@ -1376,8 +1376,8 @@
         // Multiplayer networking. The Python host owns the seed, clock, shared block edits,
         // connected-player list, usernames, skins, and multiplayer chat.
         const MULTIPLAYER_PROTOCOL = 6; // browser-hosted relay protocol
-        const DEDICATED_SERVER_PROTOCOL = 12; // authenticated streamed-world dedicated servers with restored-player startup fix
-        const SUPPORTED_DEDICATED_PROTOCOLS = [12];
+        const DEDICATED_SERVER_PROTOCOL = 13; // authenticated streamed-world servers with authoritative teleport + graceful shutdown
+        const SUPPORTED_DEDICATED_PROTOCOLS = [13];
         const PLAYER_SKINS = {
             steve:     { body: [0.10, 0.55, 0.78], head: [0.72, 0.49, 0.33] },
             alex:      { body: [0.25, 0.68, 0.38], head: [0.93, 0.68, 0.48] },
@@ -1496,6 +1496,30 @@
             try{sessionStorage.setItem('mellorcraftReturnMainMenu','1');}catch(_){}
             try{if(relaySocket)relaySocket.close();}catch(_){}
             window.location.reload();
+        }
+
+        function exitDedicatedServerToMenu(reason='The multiplayer server went offline.') {
+            if(singleplayerNetworkMode!=='dedicated')return;
+            const message=String(reason||'The multiplayer server went offline.');
+            gameStarted=false;gameStartInProgress=false;preserveStreamedWorldEditsForStart=false;
+            multiplayerConnected=false;setConnectionBadge(false);remotePlayers.clear();localClientId=null;
+            isMouseDown=false;mobileMineTarget=null;breakingBlock=null;breakProgress=0;
+            for(const key of Object.keys(keys))keys[key]=false;
+            mobileSprintHeld=false;
+            try{document.exitPointerLock?.();}catch(_){}
+            try{stopMusicPlayback();}catch(_){}
+            craftingOpen=false;inventoryOpen=false;creativeOpen=false;settingsOpen=false;openFurnaceKey=null;isChatOpen=false;
+            for(const id of ['craftingMenu','inventoryScreen','creativeInventory','settingsMenu','furnaceMenu','chatContainer','deathScreen']){
+                const el=document.getElementById(id);if(el)el.style.display='none';
+            }
+            const startScreen=document.getElementById('startScreen');if(startScreen)startScreen.style.display='flex';
+            const pw=document.getElementById('serverAuthPassword');if(pw)pw.value='';
+            if(pendingServerAuth)pendingServerAuth={...pendingServerAuth,password:''};
+            const oldSocket=socket;socket=null;singleplayerNetworkMode='local';
+            try{if(oldSocket&&oldSocket.readyState<2)oldSocket.close();}catch(_){}
+            try{updateMobileControlsVisibility();}catch(_){}
+            try{showStartPage('serverAuthPage');}catch(_){}
+            setServerAuthStatus(message,true);
         }
 
         function parseSocketEndpoint(rawHost, rawPort, fallbackHost, fallbackPort) {
@@ -2430,6 +2454,24 @@
                 }
                 return;
             }
+            if (data.type === 'teleport_position') {
+                const p=data.position||{};
+                if ([p.x,p.y,p.z].every(v=>Number.isFinite(Number(v)))) {
+                    currentDimension=Math.max(0,Math.min(2,Math.floor(Number(p.dimension)||0)));
+                    player.x=Number(p.x);player.y=Number(p.y);player.z=Number(p.z);
+                    player.vx=0;player.vy=0;player.vz=0;player.kbX=0;player.kbZ=0;player.kbTime=0;
+                    player.onGround=false;teleportCooldown=Math.max(teleportCooldown,1.5);
+                    portalExitRequired=true;dimensionTransitionInProgress=false;pendingPortalArrivalKey=null;
+                    resetChunkStreamingForDimension(currentDimension,player.x,player.z);
+                    cachedRenderHit=null;mobileMineTarget=null;
+                    if(data.message)addChatMessage(String(data.message),'chatSystem');
+                }
+                return;
+            }
+            if (data.type === 'server_shutdown') {
+                exitDedicatedServerToMenu(String(data.message||'The server was stopped by an operator.'));
+                return;
+            }
             if (data.type === 'permission_update') {
                 localIsOperator = Boolean(data.isOperator);
                 updateOperatorControls();
@@ -2575,7 +2617,7 @@
                 setServerAuthStatus(mode==='signup'?'Creating account and loading world...':'Signing in and loading world...');
                 joinTimeoutId=setTimeout(()=>{
                     if(!gameStarted&&socket&&socket.readyState===WebSocket.OPEN){
-                        lastJoinError='The server accepted the connection but did not finish authentication/world loading. Make sure the matching v1.8.0 protocol 12 server is running.';
+                        lastJoinError='The server accepted the connection but did not finish authentication/world loading. Make sure the matching v1.8.0 protocol 13 server is running.';
                         try{socket.close(4002,'Authentication/world load timeout');}catch(_){}
                     }
                 },12000);
@@ -2585,8 +2627,7 @@
             socket.addEventListener('close',(event)=>{
                 if(joinTimeoutId)clearTimeout(joinTimeoutId);joinTimeoutId=null;multiplayerConnected=false;setConnectionBadge(false);remotePlayers.clear();
                 if(gameStarted&&singleplayerNetworkMode==='dedicated'){
-                    safeStorageSet('mellorcraftServerExitNotice',`The multiplayer server went offline${event.reason?`: ${event.reason}`:'.'}`);
-                    try{sessionStorage.setItem('mellorcraftReturnMainMenu','1');}catch(_){}socket=null;window.location.reload();return;
+                    exitDedicatedServerToMenu(`The multiplayer server went offline${event.reason?`: ${event.reason}`:'.'}`);return;
                 }
                 if(submit)submit.disabled=false;singleplayerNetworkMode='local';
                 const passwordInput=document.getElementById('serverAuthPassword');if(passwordInput)passwordInput.value='';
@@ -9435,6 +9476,7 @@
         }
 
         let lastTime = 0, frames = 0, fpsTime = 0;
+        let mainLoopStarted = false;
         let infoUiTimer = 0, overlayUiTimer = 0, healthUiTimer = 0, timeUiTimer = 0, raycastUiTimer = 0;
         let cachedRenderHit = null;
         let mobMaintenanceTimer = 0;
@@ -9442,6 +9484,7 @@
         function loop(time) {
             const dt = Math.min((time - lastTime) / 1000, 0.1);
             lastTime = time;
+            if(!gameStarted){requestAnimationFrame(loop);return;}
             
             if (gameStarted && !deathScreenOpen) {
                 if(gameRules.doDaylightCycle)worldTime += dt / currentDayLength();
@@ -9860,7 +9903,7 @@
             if (!isMobilePlaying) canvas.requestPointerLock();
             updateMobileCreativeButton();
             updateMobileControlsVisibility();
-            requestAnimationFrame(loop);
+            if(!mainLoopStarted){mainLoopStarted=true;lastTime=performance.now();requestAnimationFrame(loop);}
         }
     </script>
 </body>
