@@ -10,13 +10,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
+import hmac
 import json
 import math
 import os
 import random
 import re
+import secrets
 import shlex
 import socket
+import sys
 import tempfile
 import threading
 import webbrowser
@@ -37,8 +41,8 @@ except ImportError:  # websockets 10/11 compatibility
 HTTP_PORT = 8000
 WEBSOCKET_PORT = 8765
 DAY_LENGTH_SECONDS = 600.0
-PROTOCOL_VERSION = 6
-SUPPORTED_PROTOCOLS = (6, 5, 4, 3, 2)
+PROTOCOL_VERSION = 12
+SUPPORTED_PROTOCOLS = (12,)
 WORLD_HEIGHT = 200
 PORTAL_BLOCK = 31
 RESPAWN_BLOCK = 48
@@ -58,6 +62,26 @@ RAW_GOAT_ITEM = 128
 COOKED_GOAT_ITEM = 129
 LIGHT_GRAY_WOOL_ITEM = 130
 PINK_WOOL_ITEM = 131
+RED_DYE_ITEM = 133
+ORANGE_DYE_ITEM = 134
+YELLOW_DYE_ITEM = 135
+BLUE_DYE_ITEM = 136
+WHITE_DYE_ITEM = 137
+PINK_DYE_ITEM = 138
+PURPLE_DYE_ITEM = 139
+LIGHT_GRAY_DYE_ITEM = 145
+GRAY_DYE_ITEM = 146
+BLACK_DYE_ITEM = 147
+BROWN_DYE_ITEM = 148
+IRON_ARMOR_ITEM = 149
+GOLD_ARMOR_ITEM = 150
+DIAMOND_ARMOR_ITEM = 151
+MELLORITE_ARMOR_ITEM = 152
+RED_WOOL_ITEM = 140
+ORANGE_WOOL_ITEM = 141
+YELLOW_WOOL_ITEM = 142
+BLUE_WOOL_ITEM = 143
+PURPLE_WOOL_ITEM = 144
 MOB_CAP_PER_DIMENSION = 30
 MAX_INVENTORY_SLOTS = 30
 MAX_STACK_SIZE = 100
@@ -74,6 +98,11 @@ MOB_DEFINITIONS: dict[str, dict[str, Any]] = {
     "SHEEP_LIGHT_GRAY": {"health": 10.0, "damage": 0.0, "hostile": False},
     "SHEEP_BROWN": {"health": 10.0, "damage": 0.0, "hostile": False},
     "SHEEP_PINK": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_RED": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_ORANGE": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_YELLOW": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_BLUE": {"health": 10.0, "damage": 0.0, "hostile": False},
+    "SHEEP_PURPLE": {"health": 10.0, "damage": 0.0, "hostile": False},
     "GOAT": {"health": 12.0, "damage": 0.0, "hostile": False},
     "RABBIT": {"health": 6.0, "damage": 0.0, "hostile": False},
     "FOX": {"health": 10.0, "damage": 0.0, "hostile": False},
@@ -94,6 +123,11 @@ MOB_LOOT: dict[str, list[tuple[int, int, int]]] = {
     "SHEEP_LIGHT_GRAY": [(RAW_MUTTON_ITEM, 1, 2), (LIGHT_GRAY_WOOL_ITEM, 1, 1)],
     "SHEEP_BROWN": [(RAW_MUTTON_ITEM, 1, 2), (BROWN_WOOL_ITEM, 1, 1)],
     "SHEEP_PINK": [(RAW_MUTTON_ITEM, 1, 2), (PINK_WOOL_ITEM, 1, 1)],
+    "SHEEP_RED": [(RAW_MUTTON_ITEM, 1, 2), (RED_WOOL_ITEM, 1, 1)],
+    "SHEEP_ORANGE": [(RAW_MUTTON_ITEM, 1, 2), (ORANGE_WOOL_ITEM, 1, 1)],
+    "SHEEP_YELLOW": [(RAW_MUTTON_ITEM, 1, 2), (YELLOW_WOOL_ITEM, 1, 1)],
+    "SHEEP_BLUE": [(RAW_MUTTON_ITEM, 1, 2), (BLUE_WOOL_ITEM, 1, 1)],
+    "SHEEP_PURPLE": [(RAW_MUTTON_ITEM, 1, 2), (PURPLE_WOOL_ITEM, 1, 1)],
 }
 FURNACE_RECIPES = {15: 101, 16: 102, 6: 24, 2: 25, 112: 113, 114: 115, 116: 117, 118: 119, 120: 121, 122: 123, 128: 129}
 FURNACE_FUEL_SECONDS = {100: 80.0, 18: 800.0, 4: 15.0, 10: 15.0, 104: 5.0}
@@ -105,6 +139,11 @@ CLIENT_FILENAME = "mellorcraft.html"
 LEGACY_SAVE_FILENAME = "mellorcraft_world.json"
 WORLDS_DIRNAME = "worlds"
 DEFAULT_WORLD_NAME = "World"
+ACCOUNTS_FILENAME = "server_accounts.json"
+PBKDF2_ITERATIONS = 210_000
+RETIRED_ITEM_IDS = {109, 110, 111}  # legacy bucket, water bucket, lava bucket
+PASSWORD_MIN_LENGTH = 6
+PASSWORD_MAX_LENGTH = 128
 WORLD_NAME_PATTERN = re.compile(r"^[A-Za-z0-9 _.-]{1,48}$")
 DEFAULT_GAME_RULES: dict[str, bool | int | str] = {
     "doDaylightCycle": True,
@@ -152,16 +191,72 @@ def normalize_game_rules(value: Any) -> dict[str, bool | int | str]:
 
 def sanitize_furnace_state(value: Any) -> dict[str, Any]:
     raw = value if isinstance(value, dict) else {}
+    ingredient_id = bounded_int(raw.get("ingredientId"), 0, 255)
+    fuel_id = bounded_int(raw.get("fuelId"), 0, 255)
+    output_id = bounded_int(raw.get("outputId"), 0, 255)
+    ingredient_count = bounded_int(raw.get("ingredientCount"), 0, 100)
+    fuel_count = bounded_int(raw.get("fuelCount"), 0, 100)
+    output_count = bounded_int(raw.get("outputCount"), 0, 100)
+    if ingredient_id in RETIRED_ITEM_IDS: ingredient_id, ingredient_count = 0, 0
+    if fuel_id in RETIRED_ITEM_IDS: fuel_id, fuel_count = 0, 0
+    if output_id in RETIRED_ITEM_IDS: output_id, output_count = 0, 0
     return {
-        "ingredientId": bounded_int(raw.get("ingredientId"), 0, 255), "ingredientCount": bounded_int(raw.get("ingredientCount"), 0, 100),
-        "fuelId": bounded_int(raw.get("fuelId"), 0, 255), "fuelCount": bounded_int(raw.get("fuelCount"), 0, 100),
-        "outputId": bounded_int(raw.get("outputId"), 0, 255), "outputCount": bounded_int(raw.get("outputCount"), 0, 100),
+        "ingredientId": ingredient_id, "ingredientCount": ingredient_count,
+        "fuelId": fuel_id, "fuelCount": fuel_count,
+        "outputId": output_id, "outputCount": output_count,
         "progress": max(0.0, min(10.0, finite_number(raw.get("progress")))), "burnTime": max(0.0, min(1000.0, finite_number(raw.get("burnTime")))),
     }
 
 
+def inventory_capacity(inventory: list[dict[str, int]], item_id: int) -> int:
+    capacity = 0
+    for slot in inventory:
+        sid = bounded_int(slot.get("id"), 0, 255)
+        count = bounded_int(slot.get("count"), 0, MAX_STACK_SIZE)
+        if count <= 0:
+            capacity += MAX_STACK_SIZE
+        elif sid == item_id:
+            capacity += max(0, MAX_STACK_SIZE - count)
+    return capacity
+
+
+def inventory_can_fit(inventory: list[dict[str, int]], item_id: int, count: int) -> bool:
+    return inventory_capacity(inventory, item_id) >= max(0, int(count))
+
+
+def inventory_add(inventory: list[dict[str, int]], item_id: int, count: int) -> bool:
+    count = max(0, int(count))
+    if count <= 0:
+        return True
+    if not inventory_can_fit(inventory, item_id, count):
+        return False
+    for slot in inventory:
+        if int(slot.get("id", 0)) == item_id and int(slot.get("count", 0)) < MAX_STACK_SIZE:
+            add = min(MAX_STACK_SIZE - int(slot.get("count", 0)), count)
+            slot["count"] = int(slot.get("count", 0)) + add
+            count -= add
+            if count <= 0:
+                return True
+    for slot in inventory:
+        if int(slot.get("count", 0)) <= 0:
+            slot["id"] = item_id
+            slot["count"] = min(MAX_STACK_SIZE, count)
+            count -= slot["count"]
+            if count <= 0:
+                return True
+    return count <= 0
+
+
 def difficulty_damage_scale() -> float:
     return float(DIFFICULTY_DAMAGE_SCALE.get(str(world.game_rules.get("difficulty", "normal")), 1.0)) if "world" in globals() else 1.0
+
+
+ARMOR_PROTECTION = {IRON_ARMOR_ITEM: 0.20, GOLD_ARMOR_ITEM: 0.40, DIAMOND_ARMOR_ITEM: 0.60, MELLORITE_ARMOR_ITEM: 0.80}
+def armor_adjusted_damage(amount: float, armor_id: int) -> float:
+    raw = max(0.0, finite_number(amount))
+    if raw <= 0.0: return 0.0
+    reduced = raw * (1.0 - ARMOR_PROTECTION.get(int(armor_id), 0.0))
+    return max(0.5, math.ceil((reduced - 1e-9) * 2.0) / 2.0)
 
 
 @dataclass
@@ -182,6 +277,7 @@ class PlayerState:
     crouching: bool = False
     renderDistance: int = 6
     selectedSlot: int = 0
+    armorId: int = 0
     inventory: list[dict[str, int]] = field(
         default_factory=lambda: [{"id": 0, "count": 0} for _ in range(MAX_INVENTORY_SLOTS)]
     )
@@ -220,6 +316,7 @@ class DroppedItemState:
     vy: float = 0.0
     vz: float = 0.0
     age: float = 0.0
+    floorY: float | None = None
 
 
 class MellorCraftWorld:
@@ -231,6 +328,7 @@ class MellorCraftWorld:
         self.weather_seed = random.randint(0, 2_147_483_646)
         self.weather_phase = 0.0
         self.game_rules = dict(DEFAULT_GAME_RULES)
+        self.world_gen: dict[str, Any] = {"type": "normal"}
         self.boss_defeated = False
         self.blocks: dict[str, int] = {}
         self.players: dict[str, PlayerState] = {}
@@ -294,7 +392,7 @@ class MellorCraftWorld:
                 count = max(0, min(MAX_STACK_SIZE, int(entry.get("count", 0))))
             except (TypeError, ValueError):
                 item_id, count = 0, 0
-            if item_id == 0 or count == 0:
+            if item_id in RETIRED_ITEM_IDS or item_id == 0 or count == 0:
                 item_id, count = 0, 0
             inventory.append({"id": item_id, "count": count})
         while len(inventory) < MAX_INVENTORY_SLOTS:
@@ -308,7 +406,7 @@ class MellorCraftWorld:
             "x": player.x, "y": player.y, "z": player.z,
             "yaw": player.yaw, "pitch": player.pitch, "dimension": player.dimension,
             "health": player.health, "hunger": player.hunger, "gamemode": player.gamemode,
-            "heldItem": player.heldItem, "crouching": player.crouching, "renderDistance": player.renderDistance, "isOperator": player.isOperator,
+            "heldItem": player.heldItem, "armorId": player.armorId, "crouching": player.crouching, "renderDistance": player.renderDistance, "isOperator": player.isOperator,
         }
 
     @staticmethod
@@ -318,7 +416,7 @@ class MellorCraftWorld:
             "x": player.x, "y": player.y, "z": player.z,
             "yaw": player.yaw, "pitch": player.pitch, "dimension": player.dimension,
             "health": player.health, "hunger": player.hunger, "gamemode": player.gamemode,
-            "heldItem": player.heldItem, "selectedSlot": player.selectedSlot,
+            "heldItem": player.heldItem, "selectedSlot": player.selectedSlot, "armorId": player.armorId,
             "inventory": [{"id": slot["id"], "count": slot["count"]} for slot in player.inventory],
             "originalSpawn": dict(player.originalSpawn) if isinstance(player.originalSpawn, dict) else None,
             "respawnPoint": dict(player.respawnPoint) if isinstance(player.respawnPoint, dict) else None,
@@ -347,6 +445,8 @@ class MellorCraftWorld:
             player.gamemode = "survival"
         player.heldItem = bounded_int(profile.get("heldItem"), 0, 255, player.heldItem)
         player.selectedSlot = bounded_int(profile.get("selectedSlot"), 0, 8, player.selectedSlot)
+        armor_id = bounded_int(profile.get("armorId"), 0, 255)
+        player.armorId = armor_id if armor_id in ARMOR_PROTECTION else 0
         inventory = self.sanitize_inventory(profile.get("inventory"))
         if inventory is not None:
             player.inventory = inventory
@@ -405,6 +505,8 @@ class MellorCraftWorld:
             self.weather_seed = int(raw.get("weatherSeed", self.weather_seed)) % 2_147_483_647
             self.weather_phase = float(raw.get("weatherPhase", self.weather_phase))
             self.game_rules = normalize_game_rules(raw.get("gameRules"))
+            raw_world_gen = raw.get("worldGen")
+            self.world_gen = dict(raw_world_gen) if isinstance(raw_world_gen, dict) else {"type": "normal"}
             self.boss_defeated = bool(raw.get("bossDefeated", False))
             blocks = raw.get("blocks")
             if not isinstance(blocks, dict):
@@ -456,11 +558,15 @@ class MellorCraftWorld:
                     continue
             for entry in raw.get("items", []):
                 try:
+                    loaded_item_id = bounded_int(entry.get("itemId"), 1, 255, 1)
+                    if loaded_item_id in RETIRED_ITEM_IDS:
+                        continue
                     item = DroppedItemState(
-                        id=str(entry["id"]), itemId=bounded_int(entry.get("itemId"), 1, 255, 1), count=bounded_int(entry.get("count"), 1, 100, 1),
+                        id=str(entry["id"]), itemId=loaded_item_id, count=bounded_int(entry.get("count"), 1, 100, 1),
                         x=finite_number(entry.get("x")), y=finite_number(entry.get("y")), z=finite_number(entry.get("z")),
                         dimension=bounded_int(entry.get("dimension"), 0, 2), vx=finite_number(entry.get("vx")), vy=finite_number(entry.get("vy")),
                         vz=finite_number(entry.get("vz")), age=max(0.0, finite_number(entry.get("age"))),
+                        floorY=(finite_number(entry.get("floorY")) if entry.get("floorY") is not None else None),
                     )
                     self.items[item.id] = item
                 except (KeyError, TypeError, ValueError):
@@ -480,9 +586,9 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 11, "version": "1.7.1", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 11, "version": "1.8.0", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
-            "bossDefeated": self.boss_defeated, "gameRules": self.game_rules,
+            "bossDefeated": self.boss_defeated, "gameRules": self.game_rules, "worldGen": self.world_gen,
             "blocks": self.blocks, "operators": sorted(self.operators), "bannedPlayers": sorted(self.banned_players), "playerProfiles": profiles,
             "mobs": [asdict(mob) for mob in self.mobs.values()], "items": [asdict(item) for item in self.items.values()],
             "furnaces": self.furnaces,
@@ -532,6 +638,341 @@ class MellorCraftWorld:
         return changed
 
 
+_console_ui = None
+_server_stop_event: asyncio.Event | None = None
+
+
+def console_log(message: Any = "") -> None:
+    """Print a server log without destroying an in-progress console command."""
+    global _console_ui
+    text = str(message)
+    if _console_ui is not None:
+        _console_ui.log(text)
+    else:
+        print(text)
+
+
+class LiveServerConsole:
+    """Small cross-platform console editor that redraws typed input after log lines."""
+    PROMPT = "server> "
+
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self.loop = loop
+        self.lock = threading.RLock()
+        self.buffer: list[str] = []
+        self.cursor = 0
+        self.history: list[str] = []
+        self.history_index: int | None = None
+        self.active = False
+        self.tty = bool(getattr(sys.stdin, "isatty", lambda: False)() and getattr(sys.stdout, "isatty", lambda: False)())
+        self.last_render_width = len(self.PROMPT)
+
+    def _clear_line_locked(self) -> None:
+        if not self.tty:
+            return
+        if os.name == "nt":
+            sys.stdout.write("\r" + (" " * max(self.last_render_width, len(self.PROMPT))) + "\r")
+        else:
+            sys.stdout.write("\r\x1b[2K")
+
+    def _redraw_locked(self) -> None:
+        if not self.active or not self.tty:
+            return
+        self._clear_line_locked()
+        text = "".join(self.buffer)
+        sys.stdout.write(self.PROMPT + text)
+        self.last_render_width = len(self.PROMPT) + len(text)
+        tail = len(text) - self.cursor
+        if tail > 0:
+            sys.stdout.write("\b" * tail if os.name == "nt" else f"\x1b[{tail}D")
+        sys.stdout.flush()
+
+    def log(self, message: str) -> None:
+        with self.lock:
+            if self.active and self.tty:
+                self._clear_line_locked()
+            sys.stdout.write(message.rstrip("\n") + "\n")
+            if self.active and self.tty:
+                self._redraw_locked()
+            else:
+                sys.stdout.flush()
+
+    def _replace_buffer_locked(self, value: str) -> None:
+        self.buffer = list(value)
+        self.cursor = len(self.buffer)
+        self._redraw_locked()
+
+    def _history_move_locked(self, delta: int) -> None:
+        if not self.history:
+            return
+        if self.history_index is None:
+            self.history_index = len(self.history)
+        self.history_index = max(0, min(len(self.history), self.history_index + delta))
+        self._replace_buffer_locked("" if self.history_index == len(self.history) else self.history[self.history_index])
+
+    def _submit_locked(self) -> str:
+        line = "".join(self.buffer).strip()
+        self._clear_line_locked()
+        sys.stdout.write(self.PROMPT + "".join(self.buffer) + "\n")
+        sys.stdout.flush()
+        if line and (not self.history or self.history[-1] != line):
+            self.history.append(line)
+            self.history = self.history[-100:]
+        self.history_index = None
+        self.buffer = []
+        self.cursor = 0
+        self._redraw_locked()
+        return line
+
+    def _execute(self, line: str) -> None:
+        if not line:
+            return
+        try:
+            future = asyncio.run_coroutine_threadsafe(process_console_command(line), self.loop)
+            result = future.result(timeout=10.0)
+            if result:
+                self.log(result)
+        except Exception as exc:
+            self.log(f"Console command failed: {exc}")
+
+    def _handle_character(self, ch: str) -> str | None:
+        with self.lock:
+            if ch in {"\r", "\n"}:
+                return self._submit_locked()
+            if ch in {"\x08", "\x7f"}:
+                if self.cursor > 0:
+                    self.cursor -= 1
+                    self.buffer.pop(self.cursor)
+                    self._redraw_locked()
+                return None
+            if ch == "\x15":  # Ctrl+U
+                self.buffer = []; self.cursor = 0; self._redraw_locked(); return None
+            if ch == "\x04":  # Ctrl+D
+                return "__EXIT__" if not self.buffer else None
+            if ch == "\x01":  # Ctrl+A
+                self.cursor = 0; self._redraw_locked(); return None
+            if ch == "\x05":  # Ctrl+E
+                self.cursor = len(self.buffer); self._redraw_locked(); return None
+            if ch >= " " and ch != "\x7f":
+                self.buffer.insert(self.cursor, ch)
+                self.cursor += 1
+                self._redraw_locked()
+        return None
+
+    def _run_windows(self) -> None:
+        import msvcrt  # type: ignore
+        with self.lock:
+            self._redraw_locked()
+        while not self.loop.is_closed():
+            ch = msvcrt.getwch()
+            if ch in {"\x00", "\xe0"}:
+                code = msvcrt.getwch()
+                with self.lock:
+                    if code == "K" and self.cursor > 0:
+                        self.cursor -= 1; self._redraw_locked()
+                    elif code == "M" and self.cursor < len(self.buffer):
+                        self.cursor += 1; self._redraw_locked()
+                    elif code == "H": self._history_move_locked(-1)
+                    elif code == "P": self._history_move_locked(1)
+                continue
+            line = self._handle_character(ch)
+            if line == "__EXIT__": return
+            if line is not None: self._execute(line)
+
+    def _run_posix(self) -> None:
+        import termios
+        import tty
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            with self.lock:
+                self._redraw_locked()
+            while not self.loop.is_closed():
+                ch = sys.stdin.read(1)
+                if not ch: return
+                if ch == "\x1b":
+                    second = sys.stdin.read(1)
+                    third = sys.stdin.read(1) if second == "[" else ""
+                    with self.lock:
+                        if third == "D" and self.cursor > 0:
+                            self.cursor -= 1; self._redraw_locked()
+                        elif third == "C" and self.cursor < len(self.buffer):
+                            self.cursor += 1; self._redraw_locked()
+                        elif third == "A": self._history_move_locked(-1)
+                        elif third == "B": self._history_move_locked(1)
+                        elif third == "H": self.cursor = 0; self._redraw_locked()
+                        elif third == "F": self.cursor = len(self.buffer); self._redraw_locked()
+                    continue
+                line = self._handle_character(ch)
+                if line == "__EXIT__": return
+                if line is not None: self._execute(line)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+    def run(self) -> None:
+        self.active = True
+        try:
+            if not self.tty:
+                while not self.loop.is_closed():
+                    try:
+                        line = input(self.PROMPT)
+                    except (EOFError, KeyboardInterrupt):
+                        return
+                    self._execute(line)
+                return
+            if os.name == "nt": self._run_windows()
+            else: self._run_posix()
+        finally:
+            with self.lock:
+                self.active = False
+
+
+class ServerAccountStore:
+    def __init__(self, path: Path, worlds_dir: Path) -> None:
+        self.path = path
+        self.worlds_dir = worlds_dir
+        self.accounts: dict[str, dict[str, Any]] = {}
+        self.reserved_names: dict[str, str] = {}
+        self.load()
+        self.refresh_reserved_names()
+
+    @staticmethod
+    def key(username: str) -> str:
+        return username.strip().casefold()
+
+    def load(self) -> None:
+        if not self.path.exists():
+            return
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            source = raw.get("accounts", raw) if isinstance(raw, dict) else {}
+            if not isinstance(source, dict):
+                return
+            for key, entry in source.items():
+                if not isinstance(entry, dict):
+                    continue
+                username = str(entry.get("username", key)).strip()[:20]
+                if not USERNAME_PATTERN.fullmatch(username):
+                    continue
+                salt = str(entry.get("salt", "")); verifier = str(entry.get("verifier", ""))
+                if not salt or not verifier:
+                    continue
+                skin = str(entry.get("skin", "steve"))
+                self.accounts[self.key(username)] = {
+                    "username": username, "skin": skin if skin in ALLOWED_SKINS else "steve",
+                    "salt": salt, "verifier": verifier,
+                    "iterations": max(100_000, int(entry.get("iterations", PBKDF2_ITERATIONS))),
+                }
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            console_log(f"Warning: could not load {self.path.name}: {exc}")
+
+    def save(self) -> None:
+        payload = {"format": "MellorCraftServerAccounts", "version": 1, "accounts": self.accounts}
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(prefix=self.path.name + ".", suffix=".tmp", dir=self.path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, separators=(",", ":"), sort_keys=True)
+                handle.flush(); os.fsync(handle.fileno())
+            os.replace(temp_name, self.path)
+        finally:
+            if os.path.exists(temp_name): os.unlink(temp_name)
+
+    def refresh_reserved_names(self) -> None:
+        reserved: dict[str, str] = {}
+        for _display, path in available_worlds(self.worlds_dir):
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(raw, dict):
+                continue
+            for value in raw.get("operators", []):
+                name = str(value).strip()[:20]
+                if USERNAME_PATTERN.fullmatch(name): reserved[self.key(name)] = name
+            profiles = raw.get("playerProfiles", {})
+            if isinstance(profiles, dict):
+                for key, entry in profiles.items():
+                    name = str(entry.get("username", key) if isinstance(entry, dict) else key).strip()[:20]
+                    if USERNAME_PATTERN.fullmatch(name): reserved[self.key(name)] = name
+            legacy = raw.get("lanPlayerProfiles", {})
+            if isinstance(legacy, dict):
+                for key, entry in legacy.items():
+                    name = str(entry.get("username", key) if isinstance(entry, dict) else key).strip()[:20]
+                    if USERNAME_PATTERN.fullmatch(name): reserved[self.key(name)] = name
+        current_world = globals().get("world")
+        if current_world is not None:
+            for key in getattr(current_world, "operators", set()):
+                name = str(key).strip()[:20]
+                if USERNAME_PATTERN.fullmatch(name): reserved[self.key(name)] = name
+            for key, entry in getattr(current_world, "player_profiles", {}).items():
+                name = str(entry.get("username", key) if isinstance(entry, dict) else key).strip()[:20]
+                if USERNAME_PATTERN.fullmatch(name): reserved[self.key(name)] = name
+        self.reserved_names = reserved
+
+    @staticmethod
+    def _derive(password: str, salt: bytes, iterations: int) -> bytes:
+        return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations, dklen=32)
+
+    @staticmethod
+    def _valid_password(password: str) -> bool:
+        return PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH
+
+    def signup(self, username: str, password: str, skin: str) -> tuple[dict[str, Any] | None, str | None]:
+        self.refresh_reserved_names()
+        key = self.key(username)
+        if key in self.accounts:
+            return None, "That username already has an account. Choose Sign In."
+        if key in self.reserved_names:
+            return None, "That username belongs to a legacy player/operator. The server owner must assign its password with /account setpassword."
+        if not self._valid_password(password):
+            return None, f"Password must be {PASSWORD_MIN_LENGTH}-{PASSWORD_MAX_LENGTH} characters."
+        salt = secrets.token_bytes(16)
+        verifier = self._derive(password, salt, PBKDF2_ITERATIONS)
+        entry = {"username": username, "skin": skin if skin in ALLOWED_SKINS else "steve", "salt": salt.hex(), "verifier": verifier.hex(), "iterations": PBKDF2_ITERATIONS}
+        self.accounts[key] = entry
+        self.save()
+        return entry, None
+
+    def signin(self, username: str, password: str) -> tuple[dict[str, Any] | None, str | None]:
+        entry = self.accounts.get(self.key(username))
+        if entry is None:
+            return None, "No account exists for that username on this server. Choose Sign Up if it is a new name."
+        try:
+            salt = bytes.fromhex(str(entry["salt"])); expected = bytes.fromhex(str(entry["verifier"])); iterations = int(entry.get("iterations", PBKDF2_ITERATIONS))
+            actual = self._derive(password, salt, iterations)
+        except (KeyError, ValueError, TypeError):
+            return None, "This account record is damaged. Ask the server operator to reset its password."
+        if not hmac.compare_digest(actual, expected):
+            return None, "Incorrect password."
+        return entry, None
+
+    def set_password(self, username: str, password: str, skin: str | None = None) -> str:
+        cleaned = username.strip()
+        if not USERNAME_PATTERN.fullmatch(cleaned): return "Invalid username."
+        if not self._valid_password(password): return f"Password must be {PASSWORD_MIN_LENGTH}-{PASSWORD_MAX_LENGTH} characters."
+        key = self.key(cleaned); previous = self.accounts.get(key, {})
+        salt = secrets.token_bytes(16); verifier = self._derive(password, salt, PBKDF2_ITERATIONS)
+        chosen_skin = skin if skin in ALLOWED_SKINS else str(previous.get("skin", "steve"))
+        self.accounts[key] = {"username": str(previous.get("username", cleaned)), "skin": chosen_skin if chosen_skin in ALLOWED_SKINS else "steve", "salt": salt.hex(), "verifier": verifier.hex(), "iterations": PBKDF2_ITERATIONS}
+        self.save(); self.refresh_reserved_names()
+        return f"Password set for {self.accounts[key]['username']}."
+
+    def delete(self, username: str) -> str:
+        key = self.key(username)
+        entry = self.accounts.pop(key, None)
+        if entry is None: return f"No account exists for {username}."
+        self.save(); return f"Deleted account for {entry['username']}."
+
+    def list_text(self) -> str:
+        if not self.accounts: return "Server accounts: none"
+        return "Server accounts: " + ", ".join(sorted((str(v["username"]) for v in self.accounts.values()), key=str.casefold))
+
+
+account_store: ServerAccountStore
+
+
 class ClientRequestHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, directory=str(SCRIPT_DIR), **kwargs)
@@ -548,7 +989,7 @@ class ClientRequestHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        print(f"HTTP {self.address_string()}: {fmt % args}")
+        console_log(f"HTTP {self.address_string()}: {fmt % args}")
 
 
 world: MellorCraftWorld
@@ -599,7 +1040,7 @@ async def broadcast(payload: dict[str, Any], exclude_id: str | None = None, mini
         except ConnectionClosed:
             dead.append(player_id)
         except Exception as exc:
-            print(f"Broadcast failure for {player_id}: {exc}")
+            console_log(f"Broadcast failure for {player_id}: {exc}")
             dead.append(player_id)
     for player_id in dead:
         world.connections.pop(player_id, None)
@@ -753,6 +1194,7 @@ async def force_kill_player(username: str) -> str:
         player.inventory = [{"id": 0, "count": 0} for _ in range(MAX_INVENTORY_SLOTS)]
         player.selectedSlot = 0
         player.heldItem = 0
+        player.armorId = 0
         websocket = world.connections.get(player.id)
         if websocket is not None:
             await send_json(websocket, {"type": "inventory_reset", "message": "Your inventory was cleared on death."})
@@ -782,13 +1224,15 @@ async def damage_player(
     now = time.monotonic()
     if now < world.damage_locks.get(victim.id, 0.0):
         return
-    victim.health = max(0.0, victim.health - max(0.0, damage))
+    applied_damage = armor_adjusted_damage(damage, victim.armorId)
+    victim.health = max(0.0, victim.health - applied_damage)
     world.dirty = True
     world.damage_locks[victim.id] = now + 0.45
     if victim.health <= 0 and not bool(world.game_rules["keepInventory"]):
         victim.inventory = [{"id": 0, "count": 0} for _ in range(MAX_INVENTORY_SLOTS)]
         victim.selectedSlot = 0
         victim.heldItem = 0
+        victim.armorId = 0
         websocket = world.connections.get(victim.id)
         if websocket is not None:
             await send_json(websocket, {"type": "inventory_reset", "message": "Your inventory was cleared on death."})
@@ -827,10 +1271,11 @@ async def handle_player_attack(attacker_id: str, data: dict[str, Any]) -> None:
     await damage_player(victim, SWORD_DAMAGE.get(attacker.heldItem, 1.0), attacker.username, dx, dz)
 
 
-async def spawn_dropped_item(item_id: int, count: int, x: float, y: float, z: float, dimension: int, vx: float = 0.0, vy: float = 0.0, vz: float = 0.0) -> DroppedItemState:
+async def spawn_dropped_item(item_id: int, count: int, x: float, y: float, z: float, dimension: int, vx: float = 0.0, vy: float = 0.0, vz: float = 0.0, floor_y: float | None = None) -> DroppedItemState:
     item = DroppedItemState(
         id=uuid.uuid4().hex, itemId=bounded_int(item_id, 1, 255, 1), count=bounded_int(count, 1, 100, 1),
         x=x, y=y, z=z, dimension=bounded_int(dimension, 0, 2), vx=vx, vy=vy, vz=vz,
+        floorY=(finite_number(floor_y) if floor_y is not None else None),
     )
     world.items[item.id] = item
     await broadcast({"type": "item_spawned", "item": asdict(item)}, minimum_protocol=3)
@@ -897,6 +1342,47 @@ async def handle_mob_spawn(player_id: str, data: dict[str, Any]) -> None:
     world.mobs[mob.id] = mob
     world.dirty = True
     await broadcast({"type": "mob_spawned", "mob": asdict(mob)}, minimum_protocol=3)
+
+
+DYE_TO_SHEEP = {
+    RED_DYE_ITEM: "SHEEP_RED",
+    ORANGE_DYE_ITEM: "SHEEP_ORANGE",
+    YELLOW_DYE_ITEM: "SHEEP_YELLOW",
+    BLUE_DYE_ITEM: "SHEEP_BLUE",
+    WHITE_DYE_ITEM: "SHEEP_WHITE",
+    PINK_DYE_ITEM: "SHEEP_PINK",
+    PURPLE_DYE_ITEM: "SHEEP_PURPLE",
+    LIGHT_GRAY_DYE_ITEM: "SHEEP_LIGHT_GRAY",
+    GRAY_DYE_ITEM: "SHEEP_GRAY",
+    BLACK_DYE_ITEM: "SHEEP_BLACK",
+    BROWN_DYE_ITEM: "SHEEP_BROWN",
+}
+
+async def handle_dye_sheep(player_id: str, data: dict[str, Any]) -> None:
+    player = world.players.get(player_id)
+    mob = world.mobs.get(str(data.get("mobId", "")))
+    dye_id = bounded_int(data.get("dyeId"), 0, 255)
+    target_type = DYE_TO_SHEEP.get(dye_id)
+    if player is None or mob is None or target_type is None or not mob.typeKey.startswith("SHEEP_"):
+        return
+    if player.dimension != mob.dimension or math.hypot(player.x - mob.x, player.z - mob.z) > 5.0 or abs((player.y + 0.9) - (mob.y + 0.6)) > 3.5:
+        return
+    selected = player.inventory[player.selectedSlot] if 0 <= player.selectedSlot < len(player.inventory) else {"id": 0, "count": 0}
+    if player.gamemode != "creative":
+        if selected.get("id") != dye_id or selected.get("count", 0) <= 0:
+            return
+        selected["count"] -= 1
+        if selected["count"] <= 0:
+            selected["id"] = 0
+            selected["count"] = 0
+        player.heldItem = selected["id"] if selected["count"] > 0 else 0
+    consumed = player.gamemode != "creative"
+    mob.typeKey = target_type
+    definition = MOB_DEFINITIONS[target_type]
+    mob.maxHealth = float(definition["health"])
+    mob.health = min(mob.health, mob.maxHealth)
+    world.dirty = True
+    await broadcast({"type": "mob_dyed", "mobId": mob.id, "typeKey": target_type, "playerId": player_id, "dyeId": dye_id, "consumed": consumed}, minimum_protocol=8)
 
 
 async def handle_mob_update(player_id: str, data: dict[str, Any]) -> None:
@@ -1068,6 +1554,28 @@ async def handle_drop_item(player_id: str, data: dict[str, Any]) -> None:
     )
 
 
+async def handle_block_drop(player_id: str, data: dict[str, Any]) -> None:
+    player = world.players.get(player_id)
+    if player is None or player.gamemode == "spectator" or player.health <= 0:
+        return
+    item_id = bounded_int(data.get("itemId"), 1, 255)
+    count = bounded_int(data.get("count"), 1, 4, 1)
+    x = finite_number(data.get("x"), player.x)
+    y = finite_number(data.get("y"), player.y + 0.5)
+    z = finite_number(data.get("z"), player.z)
+    dimension = bounded_int(data.get("dimension"), 0, 2, player.dimension)
+    floor_y = finite_number(data.get("floorY"), y - 0.4)
+    if item_id <= 0 or item_id in RETIRED_ITEM_IDS or dimension != player.dimension:
+        return
+    if math.dist((x, y, z), (player.x, player.y + 0.8, player.z)) > 8.0:
+        return
+    floor_y = max(-0.5, min(y, floor_y))
+    await spawn_dropped_item(
+        item_id, count, x, y, z, dimension,
+        random.uniform(-0.7, 0.7), 1.8, random.uniform(-0.7, 0.7), floor_y,
+    )
+
+
 async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
     message_type = data.get("type")
     player = world.players.get(player_id)
@@ -1095,6 +1603,8 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             if inventory is not None:
                 player.inventory = inventory
             player.selectedSlot = bounded_int(data.get("selectedSlot"), 0, 8, player.selectedSlot)
+            armor_id = bounded_int(data.get("armorId"), 0, 255)
+            player.armorId = armor_id if armor_id in ARMOR_PROTECTION else 0
             selected = player.inventory[player.selectedSlot]
             player.heldItem = selected["id"] if selected["count"] > 0 else 0
         world.dirty = True
@@ -1113,6 +1623,8 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         await handle_player_attack(player_id, data)
     elif message_type == "attack_mob" and world.client_protocols.get(player_id, 1) >= 3:
         await handle_mob_attack(player_id, data)
+    elif message_type == "dye_sheep" and world.client_protocols.get(player_id, 1) >= 8:
+        await handle_dye_sheep(player_id, data)
     elif message_type == "mob_attack_player" and world.client_protocols.get(player_id, 1) >= 3:
         await handle_mob_attack_player(player_id, data)
     elif message_type == "mob_spawn" and world.client_protocols.get(player_id, 1) >= 3:
@@ -1135,6 +1647,8 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         await handle_furnace_update(player_id, data)
     elif message_type == "drop_item" and world.client_protocols.get(player_id, 1) >= 3:
         await handle_drop_item(player_id, data)
+    elif message_type == "block_drop" and world.client_protocols.get(player_id, 1) >= 10:
+        await handle_block_drop(player_id, data)
     elif message_type == "request_boss_spawn" and world.client_protocols.get(player_id, 1) >= 3:
         if not world.boss_defeated and player.dimension == 2 and not any(m.typeKey == "MELLOR_BOSS" and m.dimension == 2 for m in world.mobs.values()):
             definition = MOB_DEFINITIONS["MELLOR_BOSS"]
@@ -1195,7 +1709,7 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
 async def websocket_handler(websocket: Any, *_args: Any) -> None:
     player_id: str | None = None
     try:
-        print(f"WebSocket connection attempt from {getattr(websocket, 'remote_address', None)}")
+        console_log(f"WebSocket connection attempt from {getattr(websocket, 'remote_address', None)}")
         raw_join = await asyncio.wait_for(websocket.recv(), timeout=10.0)
         try:
             join = json.loads(raw_join)
@@ -1222,7 +1736,28 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
         if not USERNAME_PATTERN.fullmatch(requested_username):
             await send_json(websocket, {"type": "error", "message": "Invalid username."})
             return
-        if world.profile_key(requested_username) in world.banned_players:
+        auth_action = str(join.get("authAction", "signin")).strip().lower()
+        password = str(join.get("password", ""))
+        requested_skin = str(join.get("skin", "steve"))
+        if requested_skin not in ALLOWED_SKINS:
+            requested_skin = "steve"
+        if auth_action == "signup":
+            account, auth_error = account_store.signup(requested_username, password, requested_skin)
+        elif auth_action == "signin":
+            account, auth_error = account_store.signin(requested_username, password)
+        else:
+            account, auth_error = None, "Invalid authentication action."
+        password = ""
+        if account is None:
+            await send_json(websocket, {"type": "error", "message": auth_error or "Authentication failed."})
+            return
+        username = str(account["username"])
+        skin = str(account.get("skin", "steve"))
+        key = world.profile_key(username)
+        if any(existing.username.casefold() == key for existing in world.players.values()):
+            await send_json(websocket, {"type": "error", "message": "That account is already signed in to this server."})
+            return
+        if key in world.banned_players:
             message = "You are banned from this server."
             await send_json(websocket, {"type": "banned", "message": message})
             try:
@@ -1230,14 +1765,10 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
             except Exception:
                 pass
             return
-        skin = str(join.get("skin", "steve"))
-        if skin not in ALLOWED_SKINS:
-            skin = "steve"
 
         player_id = uuid.uuid4().hex
-        username = unique_username(requested_username)
         player, restored = world.restored_player(
-            player_id, username, skin, username.casefold() in world.operators
+            player_id, username, skin, key in world.operators
         )
         world.players[player_id] = player
         world.connections[player_id] = websocket
@@ -1247,13 +1778,14 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
         world.tick()
         world.recompute_mob_hosts()
 
+        total_blocks = len(world.blocks)
         await send_json(websocket, {
             "type": "welcome", "protocol": PROTOCOL_VERSION, "negotiatedProtocol": client_protocol,
-            "clientId": player_id, "username": username, "seed": world.seed, "worldName": world.world_name,
+            "clientId": player_id, "username": username, "skin": skin, "accountAuthenticated": True, "seed": world.seed, "worldName": world.world_name,
             "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
-            "dayLength": world.game_rules["dayLength"], "gameRules": world.game_rules,
-            "bossDefeated": world.boss_defeated,
-            "isOperator": player.isOperator, "blocks": world.block_snapshot(),
+            "dayLength": world.game_rules["dayLength"], "gameRules": world.game_rules, "worldGen": world.world_gen,
+            "bossDefeated": world.boss_defeated, "streamedWorld": True, "blockCount": total_blocks,
+            "isOperator": player.isOperator, "blocks": [],
             "playerState": world.player_profile(player) if restored and client_protocol >= 4 else None,
             "players": world.player_snapshot(),
             "mobs": world.mob_snapshot() if client_protocol >= 3 else [],
@@ -1261,9 +1793,29 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
             "furnaces": world.furnaces if client_protocol >= 6 else {},
             "mobHosts": {str(k): v for k, v in world.mob_hosts.items()} if client_protocol >= 3 else {},
         })
+        # Stream edits directly from the world dictionary. This avoids constructing a second
+        # giant block list in memory and prevents established worlds from stalling at join.
+        batch_size = 1200
+        batch: list[dict[str, int]] = []
+        loaded = 0
+        for key, block_type in world.blocks.items():
+            try:
+                d, x, y, z = world.parse_block_key(key)
+            except (TypeError, ValueError):
+                continue
+            batch.append({"dimension": d, "x": x, "y": y, "z": z, "blockType": int(block_type)})
+            if len(batch) >= batch_size:
+                loaded += len(batch)
+                await send_json(websocket, {"type": "world_block_batch", "blocks": batch, "loaded": loaded, "total": total_blocks})
+                batch = []
+                await asyncio.sleep(0)
+        if batch:
+            loaded += len(batch)
+            await send_json(websocket, {"type": "world_block_batch", "blocks": batch, "loaded": loaded, "total": total_blocks})
+        await send_json(websocket, {"type": "world_ready", "blockCount": loaded})
         await broadcast({"type": "player_joined", "player": world.public_player_state(player)}, exclude_id=player_id)
         await broadcast_mob_hosts()
-        print(f"WebSocket joined: {username} ({player_id[:8]}) protocol={client_protocol}")
+        console_log(f"WebSocket joined: {username} ({player_id[:8]}) protocol={client_protocol}")
 
         async for raw_message in websocket:
             try:
@@ -1272,6 +1824,13 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
                 await send_json(websocket, {"type": "error", "message": "Malformed JSON message."})
                 continue
             if isinstance(data, dict):
+                if data.get("type") == "client_ready":
+                    console_log(f"Client ready: {player.username} ({player_id[:8]})")
+                    continue
+                if data.get("type") == "client_start_error":
+                    detail = str(data.get("message", "Unknown browser startup error"))[:500]
+                    console_log(f"Client startup failed: {player.username} ({player_id[:8]}): {detail}")
+                    continue
                 await handle_client_message(player_id, data)
     except asyncio.TimeoutError:
         try:
@@ -1281,7 +1840,7 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
     except ConnectionClosed:
         pass
     except Exception as exc:
-        print(f"WebSocket handler error: {exc}")
+        console_log(f"WebSocket handler error: {exc}")
     finally:
         if player_id is not None:
             player = world.players.pop(player_id, None)
@@ -1296,7 +1855,7 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
             world.attack_cooldowns.pop(player_id, None)
             hosts_changed = world.recompute_mob_hosts()
             if player is not None:
-                print(f"WebSocket left: {player.username} ({player_id[:8]})")
+                console_log(f"WebSocket left: {player.username} ({player_id[:8]})")
                 await broadcast({"type": "player_left", "playerId": player_id})
             if hosts_changed:
                 await broadcast_mob_hosts()
@@ -1354,12 +1913,25 @@ async def item_loop() -> None:
         removed: list[str] = []
         for item in list(world.items.values()):
             item.age += dt
-            item.x += item.vx * dt
-            item.y += item.vy * dt
-            item.z += item.vz * dt
-            item.vx *= max(0.0, 1.0 - dt * 3.0)
-            item.vz *= max(0.0, 1.0 - dt * 3.0)
-            item.vy *= max(0.0, 1.0 - dt * 4.0)
+            if item.floorY is not None:
+                item.vy -= 18.0 * dt
+                item.x += item.vx * dt
+                item.y += item.vy * dt
+                item.z += item.vz * dt
+                item.vx *= max(0.0, 1.0 - dt * 3.5)
+                item.vz *= max(0.0, 1.0 - dt * 3.5)
+                if item.y <= item.floorY:
+                    item.y = item.floorY
+                    item.vy = 0.0
+                    item.vx *= max(0.0, 1.0 - dt * 8.0)
+                    item.vz *= max(0.0, 1.0 - dt * 8.0)
+            else:
+                item.x += item.vx * dt
+                item.y += item.vy * dt
+                item.z += item.vz * dt
+                item.vx *= max(0.0, 1.0 - dt * 3.0)
+                item.vz *= max(0.0, 1.0 - dt * 3.0)
+                item.vy *= max(0.0, 1.0 - dt * 4.0)
             if item.age > 300.0:
                 removed.append(item.id)
                 continue
@@ -1370,10 +1942,17 @@ async def item_loop() -> None:
                     continue
                 dx, dy, dz = player.x - item.x, (player.y + 0.8) - item.y, player.z - item.z
                 if dx * dx + dy * dy + dz * dz <= 2.25:
+                    if not inventory_can_fit(player.inventory, item.itemId, item.count):
+                        continue
+                    if not inventory_add(player.inventory, item.itemId, item.count):
+                        continue
+                    selected = player.inventory[player.selectedSlot]
+                    player.heldItem = selected["id"] if selected["count"] > 0 else 0
                     websocket = world.connections.get(player.id)
                     if websocket is not None:
                         await send_json(websocket, {"type": "give_item", "itemId": item.itemId, "count": item.count})
                     removed.append(item.id)
+                    world.dirty = True
                     break
         for item_id in set(removed):
             if world.items.pop(item_id, None) is not None:
@@ -1387,7 +1966,7 @@ async def save_loop() -> None:
             try:
                 world.save()
             except OSError as exc:
-                print(f"Could not save world: {exc}")
+                console_log(f"Could not save world: {exc}")
 
 
 def start_http_server() -> ThreadingHTTPServer:
@@ -1554,6 +2133,61 @@ async def process_gamerule_command(args: list[str]) -> str:
     return f"Set {name} to {game_rule_text(name)}."
 
 
+COMMAND_HELP: tuple[tuple[str, str], ...] = (
+    ("/help", "Show every server-console command."),
+    ("/stop", "Save the world and shut down the server cleanly."),
+    ("/list", "List connected players and operator status."),
+    ("/ops", "List operator usernames."),
+    ("/op <username>", "Grant operator status."),
+    ("/deop <username>", "Remove operator status."),
+    ("/ban <username>", "Ban a username from the current world/server."),
+    ("/kill <username>", "Kill a connected player using normal death rules."),
+    ("/mobs", "Show mob counts by dimension."),
+    ("/gamerule", "List all game rules and current values."),
+    ("/gamerule <rule> [value]", "Read or change a game rule."),
+    ("/gamemode <player> <survival|creative|spectator>", "Change a connected player's gamemode."),
+    ("/tp <player> <targetPlayer>", "Teleport one connected player to another."),
+    ("/tp <player> <x> <y> <z> <dimension 1|2|3>", "Teleport a player to coordinates."),
+    ("/account list", "List registered server accounts."),
+    ("/account setpassword <username> <password>", "Create/reset an account password; use quotes around names/passwords containing spaces."),
+    ("/account delete <username>", "Delete a server account login. World player data is not deleted."),
+)
+
+COMMAND_USAGE = {
+    "/ban": "Usage: /ban <username>",
+    "/kill": "Usage: /kill <username>",
+    "/op": "Usage: /op <username>",
+    "/deop": "Usage: /deop <username>",
+    "/gamemode": "Usage: /gamemode <player> <survival|creative|spectator>",
+    "/gm": "Usage: /gamemode <player> <survival|creative|spectator>",
+    "/tp": "Usage: /tp <player> <targetPlayer> OR /tp <player> <x> <y> <z> <dimension 1|2|3>",
+    "/account": "Usage: /account <list|setpassword|delete> ...",
+}
+
+
+def all_command_help() -> str:
+    return "Console commands:\n" + "\n".join(f"  {usage:<58} {description}" for usage, description in COMMAND_HELP)
+
+
+async def process_account_command(args: list[str]) -> str:
+    if not args:
+        return COMMAND_USAGE["/account"]
+    sub = args[0].lower()
+    if sub == "list":
+        return account_store.list_text() if len(args) == 1 else "Usage: /account list"
+    if sub == "setpassword":
+        if len(args) != 3:
+            return "Usage: /account setpassword <username> <password>"
+        return account_store.set_password(args[1], args[2])
+    if sub == "delete":
+        if len(args) != 2:
+            return "Usage: /account delete <username>"
+        if find_player_by_username(args[1]) is not None:
+            return "That account is currently signed in. Disconnect the player before deleting it."
+        return account_store.delete(args[1])
+    return COMMAND_USAGE["/account"]
+
+
 async def process_console_command(line: str) -> str:
     command = line.strip()
     if not command:
@@ -1567,6 +2201,8 @@ async def process_console_command(line: str) -> str:
     name = tokens[0].lower()
     args = tokens[1:]
     argument = " ".join(args)
+    if not args and name in COMMAND_USAGE:
+        return COMMAND_USAGE[name]
     if name == "/ban":
         return await ban_username(argument)
     if name == "/kill":
@@ -1587,36 +2223,31 @@ async def process_console_command(line: str) -> str:
         return await process_gamerule_command(args)
     if name in {"/gamemode", "/gm"}:
         if len(args) != 2:
-            return "Usage: /gamemode <player> <survival|creative|spectator>"
+            return COMMAND_USAGE[name]
         return await set_player_gamemode(args[0], args[1])
     if name == "/tp":
         return await process_teleport_command(args)
+    if name == "/account":
+        return await process_account_command(args)
     if name in {"/help", "help"}:
-        return ("Console commands: /ban <username>, /kill <username>, /op <username>, /deop <username>, /ops, /list, /mobs, "
-                "/gamerule [rule] [value], "
-                "/gamemode <player> <mode>, /tp <player> <targetPlayer>, "
-                "/tp <player> <x> <y> <z> <dimension 1|2|3>, /help")
+        return all_command_help()
+    if name == "/stop":
+        try:
+            world.save()
+        except OSError as exc:
+            return f"Could not save before stopping: {exc}"
+        if _server_stop_event is not None:
+            _server_stop_event.set()
+        return "World saved. Stopping server..."
     return "Unknown console command. Type /help."
 
 
-def console_reader(loop: asyncio.AbstractEventLoop) -> None:
-    while not loop.is_closed():
-        try:
-            line = input("server> ")
-        except (EOFError, KeyboardInterrupt):
-            return
-        try:
-            future = asyncio.run_coroutine_threadsafe(process_console_command(line), loop)
-            result = future.result(timeout=5.0)
-            if result:
-                print(result)
-        except Exception as exc:
-            print(f"Console command failed: {exc}")
-
-
 async def run_websocket_server() -> None:
+    global _console_ui, _server_stop_event
     loop = asyncio.get_running_loop()
-    threading.Thread(target=console_reader, args=(loop,), name="MellorCraftConsole", daemon=True).start()
+    _server_stop_event = asyncio.Event()
+    _console_ui = LiveServerConsole(loop)
+    threading.Thread(target=_console_ui.run, name="MellorCraftConsole", daemon=True).start()
     async with serve(
         websocket_handler, "0.0.0.0", WEBSOCKET_PORT,
         max_size=512 * 1024, ping_interval=20, ping_timeout=20,
@@ -1627,10 +2258,11 @@ async def run_websocket_server() -> None:
             asyncio.create_task(save_loop()),
         ]
         try:
-            await asyncio.gather(*tasks)
+            await _server_stop_event.wait()
         finally:
             for task in tasks:
                 task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def safe_world_filename(world_name: str) -> str:
@@ -1658,7 +2290,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.7.1 World Selection")
+    print("\nMellorCraft v1.8.0 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -1749,7 +2381,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.7.1 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.8.0 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -1762,7 +2394,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    global world
+    global world, account_store
     args = parse_args()
     client_path = SCRIPT_DIR / CLIENT_FILENAME
     if not client_path.exists():
@@ -1770,10 +2402,11 @@ def main() -> None:
 
     world_name, save_path, seed, open_game = resolve_world(args)
     world = MellorCraftWorld(save_path, requested_seed=seed, world_name=world_name)
+    account_store = ServerAccountStore(SCRIPT_DIR / ACCOUNTS_FILENAME, SCRIPT_DIR / WORLDS_DIRNAME)
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.7.1 multiplayer server is running")
+    print("\nMellorCraft v1.8.0 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")
@@ -1782,8 +2415,9 @@ def main() -> None:
     print(f"  World seed:    {world.seed}")
     print(f"  Save file:     {save_path.relative_to(SCRIPT_DIR)}")
     print("Join this same world on the host PC using the Host PC address above.")
-    print("Console commands: /ban <player>, /kill <player>, /op, /deop, /ops, /list, /mobs, /gamerule [rule] [value], /gamemode <player> <mode>, /tp <player> <target|x y z dim>, /help")
-    print("Press Ctrl+C to stop.\n")
+    print("Console: type /help to list all commands. Incoming logs will preserve what you are typing.")
+    print(f"  Accounts:      {(SCRIPT_DIR / ACCOUNTS_FILENAME).relative_to(SCRIPT_DIR)}")
+    print("Type /stop to save and shut down cleanly, or press Ctrl+C.\n")
     if open_game:
         try:
             webbrowser.open(f"http://127.0.0.1:{HTTP_PORT}")

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MellorCraft v1.7.1 Seed Map</title>
+<title>MellorCraft v1.8.0 Seed Map</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#15171b;color:#eee;font-family:Arial,sans-serif}
@@ -145,11 +145,11 @@ const BIOMES={
     PLAINS:0,DESERT_BARREN:1,DESERT_CACTUS:2,FOREST:3,
     MOUNTAINS_LOW:4,MOUNTAINS_MID:5,MOUNTAINS_HIGH:6,
     TAIGA:7,STONY_PEAKS:8,BADLANDS:9,OCEAN:10,SWAMP:11,
-    JUNGLE:12,SAVANNA:13,BEACH:14
+    JUNGLE:12,SAVANNA:13,BEACH:14,FLOWER_FOREST:15
 };
 const ALT_BIOMES={RED:0,BLUE:1,GREEN:2};
-const BIOME_NAMES=['Plains','Barren Desert','Cactus Desert','Forest','Low Mountains','Medium Mountains','High Mountains','Taiga','Stony Peaks','Badlands','Ocean','Swamp','Jungle','Savanna','Beach'];
-const BIOME_COLORS=['#78a84b','#d7b968','#d9c36d','#2f7b39','#859271','#7b8177','#e8edf0','#477d55','#7f858b','#b65c34','#2f69a8','#4c7658','#176d31','#a8aa49','#e5d394'];
+const BIOME_NAMES=['Plains','Barren Desert','Cactus Desert','Forest','Low Mountains','Medium Mountains','High Mountains','Taiga','Stony Peaks','Badlands','Ocean','Swamp','Jungle','Savanna','Beach','Flower Forest'];
+const BIOME_COLORS=['#78a84b','#d7b968','#d9c36d','#2f7b39','#859271','#7b8177','#e8edf0','#477d55','#7f858b','#b65c34','#2f69a8','#4c7658','#176d31','#a8aa49','#e5d394','#4f934f'];
 const ALT_NAMES=['Red Wastes','Blue Caverns','Green Depths'];
 const MOUNTAIN_XZ_SCALE=Math.SQRT1_2; // v1.4.1: half mountain land area, unchanged outline
 const ALT_COLORS=['#9a3434','#344f9a','#397a47'];
@@ -222,6 +222,7 @@ function getBaseBiome(x, z) {
     return BIOMES.DESERT_CACTUS;
   }
   if(temp<-.28){if(moist<-.70)return BIOMES.STONY_PEAKS;return BIOMES.TAIGA}
+  if(moist>-0.05&&temp>-0.18&&temp<0.28&&coordHash(Math.floor(x/190),Math.floor(z/190),8151)<0.075)return BIOMES.FLOWER_FOREST;
   if(moist>.02)return BIOMES.FOREST;
   return BIOMES.PLAINS;
 }
@@ -447,8 +448,8 @@ function getSurfaceStructuresInBounds(minX,minZ,maxX,maxZ){
       }
     }
   }
-  scan(128,.05,610,'Mansion',15,[BIOMES.FOREST]);
-  scan(128,.10,620,'Outpost',4,[BIOMES.PLAINS,BIOMES.SAVANNA,BIOMES.FOREST]);
+  scan(128,.05,610,'Mansion',15,[BIOMES.FOREST,BIOMES.FLOWER_FOREST]);
+  scan(128,.10,620,'Outpost',4,[BIOMES.PLAINS,BIOMES.SAVANNA,BIOMES.FOREST,BIOMES.FLOWER_FOREST]);
   scan(64,.15,630,'Cabin',3,[BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH,BIOMES.TAIGA]);
   return result;
 }
@@ -565,7 +566,7 @@ function weatherAnimationFrame(now){if(weatherPlaying){const dt=Math.min(.1,Math
 requestAnimationFrame(weatherAnimationFrame);
 function buildLegend(){
  const dim=Number(document.getElementById('dimension').value),el=document.getElementById('legend');
- const active=[BIOMES.PLAINS,BIOMES.DESERT_BARREN,BIOMES.DESERT_CACTUS,BIOMES.FOREST,BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH,BIOMES.TAIGA,BIOMES.STONY_PEAKS,BIOMES.BADLANDS,BIOMES.JUNGLE,BIOMES.SAVANNA];
+ const active=[BIOMES.PLAINS,BIOMES.DESERT_BARREN,BIOMES.DESERT_CACTUS,BIOMES.FOREST,BIOMES.FLOWER_FOREST,BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH,BIOMES.TAIGA,BIOMES.STONY_PEAKS,BIOMES.BADLANDS,BIOMES.JUNGLE,BIOMES.SAVANNA];
  const rows=dim===0?active.map(i=>[BIOME_NAMES[i],BIOME_COLORS[i]]):dim===1?ALT_NAMES.map((n,i)=>[n,ALT_COLORS[i]]):[['Boss island','#56176a'],['Void','#08030d']];
  el.innerHTML='<strong>Legend</strong>'+rows.map(r=>`<div class="legend-row"><span class="swatch" style="background:${r[1]}"></span>${r[0]}</div>`).join('')+'<hr><div>M Mansion • O Outpost • C Cabin<br>A Alt Maze • S Boss Shrine</div>'+(dim===0?'<hr><div><strong>Weather</strong><br><span style="color:#78a8ff">Low pressure</span> → <span style="color:#ff9a66">high pressure</span><br>Clouds fade in below pressure 100<br><span style="color:#8fc8ff">Blue</span> = rain/fog intensity<br>Overcast 50–100 • Light rain 30–50 • Moderate 15–30 • Heavy &lt;15</div>':'');
 }

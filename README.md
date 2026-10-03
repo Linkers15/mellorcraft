@@ -1,10 +1,125 @@
-MellorCraft v1.7.1
+MellorCraft v1.8.0 mobile performance + armor-slot pass
+========================================================
+- Kept the restored v1.7.1 mobile controls and device-detection path intact while optimizing the heavier v1.8.0 renderer around it. No gameplay systems, textures, mobs, weather, drops, crafting, flowers, armor, or multiplayer features are disabled.
+- Mobile block/mob textures now use native 16x16 atlas tiles instead of storing each logical texel as a duplicated 2x2 area. With nearest-neighbor sampling the artwork is unchanged, while the mobile GPU texture-atlas footprint is reduced from 512x512 to 256x256 (75% fewer atlas texels). Desktop retains the 32x32 physical atlas tiles.
+- Lower-end mobile hardware uses a more conservative internal framebuffer default (55% on lower-end iOS and 60% on other lower-end mobile hardware). Higher-end mobile defaults are also reduced moderately to account for v1.8.0 texture sampling. The existing Resolution setting is preserved.
+- Added a mobile adaptive-resolution governor. Under sustained low FPS it reduces only the internal WebGL framebuffer in small steps; when sustained headroom returns it slowly restores resolution. UI resolution and every gameplay/rendering feature remain enabled.
+- Removed the full block raycast that previously ran on every right-side touch-move event while looking around. The normal throttled selection raycast still runs, and active mining still refreshes its raycast immediately.
+- Reduced lower-end-mobile chunk/remesh CPU burst budgets and slowed non-critical HUD/player-overlay polling. Rain particle/splash counts and the flat-cloud horizon are also reduced on lower-end mobile while weather itself remains active.
+- The texture atlas is now bound once per render pass instead of being rebound for each textured mesh. Fully textured terrain also uses a constant color attribute instead of fetching an unused per-vertex RGB buffer, reducing mobile WebGL driver work and vertex bandwidth.
+- The mobile Armor slot is explicitly fixed at 50x50 pixels with a non-shrinking flex basis, matching the normal touch-sized inventory slot instead of being squeezed by the armor-effect text.
+- Dedicated multiplayer remains protocol 12.
+
+v1.8.0 mobile-controls startup restoration
+------------------------------------------
+- Restored the v1.7.1 mobile startup ordering: `gameStarted` is set before `initGame()` runs its mobile-control visibility update. A later dedicated-server startup hardening change had moved that assignment until after `initGame()`, which caused `#mobileControls` to be explicitly hidden on every phone/tablet even though device detection and touch handlers were correct.
+- The v1.7.1 mobile CSS, touch-zone/joystick markup, and touch handler implementation remain unchanged, except the obsolete direct Craft button stays hidden because v1.8.0 uses Inventory plus placed Crafting Tables for crafting.
+- A successful startup now performs one additional `updateMobileControlsVisibility()` after the loading screen is dismissed, and failed startup explicitly hides mobile controls again.
+
+MellorCraft v1.8.0 — v1.7.1 mobile logic + permanent account skins
+======================================================================
+- Reverted MellorCraft mobile-device detection to the exact logic used in v1.7.1: the original mobile user-agent test plus the proven `MacIntel` + multi-touch iPad desktop-mode check. All v1.8.0 gameplay, textures, accounts, crafting, drops, flowers, armor, and protocol-12 networking remain intact.
+- Removed the newer layered mobile heuristics (`userAgentData.mobile`, `navigator.standalone`, coarse-pointer, phone-screen-size, and extra Mac/iPhone inference) so the mobile-controls decision once again follows the v1.7.1 path.
+- Dedicated-server skins are now permanent account properties. Skin is selected only while creating an account; the Sign In form hides/disables the skin selector.
+- The protocol-12 `welcome` message now includes the authenticated account's saved skin, and the client immediately adopts that server-authoritative skin before the world starts. A saved player profile also reinforces the same account skin on restore.
+- Verified persistence by creating an account with Ember, disconnecting, then signing in while deliberately transmitting Forest: the server, restored player state, and account file all remained Ember.
+- Dedicated multiplayer remains protocol 12.
+
+MellorCraft v1.8.0 — protocol 12 restored-player startup fix
+==============================================================
+- Fixed a dedicated-server startup hang affecting existing accounts after `world_ready`. Restoring a saved player profile was still rebuilding the complete textured Crafting and Creative catalogs during `initGame()`, even though both menus are hidden at startup. Those expensive lists now render only when their menus are opened.
+- Dedicated startup now reports `World loaded. Preparing game...` and `World loaded. Initializing game...` as explicit stages. `gameStarted` is set only after initialization succeeds.
+- A dedicated client sends `client_ready` only after initialization completes and the loading screen is dismissed; the Python server logs `Client ready: <username> (...)` so operators can distinguish a successful world transfer from a successfully started browser client.
+- Startup failure reporting is now fail-safe: if browser initialization throws, the client shows the actual exception on the account screen and sends `client_start_error` to the Python console as `Client startup failed: ...`. Menu-audio failures can no longer mask the real error behind the old loading text.
+- Dedicated multiplayer protocol is now 12 and accepts only protocol 12, preventing older protocol-11 clients/servers from silently pairing with this corrected startup path.
+
+MellorCraft v1.8.0 protocol 11 startup hotfix
+----------------------------------------------
+- Fixed another dedicated-server join failure that could leave the client on **“World loaded. Starting game...”** even after the server had completed the world transfer.
+- The root cause was a browser-dependent synchronous exception in menu-music cleanup: resetting `currentTime` on an `Audio` element whose MP3 source had not loaded could throw before the loading screen was hidden and before the existing startup error handler began.
+- Audio shutdown is now non-throwing, the loading-screen transition itself is inside the guarded startup path, and a stale startup-in-progress flag is cleared when an authenticated `world_ready` arrives without a started game.
+- Dedicated multiplayer now uses **protocol 11** so this corrected client cannot silently pair with an older protocol-11 server build.
+- The protocol-11 server was verified through account signup -> `welcome` -> `world_ready`. A client regression harness with deliberately throwing `Audio.pause()` / `currentTime` operations still reached `initGame()` and removed the loading screen.
+
+MellorCraft v1.8.0
 =========================================================
 
 
+
+v1.8.0 server-startup, item-drop, and inventory-preview hotfix
+----------------------------------------------------------------
+- Dedicated multiplayer now uses **protocol 11**. Pages opened from `http://SERVER-IP:8000` always connect back to that exact host on WebSocket port 8765 instead of accidentally reusing a different server address saved earlier by the standalone client.
+- Removed the `requestAnimationFrame()` dependency from the final `world_ready` -> game-start transition. The client schedules initialization directly, resets stale startup guards before a dedicated join, and therefore cannot remain at **“World loaded. Starting game...”** merely because animation frames are being throttled.
+- Block icons in the hotbar, Inventory, Creative, Crafting, and Furnace now use the **side face** of placeable blocks rather than the overhead face. Saplings and flowers use transparent profile sprites with visible stems/leaves/petals instead of appearing as full square blocks.
+- Survival mining no longer deposits the block directly into inventory. The resulting block/item drop appears at the mined position with a small upward pop, follows gravity, and settles on the nearest solid surface below. Creative mining continues to produce no collectible drop.
+- Dropped-item pickup is now capacity-aware and all-or-nothing. If the player's inventory cannot hold the entire dropped stack, walking over it leaves the item in the world. Dedicated-server and browser-hosted worlds apply the same rule.
+- Picking up an item no longer writes a “Picked up ...” line into the in-game chat.
+- Dyeing a sheep now consumes exactly one dye after the authoritative recolor succeeds in local, LAN-hosted, LAN-guest, and dedicated-server play. Dyeing placed wool continues to consume one dye in Survival.
+
+v1.8.0 startup, armor, dye, and server-control pass
+-----------------------------------------------------
+- Fixed the post-stream startup stall at **“World loaded. Starting game...”**. Dedicated multiplayer now uses **protocol 11**. Streamed block edits are cleared before transfer, preserved through `initGame()`, and inserted directly into the chunk-edit map instead of being erased at startup. Game initialization is scheduled directly after `world_ready` without depending on an animation-frame callback, and startup exceptions return to the account page with the actual error rather than leaving the loading text onscreen forever.
+- Added `/stop` to the dedicated-server console. It saves the active world, shuts down the WebSocket/background tasks cleanly, closes the HTTP server, and exits the Python process so the command prompt returns.
+- Added `/hunger <0-20>` to the in-game operator command set, parallel to `/health`; the new value is synchronized immediately in multiplayer.
+- Added **Light Gray, Gray, Black, and Brown** flowers/dyes, completing all eleven sheep/wool dye colors used by MellorCraft. Dyes recolor sheep and placed wool.
+- Greatly reduced flower density outside Flower Forest: ordinary Forest, Plains, Savanna, and Jungle flower attempts are now only about **0.15%-0.30% per eligible grass column**. Flower Forest remains intentionally dense.
+- Inventory crafting now shows only recipes costing **fewer than 5 total ingredient items**. Recipes costing **5 or more** are hidden entirely until a placed Crafting Table is opened.
+- Added equipable **Iron, Gold, Diamond, and Mellorite Armor Sets**, each crafted from 8 of its material at a Crafting Table. They reduce incoming damage by 20%, 40%, 60%, and 80% respectively. After reduction, positive damage is rounded **up to the nearest half-heart** so combat never stores tiny fractional damage values. Armor is saved and synchronized in browser-hosted and dedicated multiplayer profiles.
+
+
+v1.8.0 streamed-world, flowers, wool, and crafting pass
+----------------------------------------------------------
+- Fixed dedicated-server worlds that could remain on the loading screen after authentication. Dedicated multiplayer now uses **protocol 11**: authentication returns the world metadata first, saved block edits stream in bounded batches with visible progress, and the client starts only after an explicit `world_ready` message. The client primes streamed edits directly into its chunk-edit map instead of replaying one giant snapshot at startup. A large-world stress test with 120,000 saved block edits completed the authenticated stream successfully.
+- Added a rare **Flower Forest** biome. It uses forest terrain/trees but generates dense red, orange, yellow, blue, white, pink, purple, light gray, gray, black, and brown flowers. Plains, ordinary Forests, Savannas, and Jungles also generate smaller biome-specific mixes of those flowers.
+- Added eleven matching dyes. One flower crafts into one dye. Clicking a sheep with a dye recolors its fleece; its future wool drop matches the new color.
+- Wool is now placeable as a block. White, black, gray, light gray, brown, pink, red, orange, yellow, blue, and purple wool blocks retain the corresponding wool item when mined. Clicking placed wool with one of the flower dyes recolors it in place.
+- Removed the obsolete duplicate **Mellorite** crystal entry and the unnamed/Unknown chest entry from Creative, while preserving the real Mellorite material, ore, storage block, and tool tier. Obsolete bucket-family IDs from earlier experimental builds are removed from the client and Creative inventory, and IDs 109-111 are purged from legacy inventories, dropped items, and Furnace state when older worlds are loaded.
+- **E now opens Inventory.** Inventory contains a searchable recipe list for recipes using fewer than five total ingredient items. Search matches recipe names, result names, categories, and ingredient names; clicking an available result crafts it immediately.
+- A **Crafting Table** costs four planks, can be placed, and opens its full searchable crafting menu when used. Recipes consuming five or more total ingredient items are only craftable from a placed Crafting Table.
+- The Seed Map recognizes Flower Forest using the same rare-biome selection rule as the game client.
+
+v1.8.0 account-handshake + server-console hotfix
+-----------------------------------------------------
+- Fixed the dedicated-server account join hang. The release now ships a matching **protocol 11** `mellorcraft_server.py` that actually performs Sign In / Sign Up before loading the authenticated player profile.
+- Added a second client-side authentication/world-load timeout. If a WebSocket opens but the server never sends the world welcome message, the account page now reports the failure and becomes usable again instead of remaining on “Creating account and loading world...” forever.
+- Reworked the interactive Python server console so incoming HTTP/WebSocket/save logs temporarily clear the prompt and then redraw the exact command being typed. Logs no longer split or erase a partially entered command. Arrow-key history, left/right cursor movement, Backspace, Ctrl+A, Ctrl+E, and Ctrl+U are supported in an interactive terminal.
+- Typing an argument-requiring command by itself now prints its usage (for example, `/tp`, `/ban`, `/op`, `/gamemode`, and `/account`).
+- `/help` now prints the complete server-console command list with usage and a short description for every command.
+- The release ZIP now includes the dedicated server, LAN relay, requirements file, client, download page, seed map, and README together so the protocol-11 client cannot accidentally be distributed without its matching server.
+
+v1.8.0 texture, inventory, and server-account pass
+----------------------------------------------------
+- Fixed **Terracotta** so it uses a softly mottled fired-clay texture instead of the brick mortar pattern.
+- Corrected side-face UV orientation for directional block faces. Grass side textures now keep the green edge at the top on +X, -X, +Z, and -Z faces instead of appearing rotated on some sides.
+- Added one cached **256x256 UI item atlas** with a 16x16 cell for every numerical block/item ID. Placeable blocks reuse their world texture, while coal, ingots, gems, sticks, food, wool, dyes, flowers, apples, music discs, and all tool/weapon tiers have dedicated pixel art.
+- The same item textures are now used in the gameplay hotbar, Crafting menu, Inventory and inventory hotbar, Creative item list and Creative hotbar, and every Furnace slot/inventory cell. Non-placeable items no longer fall back to emoji/text-only icons in those interfaces.
+- Dedicated multiplayer now uses **protocol 11** and requires a per-server account before a username can enter the world. The client presents **Sign In / Sign Up**, username, password, and skin fields both when connecting from a standalone client and when opening the page served directly by `mellorcraft_server.py`.
+- Server passwords are stored only as random-salt **PBKDF2-HMAC-SHA256** verifiers (210,000 iterations), and usernames are matched case-insensitively. An authenticated username is the identity used to restore its saved profile and operator status, preventing another client from simply typing an operator's name.
+- Existing pre-account player/operator names are reserved. The server owner can claim one safely from the console with `/account setpassword "Player Name" password`; `/account list` and `/account delete "Player Name"` are also available. A single account cannot be connected twice simultaneously.
+- Opening the dedicated server's HTTP root now redirects directly to the account page for that server. Browser-hosted LAN/relay worlds retain their existing relay protocol; the account requirement applies to the dedicated Python server.
+- Added a third **Play in Browser** card to the download page linking directly to `https://linkers15.github.io/mellorcraft/mellorcraft.html`.
+- World format remains 11. Browser/exported saves now identify themselves as v1.8.0.
+
+**Security note:** accounts prevent simple username/operator impersonation and passwords are protected at rest, but the default local server still uses plain HTTP/WebSocket transport. Passwords can therefore be observed by someone able to intercept that network traffic. For Internet-facing servers, place MellorCraft behind HTTPS/WSS (for example, a TLS reverse proxy) rather than exposing the default ports directly.
+
+v1.8.0 texture atlas hotfix
+-----------------------------
+- Fixed the atlas Y-coordinate mapping. The atlas was uploaded without WebGL Y-flipping but the UV helper inverted the whole atlas again, causing faces to sample unrelated rows. This was the source of black block faces, incorrect materials such as leaf faces sampling brick-like textures, and missing/wrong mob textures.
+- Atlas UVs now use the same top-to-bottom coordinate space as the generated canvas, so every block face and mob part samples its intended tile.
+- Unused atlas tiles are now transparent and the shader falls back to the normal vertex color when a tile is missing, preventing future custom/unknown types from rendering as solid black.
+
+v1.8.0 texture update
+---------------------
+- Added 16x16 pixel textures for every block, including the Oak, Acacia, Spruce, Jungle, sapling, legacy liquid, utility, ore, portal, and special block IDs. Top/side/bottom variants remain available where the block needs them.
+- Added textures to mobs and remote players. Mob texture UVs are quantized against world-space model dimensions so one visible texture square is approximately the same 1/16-block size as one square on a full block texture.
+- Textures use a single shared WebGL atlas and the existing chunk/entity vertex buffers. Enabling textures does not create per-block textures, per-pixel geometry, or extra draw calls for individual block faces.
+- The atlas stores each logical 16x16 texture at 2x nearest-neighbor resolution for crisp sampling, uses no mipmap generation, and is uploaded once at startup.
+- Added a **Block & Mob Textures** setting. Textures default on for v1.8.0 and can be disabled instantly to use the original color-only fallback renderer on lower-end devices.
+- World format 11 remains unchanged. Dedicated multiplayer advances to protocol 11 in the current dedicated-server build above; browser-hosted relay networking keeps its existing protocol.
+
 v1.7.1 water rollback + mob/network fixes
 ------------------------------------------
-- Removed the experimental water expansion completely from active gameplay: no Ocean or River generation, no water/flow simulation, no buckets, no boats, and no Salmon/Shark aquatic mobs. Terrain generation is restored to the stable pre-water v1.7.1 system.
+- Removed the experimental water expansion completely from active gameplay: no Ocean or River generation, no water/flow simulation, no boats, and no Salmon/Shark aquatic mobs. Terrain generation is restored to the stable pre-water v1.7.1 system.
 - The Seed Map is restored to the pre-water terrain generator as well, so it no longer displays river/ocean hydrology from the experimental builds.
 - Kept the Customized-world terrain blending fix that prevents the former 50+ block biome-junction cliffs.
 - Kept default Overworld spawning at block coordinate **0,0**.
@@ -275,7 +390,6 @@ Current world-generation rules
 - The Overworld remains 200 blocks tall.
 - Ocean, Beach, and River biomes are generated alongside Plains, Forest, Taiga, Stony Peaks, Jungle, Savanna, deserts, Badlands, and all three Mountain biomes. Swamp remains unavailable in new generation.
 - Ocean water sits at Y=45. Ocean floors are sealed against cave and ravine carving. Rivers use seeded continuous channels whose surface descends from higher inland elevations to Y=45 at the ocean boundary.
-- Water source and flowing blocks are active again. Buckets can collect source water and place new sources; natural lava generation remains disabled.
 - Mountain-region occurrence remains at the v1.4.0 frequency. In v1.4.1 each seeded range keeps its shape and height bands while its horizontal footprint is compressed to 50% of its former land area, producing steeper slopes.
 - Taiga and Stony Peaks remain centered near Y=80.
 - Normal caves and varied ravines remain. Rare mega-caves are approximately
@@ -342,12 +456,11 @@ Mouse       Look
 Space       Jump / fly upward
 Shift       Crouch / fly downward
 Left click  Break / attack
-Right click Place / use jukebox
+Right click Place / use block / dye sheep or wool
 Q           Drop selected item
 G           Eat raw meat
 T           Chat
-E           Crafting
-R           Inventory
+E           Inventory
 C           Creative inventory
 Esc         Settings / pause
 
@@ -361,13 +474,15 @@ and position updates continue while the settings menu is open.
 Network notes
 -------------
 Allow Python through the host firewall on private networks. TCP ports 8000 and
-8765 must be reachable. The server is intended for a trusted local network and
-does not provide accounts, TLS encryption, or Internet hardening.
+8765 must be reachable. Dedicated v1.8.0 servers use protocol 11 and require a
+server account before a username is admitted. Account passwords are salted and
+hashed on disk, but the default HTTP/WebSocket transport is not encrypted. Use
+HTTPS/WSS through a TLS reverse proxy before exposing a server to the Internet.
 
-The v1.5 multiplayer HTML client and Python server use protocol 5 for mod-aware joins.
-An unmodded server also accepts supported older protocols; a modded server requires
-protocol 5 plus the exact mod-set signature. Replace client and server together when
-updating a modded installation.
+`server_accounts.json` stores the server-wide account registry. Keep that file
+private and back it up with the world saves. For a privileged identity from an old
+pre-account world, assign the account from the server console with
+`/account setpassword "Player Name" password` before that player signs in.
 
 Mountain and Alt Dimension revision
 -----------------------------------
