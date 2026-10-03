@@ -1716,7 +1716,8 @@
             removeMobLocal(mob.id);
             integratedBroadcast({type:'mob_removed',mobId:mob.id,reason});
             if(reason==='player_kill'&&killerId&&type&&!type.isBoss){
-                for(const loot of (MOB_LOOT[typeKey]||[])){const count=loot.min+Math.floor(Math.random()*(loot.max-loot.min+1));integratedSpawnItem(loot.id,count,x,y+.4,z,dimension,(Math.random()-.5)*1.5,1, (Math.random()-.5)*1.5);}
+                const lootFloor=Number.isFinite(Number(mob.groundY))?Number(mob.groundY):droppedItemFloorYAt(x,y+.5,z,dimension,Math.max(32,Math.floor(y)+2));
+                for(const loot of (MOB_LOOT[typeKey]||[])){const count=loot.min+Math.floor(Math.random()*(loot.max-loot.min+1));integratedSpawnItem(loot.id,count,x,y+.4,z,dimension,(Math.random()-.5)*1.5,1,(Math.random()-.5)*1.5,lootFloor);}
             }
             if (reason==='player_kill' && type && type.isBoss) {
                 bossDefeated=true;
@@ -1967,6 +1968,7 @@
                     mob.x=Number.isFinite(Number(u.x))?Number(u.x):mob.x; mob.y=Number.isFinite(Number(u.y))?Number(u.y):mob.y; mob.z=Number.isFinite(Number(u.z))?Number(u.z):mob.z;
                     mob.bodyRotation=Number.isFinite(Number(u.bodyRotation))?Number(u.bodyRotation):mob.bodyRotation; mob.headRotation=Number.isFinite(Number(u.headRotation))?Number(u.headRotation):mob.headRotation;
                     mob.vx=Math.max(-30,Math.min(30,Number(u.vx)||0)); mob.vy=Math.max(-50,Math.min(50,Number(u.vy)||0)); mob.vz=Math.max(-30,Math.min(30,Number(u.vz)||0));
+                    if(Number.isFinite(Number(u.groundY)))mob.groundY=Number(u.groundY);
                     mob.targetX=mob.x;mob.targetY=mob.y;mob.targetZ=mob.z;mob.targetBodyRotation=mob.bodyRotation;mob.targetHeadRotation=mob.headRotation;
                 }
                 singleplayerDirty=true; return true;
@@ -2063,9 +2065,12 @@
                 item.age=(Number(item.age)||0)+dt; item.vx=Number(item.vx)||0;item.vy=Number(item.vy)||0;item.vz=Number(item.vz)||0;
                 const hasFloor=Number.isFinite(Number(item.floorY));
                 if(hasFloor){
-                    item.vy-=18*dt;item.x+=item.vx*dt;item.y+=item.vy*dt;item.z+=item.vz*dt;
+                    const oldY=item.y,floorY=Number(item.floorY);
+                    item.vy-=18*dt;item.x+=item.vx*dt;const nextY=item.y+item.vy*dt;item.z+=item.vz*dt;
                     item.vx*=Math.max(0,1-dt*3.5);item.vz*=Math.max(0,1-dt*3.5);
-                    if(item.y<=item.floorY){item.y=item.floorY;item.vy=0;item.vx*=Math.max(0,1-dt*8);item.vz*=Math.max(0,1-dt*8);}
+                    // Swept floor collision: if this tick crosses the support plane, land on it instead of tunneling through.
+                    if((oldY>=floorY&&nextY<=floorY)||nextY<floorY){item.y=floorY;item.vy=0;item.vx*=Math.max(0,1-dt*8);item.vz*=Math.max(0,1-dt*8);}
+                    else item.y=nextY;
                 }else{
                     item.x+=item.vx*dt;item.y+=item.vy*dt;item.z+=item.vz*dt;item.vx*=Math.max(0,1-dt*3);item.vz*=Math.max(0,1-dt*3);item.vy*=Math.max(0,1-dt*4);
                 }
@@ -8158,13 +8163,18 @@
             }
         }
 
-        function minedDropFloorY(x,y,z,dim=currentDimension){
-            const bx=Math.floor(x),bz=Math.floor(z);
-            for(let by=Math.floor(y)-1;by>=0;by--){
+        function droppedItemFloorYAt(x,y,z,dim=currentDimension,maxScan=96){
+            const bx=Math.floor(x),bz=Math.floor(z),start=Math.floor(y-.01),bottom=Math.max(0,start-Math.max(1,Math.floor(maxScan||96)));
+            for(let by=start;by>=bottom;by--){
                 const below=getBlock(bx,by,bz,dim);
                 if(below!==BLOCKS.AIR&&!isLiquidBlock(below)&&!isPlantBlock(below))return by+1.18;
             }
-            return .18;
+            return bottom===0?.18:null;
+        }
+
+        function minedDropFloorY(x,y,z,dim=currentDimension){
+            const floor=droppedItemFloorYAt(x,y,z,dim,Math.max(96,Math.floor(y)+2));
+            return Number.isFinite(Number(floor))?Number(floor):.18;
         }
 
         function spawnMinedBlockDrop(itemId,count,x,y,z,dim=currentDimension){
@@ -9325,7 +9335,8 @@
             const hosted = mobs.filter(m => isMobHostForDimension(m.dimension)).map(m => ({
                 id: m.id, x: m.x, y: m.y, z: m.z,
                 bodyRotation: m.bodyRotation, headRotation: m.headRotation,
-                vx: m.vx, vy: m.vy, vz: m.vz
+                vx: m.vx, vy: m.vy, vz: m.vz,
+                groundY: droppedItemFloorYAt(m.x,m.y+.35,m.z,m.dimension,24)
             }));
             if (!hosted.length) return;
             lastMobNetworkSend = timeMs;

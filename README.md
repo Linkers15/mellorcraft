@@ -1,5 +1,12 @@
 MellorCraft v1.8.0 server disconnect + /tp fix
 ================================================
+
+Dropped-item floor collision hotfix
+----------------------------------
+- Dropped block and mob items now use swept floor collision so delayed frames/server ticks cannot tunnel an item through the supporting block.
+- Mob hosts report the support surface beneath mobs; mob loot uses that support height when it spawns.
+- Browser-hosted worlds and dedicated servers apply the same anti-tunneling behavior.
+
 - Dedicated multiplayer now uses protocol 13 so the corrected client/server pair cannot silently mix with protocol-12 builds.
 - Fixed dedicated-server `/tp`: the client now handles the server's authoritative `teleport_position` packet, updates dimension/coordinates immediately, clears velocity and knockback, resets nearby chunk streaming, and applies a short portal cooldown so the player's next movement update cannot snap the teleport back.
 - `/stop` now broadcasts a `server_shutdown` message after saving and before WebSocket/HTTP shutdown. Connected clients immediately leave gameplay and return to the server login screen.

@@ -301,6 +301,7 @@ class MobState:
     vx: float = 0.0
     vy: float = 0.0
     vz: float = 0.0
+    groundY: float | None = None
 
 
 @dataclass
@@ -552,6 +553,7 @@ class MellorCraftWorld:
                         health=max(0.1, min(float(definition["health"]), float(entry.get("health", definition["health"])))),
                         maxHealth=float(definition["health"]), bodyRotation=float(entry.get("bodyRotation", 0.0)),
                         headRotation=float(entry.get("headRotation", 0.0)), vx=float(entry.get("vx", 0.0)), vy=float(entry.get("vy", 0.0)), vz=float(entry.get("vz", 0.0)),
+                        groundY=(finite_number(entry.get("groundY")) if entry.get("groundY") is not None else None),
                     )
                     self.mobs[mob.id] = mob
                 except (KeyError, TypeError, ValueError):
@@ -1305,9 +1307,12 @@ async def remove_mob(
         minimum_protocol=3,
     )
     if player_kill:
+        # Mob hosts report the support surface beneath each mob. Use it for loot so a laggy physics tick
+        # cannot let a drop tunnel through the block it was standing on. The fallback is the mob's feet.
+        loot_floor = mob.groundY if mob.groundY is not None else max(0.18, mob.y + 0.18)
         for item_id, minimum, maximum in MOB_LOOT.get(mob.typeKey, []):
             await spawn_dropped_item(item_id, random.randint(minimum, maximum), mob.x, mob.y + 0.4, mob.z, mob.dimension,
-                                     random.uniform(-0.7, 0.7), 1.0, random.uniform(-0.7, 0.7))
+                                     random.uniform(-0.7, 0.7), 1.0, random.uniform(-0.7, 0.7), loot_floor)
     if mob.typeKey == "MELLOR_BOSS" and player_kill:
         world.boss_defeated = True
         await broadcast({"type": "system", "message": "The Mellor Boss was defeated!"})
@@ -1403,6 +1408,10 @@ async def handle_mob_update(player_id: str, data: dict[str, Any]) -> None:
         mob.vx = max(-30.0, min(30.0, finite_number(entry.get("vx"), mob.vx)))
         mob.vy = max(-50.0, min(50.0, finite_number(entry.get("vy"), mob.vy)))
         mob.vz = max(-30.0, min(30.0, finite_number(entry.get("vz"), mob.vz)))
+        if entry.get("groundY") is not None:
+            candidate_ground = finite_number(entry.get("groundY"), mob.groundY if mob.groundY is not None else mob.y + 0.18)
+            if -0.5 <= candidate_ground <= mob.y + 1.5:
+                mob.groundY = candidate_ground
     if updates:
         world.dirty = True
 
@@ -1914,17 +1923,22 @@ async def item_loop() -> None:
         for item in list(world.items.values()):
             item.age += dt
             if item.floorY is not None:
+                floor_y = float(item.floorY)
+                old_y = item.y
                 item.vy -= 18.0 * dt
                 item.x += item.vx * dt
-                item.y += item.vy * dt
+                next_y = item.y + item.vy * dt
                 item.z += item.vz * dt
                 item.vx *= max(0.0, 1.0 - dt * 3.5)
                 item.vz *= max(0.0, 1.0 - dt * 3.5)
-                if item.y <= item.floorY:
-                    item.y = item.floorY
+                # Swept floor collision prevents a low-FPS / delayed server tick from tunneling through support.
+                if (old_y >= floor_y and next_y <= floor_y) or next_y < floor_y:
+                    item.y = floor_y
                     item.vy = 0.0
                     item.vx *= max(0.0, 1.0 - dt * 8.0)
                     item.vz *= max(0.0, 1.0 - dt * 8.0)
+                else:
+                    item.y = next_y
             else:
                 item.x += item.vx * dt
                 item.y += item.vy * dt
