@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MellorCraft v1.8.0</title>
+    <title>MellorCraft v1.8.1</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Courier New', monospace; background: #000; }
@@ -759,7 +759,7 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2 id="versionSubtitle">v1.8.0</h2>
+        <h2 id="versionSubtitle">v1.8.1</h2>
         <div id="startupPage" class="main-menu-panel start-page active">
             <p class="startup-copy">Press Start to enable the soundtrack and open the main menu.</p>
             <button class="menuBtn greenBtn" id="startClientBtn">Start MellorCraft</button>
@@ -912,7 +912,7 @@
             <div class="setting-group"><label>Master Volume: <span id="menuVolVal">45</span>%</label><input type="range" id="menuSetVol" min="0" max="100" value="45"></div>
             <div class="setting-group"><label>Field of View: <span id="menuFovVal">60</span></label><input type="range" id="menuSetFov" min="30" max="110" value="60"></div>
             <div class="setting-group"><label>Look Sensitivity: <span id="menuSensVal">100</span>%</label><input type="range" id="menuSetSens" min="10" max="300" value="100"></div>
-            <div class="setting-group"><label class="shader-toggle-row"><span>Block &amp; Mob Textures</span><input type="checkbox" id="menuSetTextures" checked></label><div class="setting-help">v1.8.0 pixel textures. Uses one shared GPU atlas and can be disabled for the lightest fallback renderer.</div></div>
+            <div class="setting-group"><label class="shader-toggle-row"><span>Block &amp; Mob Textures</span><input type="checkbox" id="menuSetTextures" checked></label><div class="setting-help">v1.8.1 pixel textures. Uses one shared GPU atlas and can be disabled for the lightest fallback renderer.</div></div>
             
           </section><button class="menuBtn blueBtn backBtn" data-start-page="mainMenuPage">Back</button>
         </div>
@@ -1161,7 +1161,7 @@
         // Game state
         let WORLD_SEED = 0;
         let gameStarted = false;
-        // v1.8.0 intentionally uses the exact mobile detection that shipped in v1.7.1.
+        // v1.8.1 intentionally uses the exact mobile detection that shipped in v1.7.1.
         // That path was proven on iPhone/iPad and also controls all of the existing mobile UI/performance branches.
         const mobileUserAgent = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile|Silk|Kindle/i.test(navigator.userAgent);
         const iPadDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
@@ -1181,7 +1181,7 @@
         ));
         document.documentElement.classList.toggle('mobile-mode', isMobilePlaying);
         if (isMobilePlaying) {
-            document.getElementById('versionSubtitle').textContent = 'v1.8.0';
+            document.getElementById('versionSubtitle').textContent = 'v1.8.1';
             document.getElementById('positionLabel').textContent = 'Pos:';
             document.getElementById('gamemodeLabel').textContent = 'Mode:';
             const mobileDefaultDistance = isIOSDevice ? 2 : 4;
@@ -1199,6 +1199,7 @@
         let overworldPortal = null;
         let altDimensionSpawn = null;
         let teleportCooldown = 0;
+        let teleportFallProtected = false;
         let portalExitRequired = false;
         let portalClearTimer = 0;
         let dimensionTransitionInProgress = false;
@@ -1212,7 +1213,12 @@
 
         // Config
         const CHUNK_SIZE = 16;
-        const WORLD_HEIGHT = 200;
+        const WORLD_HEIGHT = 248;
+        // 48 real, additional voxel layers below the original Y=0, without shifting any displayed surface elevation.
+        // Legacy saves are explicitly migrated by +48 internal slots when loaded.
+        const WORLD_Y_ORIGIN = 48;
+        function worldYFromVoxel(y,dim=currentDimension){return dim===0?y-WORLD_Y_ORIGIN:y;}
+        function voxelYFromWorld(y,dim=currentDimension){return dim===0?y+WORLD_Y_ORIGIN:y;}
         const WATER_LEVEL = 32; // retained only for legacy-save compatibility
         const MOUNTAIN_XZ_SCALE = Math.SQRT1_2; // v1.4.1: same range shape at 50% X/Z land area
         const ALT_WORLD_HEIGHT = 50;
@@ -1229,7 +1235,7 @@
         let crouchToggleActive=false;
         let mobileCrouchHeld=false;
         let mobileSprintHeld=false,lastForwardTap=0;
-        let texturesEnabled = safeStorageGet('mellorcraftTextures') !== '0'; // v1.8.0: 16x16 block + mob textures default on.
+        let texturesEnabled = safeStorageGet('mellorcraftTextures') !== '0'; // v1.8.1: 16x16 block + mob textures default on.
         let liteShaderEnabled = safeStorageGet('mellorcraftLiteShader') !== null ? safeStorageGet('mellorcraftLiteShader') === '1' : !isMobilePlaying;
         let shaderShadowStrength = loadShaderNumber('mellorcraftShaderShadowV2', 105, 0, 125) / 100;
         let shaderSunrayStrength = loadShaderNumber('mellorcraftShaderSunrays', 125, 0, 200) / 100;
@@ -1283,7 +1289,7 @@
         let worldTime = 0.25;
         let dayCount = 1;
         let weatherSeed = Math.floor(Math.random()*2147483647), weatherPhase = 0, localPressure = 200;
-        const CLOUD_LEVEL = 200;
+        const CLOUD_LEVEL = 200+WORLD_Y_ORIGIN;
         const WEATHER_PRESSURE_MAX = 200;
         let localWeatherState={pressure:200,tendency:0,stormAmount:0,fog:0,cloud:0,rain:0,supercell:0,lowCenter:0,windMph:0,windX:0,windZ:0};
         function weatherClamp01(v){return Math.max(0,Math.min(1,v));}
@@ -1339,7 +1345,7 @@
             const fogT=playerEyeY()>=CLOUD_LEVEL?0:weatherFogFromPressure(localPressure),localFog=Math.pow(fogT,1.65)*weatherSkyExposure;
             if(localFog>.001){const haze=ctx.createLinearGradient(0,0,0,h);haze.addColorStop(0,`rgba(${fogColor},${localFog*.018})`);haze.addColorStop(.28,`rgba(${fogColor},${localFog*.08})`);haze.addColorStop(.54,`rgba(${fogColor},${localFog*.46})`);haze.addColorStop(.78,`rgba(${fogColor},${localFog*.31})`);haze.addColorStop(1,`rgba(${fogColor},${localFog*.15})`);ctx.fillStyle=haze;ctx.fillRect(0,0,w,h);const mistCount=isMobilePlaying?2:3;for(let i=0;i<mistCount;i++){const cx=((weatherPhase*18+i*w*.43)%(w*1.4))-w*.2,cy=h*(.47+i*.06),radius=Math.max(w,h)*(.34+i*.08),mist=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);mist.addColorStop(0,`rgba(${fogColor},${localFog*(.10+i*.025)})`);mist.addColorStop(1,`rgba(${fogColor},0)`);ctx.fillStyle=mist;ctx.fillRect(0,0,w,h);}}
             const distances=isMobilePlaying?[300,500]:[280,400,500],samples=isMobilePlaying?12:16;
-            for(const distance of distances)for(let n=0;n<samples;n++){const angle=n/samples*Math.PI*2,x=player.x+Math.cos(angle)*distance,z=player.z+Math.sin(angle)*distance,pressure=weatherPressureAt(x,z),stormT=weatherFogFromPressure(pressure);if(stormT<=0)continue;const bankY=Math.min(CLOUD_LEVEL-45,155),p=projectWeatherPoint(x,bankY,z,w,h);if(!p)continue;const key=`${distance}:${n}:${samples}`,target=fogBankVisibilityTarget(key,x,bankY,z),current=fogBankVisibility.get(key)??0,ease=target<current?(isMobilePlaying?.045:.06):(isMobilePlaying?.075:.10),visibility=current+(target-current)*ease;fogBankVisibility.set(key,visibility);if(visibility<.003)continue;const strength=Math.pow(stormT,1.35)*.62*visibility,radius=Math.max(55,235-distance*.18),gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(${fogColor},${strength})`);gradient.addColorStop(.62,`rgba(${fogColor},${strength*.58})`);gradient.addColorStop(1,`rgba(${fogColor},0)`);ctx.fillStyle=gradient;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);}
+            for(const distance of distances)for(let n=0;n<samples;n++){const angle=n/samples*Math.PI*2,x=player.x+Math.cos(angle)*distance,z=player.z+Math.sin(angle)*distance,pressure=weatherPressureAt(x,z),stormT=weatherFogFromPressure(pressure);if(stormT<=0)continue;const bankY=Math.min(CLOUD_LEVEL-45,155+WORLD_Y_ORIGIN),p=projectWeatherPoint(x,bankY,z,w,h);if(!p)continue;const key=`${distance}:${n}:${samples}`,target=fogBankVisibilityTarget(key,x,bankY,z),current=fogBankVisibility.get(key)??0,ease=target<current?(isMobilePlaying?.045:.06):(isMobilePlaying?.075:.10),visibility=current+(target-current)*ease;fogBankVisibility.set(key,visibility);if(visibility<.003)continue;const strength=Math.pow(stormT,1.35)*.62*visibility,radius=Math.max(55,235-distance*.18),gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(${fogColor},${strength})`);gradient.addColorStop(.62,`rgba(${fogColor},${strength*.58})`);gradient.addColorStop(1,`rgba(${fogColor},0)`);ctx.fillStyle=gradient;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);}
         }
         function weatherImpactY(x,z){const bx=Math.floor(x),bz=Math.floor(z),key=`${bx},${bz}`,now=performance.now(),cached=weatherImpactCache.get(key);if(cached&&now-cached.at<1800)return cached.y;const terrain=getHeight(bx,bz,getBiome(bx,bz))+1,loadedTop=loadedColumnTop(bx,bz),impact=loadedTop===null?terrain:Math.max(terrain,loadedTop);weatherImpactCache.set(key,{y:impact,at:now});if(weatherImpactCache.size>640)weatherImpactCache.clear();return impact;}
         function resetWeatherDrop(drop){const angle=Math.random()*Math.PI*2,distance=Math.sqrt(Math.random())*68;drop.x=player.x+Math.cos(angle)*distance;drop.z=player.z+Math.sin(angle)*distance;drop.ground=weatherImpactY(drop.x,drop.z);drop.y=Math.max(player.y+16,drop.ground+18)+Math.random()*28;drop.speed=65+Math.random()*35;}
@@ -1376,8 +1382,8 @@
         // Multiplayer networking. The Python host owns the seed, clock, shared block edits,
         // connected-player list, usernames, skins, and multiplayer chat.
         const MULTIPLAYER_PROTOCOL = 6; // browser-hosted relay protocol
-        const DEDICATED_SERVER_PROTOCOL = 13; // authenticated streamed-world servers with authoritative teleport + graceful shutdown
-        const SUPPORTED_DEDICATED_PROTOCOLS = [13];
+        const DEDICATED_SERVER_PROTOCOL = 16; // authenticated streamed-world servers with authoritative teleport + graceful shutdown
+        const SUPPORTED_DEDICATED_PROTOCOLS = [16];
         const PLAYER_SKINS = {
             steve:     { body: [0.10, 0.55, 0.78], head: [0.72, 0.49, 0.33] },
             alex:      { body: [0.25, 0.68, 0.38], head: [0.93, 0.68, 0.48] },
@@ -1409,6 +1415,7 @@
         let protocolFallbackTried = false;
         let pendingProtocolFallback = false;
         let serverAuthMode = 'signin';
+        let serverPublicSignupAllowed = true;
         let pendingServerAuth = null;
         const PAGE_PARAMS = new URLSearchParams(window.location.search);
         const DIRECT_SERVER_MODE = PAGE_PARAMS.get('directServer') === '1' ||
@@ -1748,7 +1755,7 @@
                 if (!integratedSpawnMatches(state.respawnPoint,dimension,x,y,z)) continue;
                 state.respawnPoint=null; changed=true;
                 if (state.id===localClientId) playerRespawnPoint=null;
-                integratedSend(state.id,{type:'respawn_point_update',respawnPoint:null,originalSpawn:state.originalSpawn||null,message:'Your respawn block was broken. Respawn reset to your original world spawn.'});
+                integratedSend(state.id,{type:'respawn_point_update',respawnPoint:null,originalSpawn:state.originalSpawn||null,message:'Your bed was broken. Respawn reset to your original world spawn.'});
             }
             for (const profile of Object.values(singleplayerLanProfiles)) {
                 if (profile && integratedSpawnMatches(profile.respawnPoint,dimension,x,y,z)) { profile.respawnPoint=null; changed=true; }
@@ -1895,15 +1902,16 @@
             if (type==='block_change') {
                 const dim=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0))),x=Math.floor(Number(payload.x)),y=Math.floor(Number(payload.y)),z=Math.floor(Number(payload.z));
                 const previous=Number.isFinite(Number(payload.previousType))?Number(payload.previousType):peekLoadedBlock(x,y,z,dim);
+                if(previous===BLOCKS.FURNACE&&Number(payload.blockType)!==BLOCKS.FURNACE)dropFurnaceContents(furnaceKey(dim,x,y,z),x,y,z,dim);
                 networkApplyingBlock=true; try { setBlock(x,y,z,payload.blockType,dim); } finally { networkApplyingBlock=false; }
-                if(previous===BLOCKS.RESPAWN_BLOCK&&Number(payload.blockType)!==BLOCKS.RESPAWN_BLOCK)integratedResetRespawnsForBrokenBlock(dim,x,y,z);
+                if(isBedBlock(previous)&&Number(payload.blockType)!==previous)integratedResetRespawnsForBrokenBlock(dim,x,y,z);
                 integratedBroadcast({type:'block_update',playerId:clientId,dimension:dim,x,y,z,blockType:Number(payload.blockType)||0});
                 return true;
             }
             if (type==='block_batch') {
                 const clean=[];
                 networkApplyingBlock=true;
-                try { for (const c of (Array.isArray(payload.changes)?payload.changes:[]).slice(0,256)) { const dim=Math.max(0,Math.min(2,Math.floor(Number(c.dimension)||0))),x=Math.floor(Number(c.x)),y=Math.floor(Number(c.y)),z=Math.floor(Number(c.z)),previous=peekLoadedBlock(x,y,z,dim); setBlock(x,y,z,c.blockType,dim); if(previous===BLOCKS.RESPAWN_BLOCK&&Number(c.blockType)!==BLOCKS.RESPAWN_BLOCK)integratedResetRespawnsForBrokenBlock(dim,x,y,z); clean.push({dimension:dim,x,y,z,blockType:Number(c.blockType)||0}); } }
+                try { for (const c of (Array.isArray(payload.changes)?payload.changes:[]).slice(0,256)) { const dim=Math.max(0,Math.min(2,Math.floor(Number(c.dimension)||0))),x=Math.floor(Number(c.x)),y=Math.floor(Number(c.y)),z=Math.floor(Number(c.z)),previous=peekLoadedBlock(x,y,z,dim); if(previous===BLOCKS.FURNACE&&Number(c.blockType)!==BLOCKS.FURNACE)dropFurnaceContents(furnaceKey(dim,x,y,z),x,y,z,dim); setBlock(x,y,z,c.blockType,dim); if(isBedBlock(previous)&&Number(c.blockType)!==previous)integratedResetRespawnsForBrokenBlock(dim,x,y,z); clean.push({dimension:dim,x,y,z,blockType:Number(c.blockType)||0}); } }
                 finally { networkApplyingBlock=false; }
                 if (clean.length) integratedBroadcast({type:'block_batch_update',playerId:clientId,changes:clean},clientId);
                 return true;
@@ -1935,7 +1943,8 @@
                 if (!mob || !victim || mobHosts[mob.dimension]!==clientId || !mob.type?.hostile || victim.dimension!==mob.dimension) return true;
                 if (now<(integratedMobAttackCooldowns.get(mob.id)||0)) return true;
                 const dx=victim.x-mob.x,dy=victim.y-mob.y,dz=victim.z-mob.z;
-                if (Math.hypot(dx,dy,dz)>2.2) return true;
+                const reach=mob.type.isBoss?4:2.2;
+                if(Math.hypot(dx,dz)>reach||Math.abs(dy)>(mob.type.isBoss?4.5:2.2))return true;
                 integratedMobAttackCooldowns.set(mob.id,now+1.25);
                 integratedDamagePlayer(victim,(Number(mob.type.damage)||1)*hostileDamageScale(),mob.type.name||mob.typeKey,dx,dz); return true;
             }
@@ -2006,7 +2015,7 @@
                 const p=payload.point||{}; if([p.x,p.y,p.z].every(v=>Number.isFinite(Number(v)))){actor.originalSpawn={x:Number(p.x),y:Number(p.y),z:Number(p.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(p.dimension)||0)))};singleplayerDirty=true;} return true;
             }
             if (type==='set_respawn_point') {
-                const p=normalizePlayerSpawnPoint(payload.point); if(!p||getBlock(p.x,p.y,p.z,p.dimension)!==BLOCKS.RESPAWN_BLOCK){integratedSend(clientId,{type:'error',message:'That respawn block is no longer present.'});return true;}
+                const p=normalizePlayerSpawnPoint(payload.point); if(!p||!isBedBlock(getBlock(p.x,p.y,p.z,p.dimension))){integratedSend(clientId,{type:'error',message:'That bed is no longer present.'});return true;}
                 actor.respawnPoint={...p}; if(actor.id===localClientId)playerRespawnPoint={...p}; integratedSend(clientId,{type:'respawn_point_update',respawnPoint:{...p},originalSpawn:actor.originalSpawn||null});singleplayerDirty=true;return true;
             }
             if (type==='server_command') { integratedProcessServerCommand(actor,payload.command); return true; }
@@ -2022,7 +2031,7 @@
             }
             if (type==='respawn') {
                 let pos=null,p=normalizePlayerSpawnPoint(actor.respawnPoint);
-                if(p&&getBlock(p.x,p.y,p.z,p.dimension)===BLOCKS.RESPAWN_BLOCK)pos=spawnPositionFromPoint(p);else {actor.respawnPoint=null;const o=actor.originalSpawn;if(o&&[o.x,o.y,o.z].every(v=>Number.isFinite(Number(v))))pos={x:Number(o.x),y:Number(o.y),z:Number(o.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(o.dimension)||0)))};}
+                if(p&&isBedBlock(getBlock(p.x,p.y,p.z,p.dimension)))pos=spawnPositionFromPoint(p);else {actor.respawnPoint=null;const o=actor.originalSpawn;if(o&&[o.x,o.y,o.z].every(v=>Number.isFinite(Number(v))))pos={x:Number(o.x),y:Number(o.y),z:Number(o.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(o.dimension)||0)))};}
                 if(!pos)pos={x:Number(payload.x)||actor.x,y:Number(payload.y)||actor.y,z:Number(payload.z)||actor.z,dimension:Math.max(0,Math.min(2,Number(payload.dimension)||0))};
                 actor.x=pos.x;actor.y=pos.y;actor.z=pos.z;actor.dimension=pos.dimension;actor.health=10;integratedDamageLocks.set(actor.id,now+2);integratedSend(actor.id,{type:'respawn_position',position:pos});integratedRecomputeMobHosts();return true;
             }
@@ -2340,7 +2349,7 @@
                 const authoritativeSkin=String(data.skin||(data.playerState&&data.playerState.skin)||'');
                 if(PLAYER_SKINS[authoritativeSkin])localSkin=authoritativeSkin;
                 WORLD_SEED = Number(data.seed) || 0;
-                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.8.0 - ${data.worldName}`; }
+                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.8.1 - ${data.worldName}`; }
                 worldTime = Number(data.worldTime) || 0.25;
                 if(Number.isFinite(data.weatherSeed))weatherSeed=data.weatherSeed|0;if(Number.isFinite(data.weatherPhase))weatherPhase=Number(data.weatherPhase);
                 applyGameRules(data.gameRules);
@@ -2465,7 +2474,8 @@
                     currentDimension=Math.max(0,Math.min(2,Math.floor(Number(p.dimension)||0)));
                     player.x=Number(p.x);player.y=Number(p.y);player.z=Number(p.z);
                     player.vx=0;player.vy=0;player.vz=0;player.kbX=0;player.kbZ=0;player.kbTime=0;
-                    player.onGround=false;teleportCooldown=Math.max(teleportCooldown,1.5);
+                    player.onGround=false;player.highestY=player.y;
+                    teleportFallProtected=true;teleportCooldown=Math.max(teleportCooldown,1.5);
                     portalExitRequired=true;dimensionTransitionInProgress=false;pendingPortalArrivalKey=null;
                     resetChunkStreamingForDimension(currentDimension,player.x,player.z);
                     cachedRenderHit=null;mobileMineTarget=null;
@@ -2563,6 +2573,7 @@
             if (data.type === 'item_spawned') { upsertDroppedItem(data.item); return; }
             if(data.type==='mob_projectile'){const a=data.projectile;if(a&&a.id&&!mobProjectiles.some(v=>v.id===a.id))mobProjectiles.push({...a,age:Number(a.age)||0});return;}
             if(data.type==='furnace_state'){if(data.key)furnaceStates.set(String(data.key),normalizeFurnaceState(data.state));if(openFurnaceKey===data.key)updateFurnaceUI();return;}
+            if(data.type==='furnace_removed'){if(data.key){furnaceStates.delete(String(data.key));if(openFurnaceKey===data.key)closeFurnace();lastTorchScanAt=0;}return;}
             if (data.type === 'item_removed') { droppedItems.delete(data.itemId); return; }
             if (data.type === 'give_item') {
                 addToInventory(Number(data.itemId), Number(data.count) || 1);
@@ -2622,7 +2633,7 @@
                 setServerAuthStatus(mode==='signup'?'Creating account and loading world...':'Signing in and loading world...');
                 joinTimeoutId=setTimeout(()=>{
                     if(!gameStarted&&socket&&socket.readyState===WebSocket.OPEN){
-                        lastJoinError='The server accepted the connection but did not finish authentication/world loading. Make sure the matching v1.8.0 protocol 13 server is running.';
+                        lastJoinError='The server accepted the connection but did not finish authentication/world loading. Make sure the matching v1.8.1 protocol 16 server is running.';
                         try{socket.close(4002,'Authentication/world load timeout');}catch(_){}
                     }
                 },12000);
@@ -2677,7 +2688,7 @@
             }
             return worlds;
         }
-        function snapshotFromChunkEdits(edits) {
+        function snapshotFromChunkEdits(edits, legacyHeight=WORLD_HEIGHT) {
             const blocks=[];
             if (!edits || typeof edits!=='object') return blocks;
             for (const [key,entries] of Object.entries(edits)) {
@@ -2686,8 +2697,8 @@
                 for (const pair of entries) {
                     if (!Array.isArray(pair)||pair.length<2) continue;
                     const index=Number(pair[0]),blockType=Number(pair[1]);
-                    const lz=Math.floor(index/(CHUNK_SIZE*WORLD_HEIGHT));
-                    const rem=index-lz*CHUNK_SIZE*WORLD_HEIGHT;
+                    const lz=Math.floor(index/(CHUNK_SIZE*legacyHeight));
+                    const rem=index-lz*CHUNK_SIZE*legacyHeight;
                     const y=Math.floor(rem/CHUNK_SIZE),lx=rem-y*CHUNK_SIZE;
                     blocks.push({dimension:dim,x:cx*CHUNK_SIZE+lx,y,z:cz*CHUNK_SIZE+lz,blockType});
                 }
@@ -2726,15 +2737,50 @@
             if(!data||typeof data!=='object')throw new Error('Not a MellorCraft world JSON file');
             const name=String(data.name||data.worldName||'').trim().slice(0,48); if(!name)throw new Error('World name is missing');
             let blocks=(data.blocks&&typeof data.blocks==='object'&&!Array.isArray(data.blocks))?{...data.blocks}:null;
-            if(!blocks&&data.chunkEdits&&typeof data.chunkEdits==='object'){blocks={};for(const b of snapshotFromChunkEdits(data.chunkEdits))blocks[`${b.dimension},${b.x},${b.y},${b.z}`]=Number(b.blockType)||0;}
+            const legacy=Number(data.formatVersion||0)<12;
+            if(!blocks&&data.chunkEdits&&typeof data.chunkEdits==='object'){blocks={};for(const b of snapshotFromChunkEdits(data.chunkEdits,legacy?200:WORLD_HEIGHT))blocks[`${b.dimension},${b.x},${b.y},${b.z}`]=Number(b.blockType)||0;}
             blocks=blocks||{};
+            if(legacy){
+                const migrated={};
+                for(const [key,v] of Object.entries(blocks)){
+                    const parts=key.split(',').map(Number);
+                    if(parts.length!==4||parts.some(v=>!Number.isFinite(v)))continue;
+                    if(parts[0]===0)parts[2]+=WORLD_Y_ORIGIN;
+                    migrated[parts.join(',')]=Number(v)===BLOCKS.RESPAWN_BLOCK?BLOCKS.BED:Number(v);
+                }
+                blocks=migrated;
+            }
             const profiles=(data.playerProfiles&&typeof data.playerProfiles==='object'&&!Array.isArray(data.playerProfiles))?JSON.parse(JSON.stringify(data.playerProfiles)):{};
             if(data.lanPlayerProfiles&&typeof data.lanPlayerProfiles==='object')for(const [k,v] of Object.entries(data.lanPlayerProfiles))if(v&&typeof v==='object')profiles[String(k).toLowerCase()]={...v};
             if(data.playerState&&typeof data.playerState==='object'&&!profiles.player)profiles.player={username:'Player',skin:'steve',...data.playerState};
+            const migratePosition=obj=>{
+                if(!legacy||!obj||typeof obj!=='object')return obj;
+                if(Number(obj.dimension||0)===0){
+                    if(Number.isFinite(Number(obj.y)))obj.y=Number(obj.y)+WORLD_Y_ORIGIN;
+                    if(Number.isFinite(Number(obj.floorY)))obj.floorY=Number(obj.floorY)+WORLD_Y_ORIGIN;
+                    if(Number.isFinite(Number(obj.groundY)))obj.groundY=Number(obj.groundY)+WORLD_Y_ORIGIN;
+                    if(Number.isFinite(Number(obj.highestY)))obj.highestY=Number(obj.highestY)+WORLD_Y_ORIGIN;
+                }
+                return obj;
+            };
+            if(legacy)for(const profile of Object.values(profiles))if(profile&&typeof profile==='object'){
+                migratePosition(profile);migratePosition(profile.originalSpawn);migratePosition(profile.respawnPoint);
+                if(Array.isArray(profile.inventory))for(const slot of profile.inventory){
+                    if(slot&&Number(slot.id)===BLOCKS.RESPAWN_BLOCK)slot.id=BLOCKS.BED;
+                }
+            }
+            const migratedMobs=(Array.isArray(data.mobs)?data.mobs:[]).map(m=>migratePosition({...m}));
+            const migratedItems=(Array.isArray(data.items)?data.items:[]).map(i=>migratePosition({...i}));
+            const migratedFurnaces={};
+            for(const [key,value] of Object.entries(data.furnaces||{})){
+                const p=key.split(',').map(Number);
+                if(legacy&&p.length===4&&p.every(Number.isFinite)&&p[0]===0)p[2]+=WORLD_Y_ORIGIN;
+                migratedFurnaces[p.length===4&&p.every(Number.isFinite)?p.join(','):key]=value;
+            }
             const operators=Array.isArray(data.operators)?data.operators.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
             const bannedPlayers=Array.isArray(data.bannedPlayers)?data.bannedPlayers.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
             const seed=Number(data.seed)||0;
-            return {format:'MellorCraftWorld',formatVersion:11,version:'1.8.0',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],bannedPlayers:[...new Set(bannedPlayers)],playerProfiles:profiles,mobs:Array.isArray(data.mobs)?data.mobs:[],items:Array.isArray(data.items)?data.items:[],furnaces:(data.furnaces&&typeof data.furnaces==='object')?data.furnaces:{},updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
+            return {format:'MellorCraftWorld',formatVersion:12,version:'1.8.1',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],bannedPlayers:[...new Set(bannedPlayers)],playerProfiles:profiles,mobs:migratedMobs,items:migratedItems,furnaces:migratedFurnaces,updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
         }
         function canonicalPlayerProfilesForSave() {
             const profiles=JSON.parse(JSON.stringify(singleplayerLanProfiles||{}));
@@ -2746,7 +2792,7 @@
         function saveSingleplayerWorld(force=false) {
             if (!singleplayerWorldName || !gameStarted || (singleplayerNetworkMode!=='local' && singleplayerNetworkMode!=='lan-host')) return false;
             if (!force && !singleplayerDirty) return true;
-            const data={format:'MellorCraftWorld',formatVersion:11,version:'1.8.0',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),bannedPlayers:[...singleplayerBannedPlayers].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),updatedAt:Date.now()};
+            const data={format:'MellorCraftWorld',formatVersion:12,version:'1.8.1',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),bannedPlayers:[...singleplayerBannedPlayers].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),updatedAt:Date.now()};
             try {localStorage.setItem(singleplayerStorageKey(singleplayerWorldName),JSON.stringify(data));singleplayerDirty=false;listSingleplayerWorlds();return true;}catch(error){addChatMessage(`Autosave failed: ${error.message}`,'chatError');return false;}
         }
         function launchSingleplayerWorld(rawData) {
@@ -2765,7 +2811,7 @@
             singleplayerLanProfiles={};for(const [key,value] of Object.entries(profiles)){const profileKey=String(key).toLowerCase();if(profileKey!==hostKey&&value&&typeof value==='object')singleplayerLanProfiles[profileKey]={...value};}
             pendingBlockSnapshot=snapshotFromBlocksDict(data.blocks);pendingMobSnapshot=(Array.isArray(data.mobs)?data.mobs:[]).filter(m=>!(bossDefeated&&m&&m.typeKey==='MELLOR_BOSS'));pendingItemSnapshot=Array.isArray(data.items)?data.items:[];furnaceStates.clear();for(const [k,v] of Object.entries(data.furnaces||{}))furnaceStates.set(k,normalizeFurnaceState(v));
             playerOriginalSpawn=pendingPlayerState?.originalSpawn?{...pendingPlayerState.originalSpawn}:null;playerRespawnPoint=normalizePlayerSpawnPoint(pendingPlayerState?.respawnPoint);
-            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.8.0 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
+            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.8.1 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
         }
         let gameConfirmResolver = null;
         function showGameConfirm(message, options={}) {
@@ -2809,24 +2855,41 @@
             const el=document.getElementById('serverAuthStatus');if(!el)return;el.textContent=message;el.style.color=isError?'#ff6b6b':'#aaa';
         }
         function setServerAuthMode(mode){
-            serverAuthMode=mode==='signup'?'signup':'signin';
+            serverAuthMode=(mode==='signup'&&serverPublicSignupAllowed)?'signup':'signin';
             document.getElementById('serverSignInMode')?.classList.toggle('active',serverAuthMode==='signin');
-            document.getElementById('serverSignUpMode')?.classList.toggle('active',serverAuthMode==='signup');
+            const signupBtn=document.getElementById('serverSignUpMode');
+            if(signupBtn){signupBtn.classList.toggle('active',serverAuthMode==='signup');signupBtn.disabled=!serverPublicSignupAllowed;signupBtn.style.display=serverPublicSignupAllowed?'':'none';}
             const pw=document.getElementById('serverAuthPassword');if(pw)pw.autocomplete=serverAuthMode==='signup'?'new-password':'current-password';
             const skin=document.getElementById('serverAuthSkin');if(skin){skin.style.display=serverAuthMode==='signup'?'':'none';skin.disabled=serverAuthMode!=='signup';}
             const submit=document.getElementById('serverAuthSubmit');if(submit)submit.textContent=serverAuthMode==='signup'?'Create Account & Join':'Sign In & Join';
-            setServerAuthStatus(serverAuthMode==='signup'?'Choose a username, password, and permanent skin for this server.':'Enter the password for your account. Your saved account skin will be restored automatically.');
+            setServerAuthStatus(!serverPublicSignupAllowed?'Public account creation is locked. Ask the server operator to create your account.':(serverAuthMode==='signup'?'Choose a username, password, and permanent skin for this server.':'Enter the password for your account. Your saved account skin will be restored automatically.'));
+        }
+        async function refreshServerSignupPolicy(endpoint){
+            serverPublicSignupAllowed=true;
+            setServerAuthMode(serverAuthMode);
+            try{
+                const host=String(endpoint.host||'').includes(':')?`[${endpoint.host}]`:endpoint.host;
+                const scheme=(location.protocol==='https:'?'https:':'http:');
+                const response=await fetch(`${scheme}//${host}:8000/server-policy.json`,{cache:'no-store'});
+                if(!response.ok)return;
+                const policy=await response.json();
+                serverPublicSignupAllowed=policy.publicSignupEnabled!==false;
+                if(!serverPublicSignupAllowed)serverAuthMode='signin';
+                setServerAuthMode(serverAuthMode);
+            }catch(_){/* Older servers simply leave Sign Up available; server-side auth still enforces policy. */}
         }
         function openDedicatedServerAuth(){
             let endpoint;try{endpoint=currentServerEndpoint();}catch(error){setJoinStatus(error.message||'Invalid server address.',true);return;}
             const identity=selectedSingleplayerIdentity(false)||{username:'Player',skin:'steve'};
             const user=document.getElementById('serverAuthUsername'),skin=document.getElementById('serverAuthSkin'),pw=document.getElementById('serverAuthPassword');
-            if(user&&!user.value)user.value=identity.username;if(skin)skin.value=PLAYER_SKINS[identity.skin]?identity.skin:'steve';if(pw)pw.value='';
+            const serverSafeIdentity=String(identity.username||'Player').replace(/\s+/g,'_').replace(/[^A-Za-z0-9_-]/g,'').slice(0,20)||'Player';
+            if(user&&!user.value)user.value=serverSafeIdentity;if(skin)skin.value=PLAYER_SKINS[identity.skin]?identity.skin:'steve';if(pw)pw.value='';
             const target=document.getElementById('serverAuthTarget');if(target)target.textContent=`Server: ${endpoint.host}:${endpoint.port}`;
             pendingServerAuth={endpoint,mode:serverAuthMode,username:user?.value||identity.username,skin:skin?.value||identity.skin,password:''};
             document.getElementById('serverAuthBack').style.display=DIRECT_SERVER_MODE?'none':'';
             showStartPage('serverAuthPage');
             setServerAuthMode(serverAuthMode);
+            refreshServerSignupPolicy(endpoint);
             setTimeout(()=>{try{user?.focus({preventScroll:false});}catch(_){}},0);
         }
         function submitDedicatedServerAuth(){
@@ -2834,7 +2897,7 @@
             const username=String(document.getElementById('serverAuthUsername')?.value||'').trim();
             const password=String(document.getElementById('serverAuthPassword')?.value||'');
             const skin=String(document.getElementById('serverAuthSkin')?.value||'steve');
-            if(!/^[A-Za-z0-9_ -]{1,20}$/.test(username)){setServerAuthStatus('Username must use 1-20 letters, numbers, spaces, _ or -.',true);return;}
+            if(!/^[A-Za-z0-9_-]{1,20}$/.test(username)){setServerAuthStatus('Username must use 1-20 letters, numbers, _ or -. Spaces are not allowed.',true);return;}
             if(password.length<6||password.length>128){setServerAuthStatus('Password must be 6-128 characters.',true);return;}
             pendingServerAuth={endpoint,mode:serverAuthMode,username,password,skin:serverAuthMode==='signup'&&PLAYER_SKINS[skin]?skin:'steve'};
             localUsername=username;
@@ -3138,6 +3201,10 @@
             RED_WOOL_BLOCK:68, ORANGE_WOOL_BLOCK:69, YELLOW_WOOL_BLOCK:70, BLUE_WOOL_BLOCK:71, PURPLE_WOOL_BLOCK:72,
             RED_FLOWER:73, ORANGE_FLOWER:74, YELLOW_FLOWER:75, BLUE_FLOWER:76, WHITE_FLOWER:77, PINK_FLOWER:78, PURPLE_FLOWER:79,
             LIGHT_GRAY_FLOWER:80, GRAY_FLOWER:81, BLACK_FLOWER:82, BROWN_FLOWER:83,
+            GRANITE:84, DIORITE:85, ANDESITE:86, LIMESTONE:87, SLATE:88,
+            OAK_STAIRS_N:89,OAK_STAIRS_E:90,OAK_STAIRS_S:91,OAK_STAIRS_W:92,BED:93,
+            WHITE_BED:94,BLACK_BED:95,GRAY_BED:96,LIGHT_GRAY_BED:97,BROWN_BED:98,PINK_BED:99,
+            ORANGE_BED:153,YELLOW_BED:154,BLUE_BED:155,PURPLE_BED:156,DEEPSLATE:157,
             OAK_WOOD: 4, OAK_LEAVES: 5, OAK_PLANKS: 10
         };
 
@@ -3177,9 +3244,31 @@
         let musicTimeout = null;
         let ambientMusicTimer = 0;
 
+        const STAIR_IDS=[BLOCKS.OAK_STAIRS_N,BLOCKS.OAK_STAIRS_E,BLOCKS.OAK_STAIRS_S,BLOCKS.OAK_STAIRS_W];
+        const isStairBlock = id=>STAIR_IDS.includes(id);
+        const BED_DEFINITIONS = [
+            ['Red',BLOCKS.BED,BLOCKS.RED_WOOL_BLOCK,ITEMS.RED_WOOL],
+            ['White',BLOCKS.WHITE_BED,BLOCKS.WHITE_WOOL_BLOCK,ITEMS.WHITE_WOOL],
+            ['Black',BLOCKS.BLACK_BED,BLOCKS.BLACK_WOOL_BLOCK,ITEMS.BLACK_WOOL],
+            ['Gray',BLOCKS.GRAY_BED,BLOCKS.GRAY_WOOL_BLOCK,ITEMS.GRAY_WOOL],
+            ['Light Gray',BLOCKS.LIGHT_GRAY_BED,BLOCKS.LIGHT_GRAY_WOOL_BLOCK,ITEMS.LIGHT_GRAY_WOOL],
+            ['Brown',BLOCKS.BROWN_BED,BLOCKS.BROWN_WOOL_BLOCK,ITEMS.BROWN_WOOL],
+            ['Pink',BLOCKS.PINK_BED,BLOCKS.PINK_WOOL_BLOCK,ITEMS.PINK_WOOL],
+            ['Orange',BLOCKS.ORANGE_BED,BLOCKS.ORANGE_WOOL_BLOCK,ITEMS.ORANGE_WOOL],
+            ['Yellow',BLOCKS.YELLOW_BED,BLOCKS.YELLOW_WOOL_BLOCK,ITEMS.YELLOW_WOOL],
+            ['Blue',BLOCKS.BLUE_BED,BLOCKS.BLUE_WOOL_BLOCK,ITEMS.BLUE_WOOL],
+            ['Purple',BLOCKS.PURPLE_BED,BLOCKS.PURPLE_WOOL_BLOCK,ITEMS.PURPLE_WOOL]
+        ];
+        const BED_BLOCKS = new Set(BED_DEFINITIONS.map(b=>b[1]));
+        const bedDefinition = id=>BED_DEFINITIONS.find(b=>b[1]===id);
+        const isBedBlock = id=>BED_BLOCKS.has(id) || id===BLOCKS.RESPAWN_BLOCK;
+        function randomCabinBed(x,z){return BED_DEFINITIONS[Math.floor(coordHash(x,z,9197,WORLD_SEED)*BED_DEFINITIONS.length)][1];}
+        function stairFacingFromYaw(yaw){const fx=-Math.sin(yaw),fz=-Math.cos(yaw);return Math.abs(fx)>Math.abs(fz)?(fx>0?BLOCKS.OAK_STAIRS_E:BLOCKS.OAK_STAIRS_W):(fz>0?BLOCKS.OAK_STAIRS_S:BLOCKS.OAK_STAIRS_N);}
         const SOLID_BLOCKS = new Set([
             BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD,
             BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.CACTUS,
+            BLOCKS.GRANITE, BLOCKS.DIORITE, BLOCKS.ANDESITE, BLOCKS.LIMESTONE, BLOCKS.SLATE,
+            ...STAIR_IDS,...BED_BLOCKS,BLOCKS.DEEPSLATE,
             BLOCKS.PLANKS, BLOCKS.COBBLESTONE, BLOCKS.CRAFTING_TABLE, BLOCKS.FURNACE, BLOCKS.CHEST,
             BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE,
             BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK,
@@ -3199,6 +3288,17 @@
             [BLOCKS.GRASS]: { top: [0.3, 0.8, 0.2], side: [0.3, 0.6, 0.2], bottom: [0.55, 0.35, 0.15] },
             [BLOCKS.DIRT]: { top: [0.55, 0.35, 0.15], side: [0.55, 0.35, 0.15], bottom: [0.55, 0.35, 0.15] },
             [BLOCKS.STONE]: { top: [0.5, 0.5, 0.5], side: [0.45, 0.45, 0.45], bottom: [0.4, 0.4, 0.4] },
+            [BLOCKS.OAK_STAIRS_N]:{top:[.68,.47,.27],side:[.63,.40,.22],bottom:[.57,.35,.17]},
+            [BLOCKS.OAK_STAIRS_E]:{top:[.68,.47,.27],side:[.63,.40,.22],bottom:[.57,.35,.17]},
+            [BLOCKS.OAK_STAIRS_S]:{top:[.68,.47,.27],side:[.63,.40,.22],bottom:[.57,.35,.17]},
+            [BLOCKS.OAK_STAIRS_W]:{top:[.68,.47,.27],side:[.63,.40,.22],bottom:[.57,.35,.17]},
+            [BLOCKS.BED]:{top:[.82,.17,.15],side:[.61,.12,.12],bottom:[.48,.29,.16]},
+            [BLOCKS.DEEPSLATE]:{top:[.29,.30,.34],side:[.25,.27,.30],bottom:[.20,.22,.26]},
+            [BLOCKS.GRANITE]: {top:[.68,.40,.36],side:[.64,.37,.32],bottom:[.59,.34,.30]},
+            [BLOCKS.DIORITE]: {top:[.81,.81,.78],side:[.75,.76,.74],bottom:[.71,.72,.70]},
+            [BLOCKS.ANDESITE]: {top:[.42,.44,.46],side:[.39,.41,.43],bottom:[.36,.38,.40]},
+            [BLOCKS.LIMESTONE]: {top:[.82,.77,.59],side:[.78,.72,.54],bottom:[.74,.69,.52]},
+            [BLOCKS.SLATE]: {top:[.26,.32,.42],side:[.23,.29,.39],bottom:[.20,.26,.36]},
             [BLOCKS.WOOD]: { top: [0.6, 0.5, 0.3], side: [0.5, 0.35, 0.2], bottom: [0.6, 0.5, 0.3] },
             [BLOCKS.LEAVES]: { top: [0.2, 0.6, 0.15], side: [0.15, 0.5, 0.1], bottom: [0.15, 0.5, 0.1] },
             [BLOCKS.SAND]: { top: [0.9, 0.85, 0.6], side: [0.85, 0.8, 0.55], bottom: [0.8, 0.75, 0.5] },
@@ -3270,8 +3370,13 @@
             [BLOCKS.BLACK_FLOWER]:{top:[.10,.10,.11],side:[.10,.10,.11],bottom:[.18,.46,.12]},[BLOCKS.BROWN_FLOWER]:{top:[.42,.26,.14],side:[.42,.26,.14],bottom:[.18,.46,.12]}
         };
 
+        for (const [, bedId, woolId] of BED_DEFINITIONS) {
+            if (!BLOCK_COLORS[bedId]) BLOCK_COLORS[bedId] = BLOCK_COLORS[woolId];
+        }
         const BLOCK_NAMES = {
             [BLOCKS.GRASS]: 'Grass', [BLOCKS.DIRT]: 'Dirt', [BLOCKS.STONE]: 'Stone',
+            [BLOCKS.OAK_STAIRS_N]:'Oak Stairs',[BLOCKS.OAK_STAIRS_E]:'Oak Stairs East',[BLOCKS.OAK_STAIRS_S]:'Oak Stairs South',[BLOCKS.OAK_STAIRS_W]:'Oak Stairs West',[BLOCKS.BED]:'Red Bed',[BLOCKS.DEEPSLATE]:'Deepslate',
+            [BLOCKS.GRANITE]:'Granite', [BLOCKS.DIORITE]:'Diorite', [BLOCKS.ANDESITE]:'Andesite', [BLOCKS.LIMESTONE]:'Limestone', [BLOCKS.SLATE]:'Slate',
             [BLOCKS.WOOD]: 'Oak Wood', [BLOCKS.LEAVES]: 'Oak Leaves', [BLOCKS.SAND]: 'Sand',
             [BLOCKS.SNOW]: 'Snow', [BLOCKS.CACTUS]: 'Cactus',
             [BLOCKS.PLANKS]: 'Oak Planks', [BLOCKS.COBBLESTONE]: 'Cobble',
@@ -3356,6 +3461,7 @@
             [ITEMS.MELLORITE_PICKAXE]: '#a040e0', [ITEMS.MELLORITE_AXE]: '#a040e0', [ITEMS.MELLORITE_SWORD]: '#a040e0', [ITEMS.MELLORITE_SHOVEL]: '#a040e0'
         };
 
+        for (const [name,bedId] of BED_DEFINITIONS) BLOCK_NAMES[bedId]=`${name} Bed`;
         const BLOCK_BREAK_TIME = {
             [BLOCKS.GRASS]: 0.6, [BLOCKS.DIRT]: 0.5, [BLOCKS.SAND]: 0.5,
             [BLOCKS.LEAVES]: 0.2, [BLOCKS.SNOW]: 0.5,
@@ -3363,6 +3469,8 @@
             [BLOCKS.ACACIA_WOOD]:2.0,[BLOCKS.SPRUCE_WOOD]:2.0,[BLOCKS.JUNGLE_WOOD]:2.0,[BLOCKS.ACACIA_PLANKS]:1.5,[BLOCKS.SPRUCE_PLANKS]:1.5,[BLOCKS.JUNGLE_PLANKS]:1.5,
             [BLOCKS.ACACIA_LEAVES]:0.2,[BLOCKS.SPRUCE_LEAVES]:0.2,[BLOCKS.JUNGLE_LEAVES]:0.2,[BLOCKS.OAK_SAPLING]:0.1,[BLOCKS.ACACIA_SAPLING]:0.1,[BLOCKS.SPRUCE_SAPLING]:0.1,[BLOCKS.JUNGLE_SAPLING]:0.1,
             [BLOCKS.STONE]: 4.0, [BLOCKS.COBBLESTONE]: 3.5, [BLOCKS.FURNACE]:3.5,
+            [BLOCKS.OAK_STAIRS_N]:1.5,[BLOCKS.OAK_STAIRS_E]:1.5,[BLOCKS.OAK_STAIRS_S]:1.5,[BLOCKS.OAK_STAIRS_W]:1.5,[BLOCKS.BED]:.8,[BLOCKS.DEEPSLATE]:4.0,
+            [BLOCKS.GRANITE]:4.0,[BLOCKS.DIORITE]:4.0,[BLOCKS.ANDESITE]:4.0,[BLOCKS.LIMESTONE]:3.4,[BLOCKS.SLATE]:4.5,
             [BLOCKS.COAL_ORE]: 3.0, [BLOCKS.IRON_ORE]: 4.5,
             [BLOCKS.GOLD_ORE]: 5.0, [BLOCKS.DIAMOND_ORE]: 6.0,
             [BLOCKS.COAL_BLOCK]: 4.0, [BLOCKS.IRON_BLOCK]: 5.0,
@@ -3380,6 +3488,7 @@
             [BLOCKS.RED_WOOL_BLOCK]:0.7,[BLOCKS.ORANGE_WOOL_BLOCK]:0.7,[BLOCKS.YELLOW_WOOL_BLOCK]:0.7,[BLOCKS.BLUE_WOOL_BLOCK]:0.7,[BLOCKS.PURPLE_WOOL_BLOCK]:0.7,
             [BLOCKS.RED_FLOWER]:0.05,[BLOCKS.ORANGE_FLOWER]:0.05,[BLOCKS.YELLOW_FLOWER]:0.05,[BLOCKS.BLUE_FLOWER]:0.05,[BLOCKS.WHITE_FLOWER]:0.05,[BLOCKS.PINK_FLOWER]:0.05,[BLOCKS.PURPLE_FLOWER]:0.05,[BLOCKS.LIGHT_GRAY_FLOWER]:0.05,[BLOCKS.GRAY_FLOWER]:0.05,[BLOCKS.BLACK_FLOWER]:0.05,[BLOCKS.BROWN_FLOWER]:0.05
         };
+        for (const [,id] of BED_DEFINITIONS) BLOCK_BREAK_TIME[id]=.8;
 
         const TOOL_SPEEDS = {
             [ITEMS.WOOD_PICKAXE]: { pickaxe: 2, tier: 1 },
@@ -3409,7 +3518,7 @@
         };
 
         const PICKAXE_BLOCKS = new Set([
-            BLOCKS.STONE, BLOCKS.COBBLESTONE, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE,
+            BLOCKS.STONE, BLOCKS.DEEPSLATE, BLOCKS.COBBLESTONE, BLOCKS.GRANITE, BLOCKS.DIORITE, BLOCKS.ANDESITE, BLOCKS.LIMESTONE, BLOCKS.SLATE, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE,
             BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK,
             BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.BRICK,
             BLOCKS.MELLORITE_ORE, BLOCKS.MELLORITE_BLOCK, BLOCKS.TERRACOTTA, BLOCKS.PACKED_ICE,
@@ -3417,7 +3526,7 @@
             BLOCKS.ZOMBIE_SPAWNER
         ]);
 
-        const AXE_BLOCKS = new Set([BLOCKS.WOOD,BLOCKS.PLANKS,BLOCKS.ACACIA_WOOD,BLOCKS.ACACIA_PLANKS,BLOCKS.SPRUCE_WOOD,BLOCKS.SPRUCE_PLANKS,BLOCKS.JUNGLE_WOOD,BLOCKS.JUNGLE_PLANKS]);
+        const AXE_BLOCKS = new Set([...STAIR_IDS,...BED_BLOCKS,BLOCKS.WOOD,BLOCKS.PLANKS,BLOCKS.ACACIA_WOOD,BLOCKS.ACACIA_PLANKS,BLOCKS.SPRUCE_WOOD,BLOCKS.SPRUCE_PLANKS,BLOCKS.JUNGLE_WOOD,BLOCKS.JUNGLE_PLANKS]);
         const SHOVEL_BLOCKS = new Set([BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.SAND, BLOCKS.SNOW, BLOCKS.RED_SAND]);
 
         const ORE_TIER_REQUIRED = {
@@ -3452,7 +3561,7 @@
             {key:'MOUNTAINS_LOW',name:'Low Mountains',id:BIOMES.MOUNTAINS_LOW},{key:'MOUNTAINS_MID',name:'Medium Mountains',id:BIOMES.MOUNTAINS_MID},{key:'MOUNTAINS_HIGH',name:'High Mountains',id:BIOMES.MOUNTAINS_HIGH}
         ];
         const WORLD_STRUCTURE_DEFS = [
-            {key:'mansion',name:'Mansions',chance:5},{key:'outpost',name:'Outposts',chance:10},{key:'cabin',name:'Cabins',chance:15},{key:'dungeon',name:'Dungeons',chance:20}
+            {key:'mansion',name:'Mansions',chance:5},{key:'outpost',name:'Outposts',chance:5},{key:'cabin',name:'Cabins',chance:7.5},{key:'dungeon',name:'Dungeons',chance:20}
         ];
         const DEFAULT_FLAT_LAYERS = [
             {blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:50},{blockId:BLOCKS.DIRT,count:3},{blockId:BLOCKS.GRASS,count:1}
@@ -3491,7 +3600,7 @@
             document.getElementById('addFlatLayerBtn').addEventListener('click',()=>addFlatLayerRow(BLOCKS.DIRT,1));
             document.getElementById('worldTypeSelect').addEventListener('change',updateWorldGeneratorPanels);
         }
-        function generatorBlockOptions(selected){return Object.keys(BLOCK_NAMES).map(Number).filter(id=>id>0&&id<100).sort((a,b)=>String(BLOCK_NAMES[a]).localeCompare(String(BLOCK_NAMES[b]))).map(id=>`<option value="${id}"${id===selected?' selected':''}>${BLOCK_NAMES[id]}</option>`).join('');}
+        function generatorBlockOptions(selected){return Object.keys(BLOCK_NAMES).map(Number).filter(id=>isBlock(id)&&id!==BLOCKS.RESPAWN_BLOCK).sort((a,b)=>String(BLOCK_NAMES[a]).localeCompare(String(BLOCK_NAMES[b]))).map(id=>`<option value="${id}"${id===selected?' selected':''}>${BLOCK_NAMES[id]}</option>`).join('');}
         function addFlatLayerRow(blockId=BLOCKS.DIRT,count=1){const box=document.getElementById('flatLayerControls');const row=document.createElement('div');row.className='flat-layer-row';row.innerHTML=`<select class="flat-layer-block">${generatorBlockOptions(Number(blockId))}</select><input class="flat-layer-count" type="number" min="1" max="199" value="${Math.max(1,Math.min(199,Math.round(Number(count)||1)))}" aria-label="Layer thickness"><button type="button" class="menuBtn redBtn flat-layer-remove" aria-label="Remove layer">×</button>`;row.querySelector('.flat-layer-remove').addEventListener('click',()=>{if(box.children.length>1)row.remove();});box.appendChild(row);}
         function setFlatLayerRows(layers){const box=document.getElementById('flatLayerControls');box.innerHTML='';for(const l of layers)addFlatLayerRow(l.blockId,l.count);if(!box.children.length)addFlatLayerRow(BLOCKS.GRASS,1);}
         function updateWorldGeneratorPanels(){const type=document.getElementById('worldTypeSelect').value;document.getElementById('customWorldGeneratorPanel').style.display=type==='custom'?'block':'none';document.getElementById('flatWorldGeneratorPanel').style.display=type==='flat'?'block':'none';}
@@ -3525,6 +3634,11 @@
             { category: 'Basic', name: 'Acacia Planks', result: BLOCKS.ACACIA_PLANKS, count: 4, ingredients: { [BLOCKS.ACACIA_WOOD]: 1 }, icon: '🪵' },
             { category: 'Basic', name: 'Spruce Planks', result: BLOCKS.SPRUCE_PLANKS, count: 4, ingredients: { [BLOCKS.SPRUCE_WOOD]: 1 }, icon: '🪵' },
             { category: 'Basic', name: 'Jungle Planks', result: BLOCKS.JUNGLE_PLANKS, count: 4, ingredients: { [BLOCKS.JUNGLE_WOOD]: 1 }, icon: '🪵' },
+            { category: 'Basic', name: 'Oak Stairs', result: BLOCKS.OAK_STAIRS_N, count: 4, ingredients: { [BLOCKS.PLANKS]: 6 }, icon: '🪜' },
+            ...BED_DEFINITIONS.flatMap(([name,bedId,woolBlock,woolItem])=>[
+                {category:'Basic',name:`${name} Bed`,result:bedId,count:1,ingredients:{[BLOCKS.PLANKS]:3,[woolItem]:3},icon:'🛏️'},
+                {category:'Basic',name:`${name} Bed (Blocks)`,result:bedId,count:1,ingredients:{[BLOCKS.PLANKS]:3,[woolBlock]:3},icon:'🛏️'}
+            ]),
             { category: 'Basic', name: 'Crafting Table', result: BLOCKS.CRAFTING_TABLE, count: 1, ingredients: { [BLOCKS.PLANKS]: 4 }, icon: '🧰' },
             { category: 'Dyes', name: 'Red Dye', result: ITEMS.RED_DYE, count: 1, ingredients: { [BLOCKS.RED_FLOWER]: 1 }, icon: '🔴' },
             { category: 'Dyes', name: 'Orange Dye', result: ITEMS.ORANGE_DYE, count: 1, ingredients: { [BLOCKS.ORANGE_FLOWER]: 1 }, icon: '🟠' },
@@ -3539,7 +3653,6 @@
             { category: 'Dyes', name: 'Brown Dye', result: ITEMS.BROWN_DYE, count: 1, ingredients: { [BLOCKS.BROWN_FLOWER]: 1 }, icon: '🟤' },
             { category: 'Basic', name: 'Sticks', result: ITEMS.STICK, count: 4, ingredients: { [BLOCKS.PLANKS]: 2 }, icon: '🥢' },
             { category: 'Basic', name: 'Torch', result: BLOCKS.TORCH, count: 4, ingredients: { [ITEMS.COAL]: 1, [ITEMS.STICK]: 1 }, icon: '🔦' },
-            { category: 'Basic', name: 'Respawn Block', result: BLOCKS.RESPAWN_BLOCK, count: 1, ingredients: { [ITEMS.GOLD_INGOT]: 5 }, icon: '🛏️' },
             { category: 'Basic', name: 'Furnace', result: BLOCKS.FURNACE, count: 1, ingredients: { [BLOCKS.COBBLESTONE]: 8 }, icon: '🔥' },
             { category: 'Wooden Tools', name: 'Wooden Pickaxe', result: ITEMS.WOOD_PICKAXE, count: 1, ingredients: { [BLOCKS.PLANKS]: 3, [ITEMS.STICK]: 2 }, icon: '⛏️' },
             { category: 'Wooden Tools', name: 'Wooden Axe', result: ITEMS.WOOD_AXE, count: 1, ingredients: { [BLOCKS.PLANKS]: 3, [ITEMS.STICK]: 2 }, icon: '🪓' },
@@ -3609,7 +3722,7 @@
             ZOMBIE:{name:'Zombie',model:'humanoid',width:.6,height:2,bodyColor:[.3,.5,.3],headColor:[.4,.6,.4],health:20,maxHealth:20,hostile:true,burnsInDay:true,speed:2.5,damage:1},
             SKELETON:{name:'Skeleton',model:'humanoid',width:.6,height:2,bodyColor:[.85,.85,.8],headColor:[.9,.9,.85],health:20,maxHealth:20,hostile:true,burnsInDay:true,speed:2.8,damage:1,ranged:true,behavior:{attackRange:12,aggroRange:20}},
             RED_ALT_ZOMBIE:{name:'Red Alt-Zombie',model:'humanoid',width:.6,height:2,bodyColor:[.8,.1,.1],headColor:[.9,.2,.2],health:40,maxHealth:40,hostile:true,burnsInDay:false,speed:2.6,damage:3},
-            MELLOR_BOSS:{name:'Mellor Boss',model:'boss',width:1.5,height:3.5,bodyColor:[.1,0,.2],headColor:[.2,0,.4],health:200,maxHealth:200,hostile:true,burnsInDay:false,speed:3.5,damage:5,isBoss:true}
+            MELLOR_BOSS:{name:'Mellor Boss',model:'boss',width:1.5,height:3.5,bodyColor:[.1,0,.2],headColor:[.2,0,.4],health:200,maxHealth:200,hostile:true,burnsInDay:false,speed:5.2,damage:5,isBoss:true,behavior:{aggroRange:60,attackRange:3.25,pathRadius:22,maxPathNodes:480,maxSafeDrop:3,repathInterval:.45}}
         };
         const SHEEP_KEYS=['SHEEP_WHITE','SHEEP_BLACK','SHEEP_GRAY','SHEEP_LIGHT_GRAY','SHEEP_BROWN','SHEEP_PINK','SHEEP_RED','SHEEP_ORANGE','SHEEP_YELLOW','SHEEP_BLUE','SHEEP_PURPLE'];
         const FOOD_VALUES={
@@ -3658,7 +3771,7 @@
         };
         const MOB_TYPE_KEY_BY_OBJECT = new Map(Object.entries(MOB_TYPES).map(([key, value]) => [value, key]));
 
-        // v1.8.0 shared procedural texture atlas. Every block face is authored as a
+        // v1.8.1 shared procedural texture atlas. Every block face is authored as a
         // logical 16x16 texture. Each logical texel is stored as a 2x2 physical texel
         // in the atlas for crisp nearest-neighbor sampling, while all blocks/mobs still
         // share one texture object and the existing batched geometry/draw calls.
@@ -3667,7 +3780,7 @@
         // duplicating every texel into a 32x32 tile. Appearance stays identical with
         // NEAREST sampling, while atlas memory/cache footprint drops by 75%.
         const ATLAS_GRID=16, ATLAS_TILE_SIZE=isMobilePlaying?16:32, ATLAS_SIZE=ATLAS_GRID*ATLAS_TILE_SIZE;
-        const ATLAS_BLOCK_MAX_ID=83;
+        const ATLAS_BLOCK_MAX_ID=88;
         const ATLAS_MOB_BASE=192;
         const ATLAS_FLOWER_STEM_TILE=246;
         const ATLAS_ITEM_TILE=254;
@@ -3678,7 +3791,11 @@
         const ATLAS_FACE_UVS_NEG_X=[[1,1],[1,0],[0,0],[1,1],[0,0],[0,1]];
         function blockTextureTile(block,face){
             const id=Math.floor(block);
-            if(id>=62&&id<=83)return 224+(id-62); // compact one-tile wool/flower textures
+            if(id>=62&&id<=83)return 224+(id-62); // compact wool/flower textures
+            if(isStairBlock(id))return blockTextureTile(BLOCKS.PLANKS,face);
+            if(BED_BLOCKS.has(id))return blockTextureTile(face===1?BLOCKS.PLANKS:bedDefinition(id)[2],face);
+            if(id===BLOCKS.DEEPSLATE)return 247;
+            if(id>=84&&id<=88)return 249+(id-84); // five distinct natural stone tiles in previously unused atlas cells
             const faceClass=face===0?0:(face===1?2:1);
             return Math.max(0,Math.min(ATLAS_MOB_BASE-1,id*3+faceClass));
         }
@@ -3805,6 +3922,15 @@
                     else if(face===2){if(gy<=3 || (gy===4&&((gx+seed)%3===0)))return shade(BLOCK_COLORS[BLOCKS.GRASS].top,.78+h*.34);const dirt=BLOCK_COLORS[BLOCKS.DIRT].side;f=.76+h*.30;if((gx*3+gy+seed)%19===0)f=.52;return shade(dirt,f);}
                     else {const dirt=BLOCK_COLORS[BLOCKS.DIRT].bottom;return shade(dirt,.76+h*.28);}
                 } else if(id===BLOCKS.DIRT){f=.72+h*.36;if((gx*5+gy*3+seed)%23===0)f=.48;}
+                else if(id===BLOCKS.DEEPSLATE){const grain=hash(Math.floor(gx/2),Math.floor(gy/2),seed+18);f=.60+h*.28+(grain>.82?.16:0);if((gy+seed)%5===0)f*=.83;}
+                else if(id>=BLOCKS.GRANITE&&id<=BLOCKS.SLATE){
+                    const fleck=hash(Math.floor(gx/2),Math.floor(gy/2),seed+27);
+                    if(id===BLOCKS.GRANITE)f=.60+h*.26+(fleck>.52?.24:0);
+                    else if(id===BLOCKS.DIORITE)f=(fleck>.47?.51:1.12)+h*.11;
+                    else if(id===BLOCKS.ANDESITE)f=.64+h*.25+(fleck>.70?.24:0);
+                    else if(id===BLOCKS.LIMESTONE)f=.86+h*.12+((gy+seed)%4===0?-.20:0);
+                    else f=.62+h*.12+(gy%3===0?-.29:0)+(fleck>.83?.14:0);
+                }
                 else if(id===BLOCKS.STONE||id===BLOCKS.BEDROCK||id===BLOCKS.RED_STONE||id===BLOCKS.BLUE_STONE){f=.72+h*.32;const crack=((gx+gy*2+seed)%17===0)||((gx*3-gy+seed)%29===0);if(crack)f=.42;}
                 else if(logIds.has(id)){if(face===0||face===1){const dx=gx-7.5,dy=gy-7.5,r=Math.hypot(dx,dy);f=.68+.24*((Math.floor(r*1.25+seed)%2)?1:0)+h*.10;}else{f=.66+.24*((gx+seed)%4===0)+h*.12;if((gy+seed)%11===0)f*=.76;}}
                 else if(leafIds.has(id)){f=.56+h*.54;if((gx*5+gy*7+seed)%19===0)f=.32;else if(h2>.91)f=1.08;}
@@ -3815,7 +3941,13 @@
                 else if(plankIds.has(id)||id===BLOCKS.CRAFTING_TABLE||id===BLOCKS.CHEST||id===BLOCKS.JUKEBOX){f=.78+h*.18;if(gy===0||gy===8)f=.45;const stagger=(gy<8?0:4);if((gx+stagger)%8===0)f=.54;if((gx*5+gy*3+seed)%43===0)f=.38;}
                 else if(id===BLOCKS.COBBLESTONE){const row=Math.floor(gy/4),offset=(row%2)*3;const mortar=(gy%4===0)||((gx+offset)%7===0);f=mortar?.43:(.68+h*.34);}
                 else if(id===BLOCKS.FURNACE){const mortar=(gy%4===0)||((gx+(Math.floor(gy/4)%2)*3)%7===0);f=mortar?.42:(.68+h*.20);if(face===2&&gx>=4&&gx<=11&&gy>=6&&gy<=13)f=.24;}
-                else if([BLOCKS.COAL_ORE,BLOCKS.IRON_ORE,BLOCKS.GOLD_ORE,BLOCKS.DIAMOND_ORE,BLOCKS.MELLORITE_ORE].includes(id)){const stone=[.45,.45,.46],cluster=((gx*7+gy*11+seed)%19<4)||((gx+2*gy+seed)%31===0);return shade(cluster?oreColor(id):stone,cluster?(.75+h*.45):(.74+h*.27));}
+                else if([BLOCKS.COAL_ORE,BLOCKS.IRON_ORE,BLOCKS.GOLD_ORE,BLOCKS.DIAMOND_ORE,BLOCKS.MELLORITE_ORE].includes(id)){
+                    const coal=id===BLOCKS.COAL_ORE;
+                    const cluster=coal ? (h2>.36 || (gx%4<3&&gy%4<3&&h>.26)) : ((gx*7+gy*11+seed)%19<4)||((gx+2*gy+seed)%31===0);
+                    // Coal has broad near-black fractured patches and pale chipped rims,
+                    // readily distinguishable from neutral gray stone in dark mines.
+                    return shade(cluster?oreColor(id):(coal?[.67,.68,.70]:[.45,.45,.46]),cluster?(coal?.36+h*.35:.75+h*.45):(.82+h*.26));
+                }
                 else if([BLOCKS.COAL_BLOCK,BLOCKS.IRON_BLOCK,BLOCKS.GOLD_BLOCK,BLOCKS.DIAMOND_BLOCK,BLOCKS.MELLORITE_BLOCK].includes(id)){f=.82+h*.18;if(gx===0||gy===0||gx===15||gy===15)f=.58;if(gx===2&&gy===2)f=1.08;}
                 else if(id===BLOCKS.GLASS){f=.96;if(gx===0||gy===0||gx===15||gy===15)f=.68;else if((gx===gy||gx+gy===15)&&((gx+gy+seed)%3===0))f=.84;}
                 else if(id===BLOCKS.BRICK){const offset=(Math.floor(gy/4)%2)*4;const mortar=(gy%4===0)||((gx+offset)%8===0);f=mortar?.46:(.78+h*.24);}
@@ -3849,9 +3981,10 @@
                 // Wool and flowers intentionally share one tile across all cube/custom faces.
                 // Paint those compact tiles once from their top/petal color instead of repainting
                 // the same tile with side and bottom colors afterward.
-                if(id>=62&&id<=79)paintBlock(blockTextureTile(id,0),id,0);
+                if((id>=62&&id<=83)||(id>=84&&id<=88))paintBlock(blockTextureTile(id,0),id,0);
                 else for(let face=0;face<3;face++)paintBlock(blockTextureTile(id,face),id,face);
             }
+            paintBlock(247,BLOCKS.DEEPSLATE,0);
             paintLogicalTile(ATLAS_FLOWER_STEM_TILE,(gx,gy)=>{const h=hash(gx,gy,9917),base=[.14,.44,.10];return shade(base,.72+h*.34);});
 
             const mobKinds=['pig','cow','camel','bear','sheep','goat','rabbit','fox','spider','zombie','skeleton','player','boss','generic','generic','generic'];
@@ -4323,7 +4456,7 @@
             // A furnace is a warm point light only while fuel is actively burning. Furnace
             // simulation continues whether or not its menu is open.
             for(const [key,state] of furnaceStates){
-                if(!state||Number(state.burnTime)<=0||Number(state.ingredientCount)<=0||!FURNACE_RECIPES[Number(state.ingredientId)])continue;const parts=key.split(',').map(Number);if(parts.length!==4||parts[0]!==currentDimension)continue;
+                if(!state||Number(state.burnTime)<=0||Number(state.ingredientCount)<=0||!FURNACE_RECIPES[Number(state.ingredientId)])continue;const parts=key.split(',').map(Number);if(parts.length!==4||parts[0]!==currentDimension||peekLoadedBlock(parts[1],parts[2],parts[3],currentDimension)!==BLOCKS.FURNACE)continue;
                 considerLight([parts[1]+.5,parts[2]+.62,parts[3]+.5]);
             }
             cachedNearestTorches = best.map(v=>v.p);
@@ -4331,6 +4464,41 @@
             return cachedNearestTorches.slice(0, maxCount);
         }
 
+
+        // Gather every loaded torch independently of the camera position. Terrain
+        // chooses lights per chunk, not per player; distant torches remain lit.
+        function allLoadedPointLights(){
+            const points=[];
+            for(const mesh of chunkMeshes.values())if(mesh&&mesh.dim===currentDimension&&mesh.torchLights)points.push(...mesh.torchLights);
+            for(const [key,f] of furnaceStates){
+                if(!f||Number(f.burnTime)<=0||Number(f.ingredientCount)<=0||!FURNACE_RECIPES[Number(f.ingredientId)])continue;
+                const parts=key.split(',').map(Number);
+                if(parts.length===4&&parts[0]===currentDimension&&peekLoadedBlock(parts[1],parts[2],parts[3],currentDimension)===BLOCKS.FURNACE)
+                    points.push([parts[1]+.5,parts[2]+.62,parts[3]+.5]);
+            }
+            return points;
+        }
+        function chunkPointLights(mesh,points){
+            const nearest=[];
+            for(const p of points){
+                const dx=Math.max(0,Math.abs(p[0]-mesh.centerX)-8),dz=Math.max(0,Math.abs(p[2]-mesh.centerZ)-8),d2=dx*dx+dz*dz;
+                if(d2>100)continue;
+                // Keep at most four nearby sources (the GLSL budget). Select by
+                // horizontal separation, rather than camera distance/height.
+                let i=nearest.length;
+                while(i>0&&nearest[i-1].d2>d2)i--;
+                nearest.splice(i,0,{p,d2});if(nearest.length>4)nearest.pop();
+            }
+            return nearest.map(v=>v.p);
+        }
+        function setPointLights(lights){
+            const off=[0,-1000,0];
+            gl.uniform3fv(uTorchPos0,lights[0]||off);
+            gl.uniform3fv(uTorchPos1,lights[1]||off);
+            gl.uniform3fv(uTorchPos2,lights[2]||off);
+            gl.uniform3fv(uTorchPos3,lights[3]||off);
+            gl.uniform1f(uTorchCount,lights.length);
+        }
 
         function getShaderSunState() {
             const t = ((worldTime % 1) + 1) % 1;
@@ -5048,7 +5216,7 @@
             return weightedHeight/totalWeight;
         }
         function flatWorldHeight(){const cfg=activeWorldGen();return Math.max(0,Math.min(WORLD_HEIGHT-1,(cfg.flatLayers||[]).reduce((n,l)=>n+Math.max(0,Number(l.count)||0),0)-1));}
-        function flatBlockAtY(y){let cursor=0;for(const l of (activeWorldGen().flatLayers||[])){const count=Math.max(0,Math.floor(Number(l.count)||0));if(y>=cursor&&y<cursor+count)return Number(l.blockId)||BLOCKS.AIR;cursor+=count;}return BLOCKS.AIR;}
+        function flatBlockAtY(y){y-=WORLD_Y_ORIGIN;if(y<0)return BLOCKS.AIR;let cursor=0;for(const l of (activeWorldGen().flatLayers||[])){const count=Math.max(0,Math.floor(Number(l.count)||0));if(y>=cursor&&y<cursor+count)return Number(l.blockId)||BLOCKS.AIR;cursor+=count;}return BLOCKS.AIR;}
         function getBiome(x, z) {
             const cfg=activeWorldGen();
             if(cfg.type==='flat'){const found=CUSTOM_BIOME_DEFS.find(b=>b.key===cfg.flatBiome);return found?found.id:BIOMES.PLAINS;}
@@ -5083,12 +5251,12 @@
         }
 
         function getHeight(x, z, biome = getBiome(x, z)) {
-            const cfg=activeWorldGen();if(cfg.type==='flat')return flatWorldHeight();
+            const cfg=activeWorldGen();if(cfg.type==='flat')return flatWorldHeight()+WORLD_Y_ORIGIN;
             const broad = noise.octave(x * 0.006, z * 0.006, 4, 0.52);
             const detail = noise.octave(x * 0.022 + 400, z * 0.022 - 400, 3, 0.48);
             const ridge = 1 - Math.abs(noise.octave(x * 0.0022 + 1200, z * 0.0022 + 1200, 4, 0.55));
             const { temp, moist } = getClimate(x, z);
-            if(cfg.type==='custom')return clamp(Math.floor(customTerrainHeight(x,z,broad,detail,ridge)),8,190);
+            if(cfg.type==='custom')return clamp(Math.floor(customTerrainHeight(x,z,broad,detail,ridge)),8,190)+WORLD_Y_ORIGIN;
 
             const cold = smoothstep(0.02, 0.34, -temp);
             const hot = smoothstep(0.16, 0.52, temp);
@@ -5124,7 +5292,7 @@
             if (biome === BIOMES.MOUNTAINS_LOW) naturalHeight = Math.min(naturalHeight, 130.999);
             else if (biome === BIOMES.MOUNTAINS_MID) naturalHeight = Math.min(naturalHeight, 160.999);
             else if (biome === BIOMES.MOUNTAINS_HIGH) naturalHeight = Math.min(naturalHeight, 190.999);
-            return clamp(Math.floor(naturalHeight), 8, 190);
+            return clamp(Math.floor(naturalHeight), 8, 190)+WORLD_Y_ORIGIN;
         }
 
 
@@ -5138,18 +5306,21 @@
 
         function isCave(x, y, z) {
             const cfg=activeWorldGen();if(cfg.type!=='normal'&&!cfg.features.caves)return false;
-            if (y <= 2 || y > 145) return false;
+            if (y <= 2 || y > 145+WORLD_Y_ORIGIN) return false;
+            y-=WORLD_Y_ORIGIN;
             // Slightly larger primary tunnels plus broad connector noise make
             // neighboring chambers meet more often instead of forming isolated pockets.
-            const main = caveNoise.octave3D(x * 0.020, y * 0.022, z * 0.020, 3, 0.52);
-            const chamber = caveNoise.octave3D(x * 0.0095 + 300, y * 0.0125, z * 0.0095 - 300, 2, 0.56);
-            const branch = caveNoise.octave3D(x * 0.030 - 700, y * 0.017, z * 0.030 + 700, 2, 0.5);
-            const connector = caveNoise.octave3D(x * 0.014 + 1200, y * 0.015, z * 0.014 - 1200, 2, 0.54);
+            // Broader cave volume with contiguous branches all the way down to bedrock.
+            // No extra vertical chunk layers or extra octaves are allocated.
+            const main = caveNoise.octave3D(x * 0.017, y * 0.016, z * 0.017, 3, 0.52);
+            const chamber = caveNoise.octave3D(x * 0.008 + 300, y * 0.010, z * 0.008 - 300, 2, 0.56);
+            const branch = caveNoise.octave3D(x * 0.026 - 700, y * 0.014, z * 0.026 + 700, 2, 0.5);
+            const connector = caveNoise.octave3D(x * 0.012 + 1200, y * 0.012, z * 0.012 - 1200, 2, 0.54);
             const highAltitudeBias = Math.max(0, (y - 105) / 80);
-            return main > 0.445 + highAltitudeBias * 0.07 ||
-                   (main > 0.245 && chamber > 0.585) ||
-                   (main > 0.315 && branch > 0.665) ||
-                   (main > 0.205 && chamber > 0.50 && connector > 0.585);
+            return main > 0.415 + highAltitudeBias * 0.08 ||
+                   (main > 0.225 && chamber > 0.535) ||
+                   (main > 0.290 && branch > 0.615) ||
+                   (main > 0.185 && chamber > 0.46 && connector > 0.54);
         }
 
         function getMegaCaveCell(cellX, cellZ) {
@@ -5167,19 +5338,50 @@
             const cz = cellZ * grid + 55 + megaHash(1182) * (grid - 110);
             const cave = {
                 cx, cz,
-                cy: 24 + megaHash(1183) * 25,
-                rx: 46 + megaHash(1184) * 38,
-                rz: 42 + megaHash(1185) * 42,
-                ry: 15 + megaHash(1186) * 13,
+                cy: WORLD_Y_ORIGIN + 15 + megaHash(1183) * 30,
+                rx: 56 + megaHash(1184) * 40,
+                rz: 50 + megaHash(1185) * 44,
+                ry: 20 + megaHash(1186) * 16,
                 angle: megaHash(1187) * Math.PI * 2
             };
             megaCaveCache.set(key, cave);
             return cave;
         }
 
+        function deepChamberAt(x,y,z){
+            if(y<3||y>55)return false;
+            // Memoize sparse chamber parameters per 168-block region. This routine
+            // executes for many underground voxels; no hashing inside hot volume tests.
+            const grid=168,baseX=Math.floor(x/grid),baseZ=Math.floor(z/grid);
+            const cache=deepChamberAt.cache||(deepChamberAt.cache=new Map());
+            for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+                const cx=baseX+dx,cz=baseZ+dz,key=`${WORLD_SEED}:${cx},${cz}`;
+                let cave=cache.get(key);
+                if(cave===undefined){
+                    if(coordHash(cx,cz,6012,WORLD_SEED)>.30)cave=null;
+                    else cave={
+                        x:cx*grid+32+coordHash(cx,cz,6013,WORLD_SEED)*104,
+                        z:cz*grid+32+coordHash(cx,cz,6014,WORLD_SEED)*104,
+                        rx:22+coordHash(cx,cz,6015,WORLD_SEED)*24,
+                        rz:23+coordHash(cx,cz,6016,WORLD_SEED)*22,
+                        ry:10+coordHash(cx,cz,6017,WORLD_SEED)*10,
+                        y:15+coordHash(cx,cz,6018,WORLD_SEED)*20
+                    };
+                    if(cache.size>512)cache.clear();
+                    cache.set(key,cave);
+                }
+                if(!cave||Math.abs(x-cave.x)>=cave.rx||Math.abs(z-cave.z)>=cave.rz||Math.abs(y-cave.y)>=cave.ry)continue;
+                const v=((x-cave.x)/cave.rx)**2+((y-cave.y)/cave.ry)**2+((z-cave.z)/cave.rz)**2;
+                if(v<1)return true;
+            }
+            return false;
+        }
         function isMegaCave(x, y, z) {
             const cfg=activeWorldGen();if(cfg.type!=='normal'&&!cfg.features.caves)return false;
-            if (y <= 3 || y >= 105) return false;
+            if (y <= 3 || y >= 105+WORLD_Y_ORIGIN) return false;
+            // Extend the old mega-cave system into genuine negative-Y underground
+            // using a separate sparse deterministic chamber layer. Ravines untouched.
+            if(y<WORLD_Y_ORIGIN+22 && deepChamberAt(x,y,z))return true;
             const grid = 320;
             const baseX = Math.floor(x / grid), baseZ = Math.floor(z / grid);
             for (let ox = -1; ox <= 1; ox++) {
@@ -5244,7 +5446,7 @@
                     const depth = 18 + ravineHash(cx, cz, 907) * 35;
                     const surfaceOpen = ravineHash(cx, cz, 908) < 0.62;
                     const undergroundOnly = ravineHash(cx, cz, 909) < 0.22;
-                    let top = undergroundOnly ? 30 + ravineHash(cx, cz, 910) * 28 : terrainHeight + (surfaceOpen ? 2 : -2);
+                    let top = undergroundOnly ? WORLD_Y_ORIGIN + 30 + ravineHash(cx, cz, 910) * 28 : terrainHeight + (surfaceOpen ? 2 : -2);
                     const longitudinalSlope = ravineHash(cx, cz, 911) < 0.78
                         ? (t - 0.5) * (10 + ravineHash(cx, cz, 912) * 32)
                         : 0;
@@ -5253,8 +5455,8 @@
                     let bottom = top - depth + longitudinalSlope + sideInset + floorNoise;
 
                     const candidate = {
-                        bottom: Math.max(2, Math.floor(bottom)),
-                        top: Math.max(4, Math.floor(top)),
+                        bottom: Math.max(WORLD_Y_ORIGIN+2, Math.floor(bottom)),
+                        top: Math.max(WORLD_Y_ORIGIN+4, Math.floor(top)),
                         surfaceOpen: Boolean(surfaceOpen && !undergroundOnly),
                         centerDistance: dist,
                         width: localWidth
@@ -5311,7 +5513,7 @@
                     }
                     const maximumBaseY = minimumSurface - 9;
                     if (maximumBaseY < 5) continue;
-                    const baseY = 4 + Math.floor(coordHash(cellX, cellZ, 763) * Math.max(1, maximumBaseY - 3));
+                    const baseY = WORLD_Y_ORIGIN+4 + Math.floor(coordHash(cellX, cellZ, 763) * Math.max(1, maximumBaseY-WORLD_Y_ORIGIN-3));
                     const dx = wx - cx, dz = wz - cz;
                     if (Math.abs(dx) <= 4 && Math.abs(dz) <= 4) return { type: 'DUNGEON', cx, cz, dx, dz, baseY };
                 }
@@ -5394,32 +5596,61 @@
             return Boolean(step && u === step[0] && v === step[1]);
         }
 
+        // Each iron/coal vein is wholly contained in one 8x8x8 cell and contains
+        // at most ten touching blocks. Cells have a guaranteed stone gap between
+        // their veins, preventing the 20-50+ contiguous deposits of earlier builds.
+        function compactOreVeinAt(x,y,z,seed,chance,minSize,maxSize){
+            const size=8,cx=Math.floor(x/size),cy=Math.floor(y/size),cz=Math.floor(z/size);
+            if(coordHash(cx,cy,cz,seed)>=chance)return false;
+            const ox=2+Math.floor(coordHash(cx,cy,cz,seed+1)*4);
+            const oy=2+Math.floor(coordHash(cx,cy,cz,seed+2)*4);
+            const oz=2+Math.floor(coordHash(cx,cy,cz,seed+3)*4);
+            const sx=coordHash(cx,cy,cz,seed+4)<.5?-1:1;
+            const sy=coordHash(cx,cy,cz,seed+5)<.5?-1:1;
+            const sz=coordHash(cx,cy,cz,seed+6)<.5?-1:1;
+            let dx=(x-cx*size-ox)*sx,dy=(y-cy*size-oy)*sy,dz=(z-cz*size-oz)*sz;
+            if(coordHash(cx,cy,cz,seed+7)<.5){const t=dx;dx=dz;dz=t;}
+            const offsets=[[0,0,0],[1,0,0],[0,0,1],[0,1,0],[-1,0,0],[0,0,-1],[0,-1,0],[1,1,0],[-1,0,1],[0,1,-1]];
+            const count=minSize+Math.floor(coordHash(cx,cy,cz,seed+8)*(maxSize-minSize+1));
+            for(let i=0;i<count;i++){const p=offsets[i];if(dx===p[0]&&dy===p[1]&&dz===p[2])return true;}
+            return false;
+        }
         function getOreType(x, y, z) {
-            if (y <= 1) return null;
-            const coalCenter = oreNoise.noise3D(x * 0.075, y * 0.075, z * 0.075);
-            const ironCenter = oreNoise.noise3D(x * 0.105 + 50, y * 0.105, z * 0.105 + 50);
-            const goldCenter = oreNoise.noise3D(x * 0.18 + 100, y * 0.18, z * 0.18 + 100);
-            const diamondCenter = oreNoise.noise3D(x * 0.25 + 150, y * 0.25, z * 0.25 + 150);
-            const melloriteCenter = oreNoise.noise3D(x * 0.3 + 200, y * 0.3, z * 0.3 + 200);
-
-            // Rare ores keep their existing rarity, but their maximum underground
-            // spawn heights are doubled for v1.4.1.
-            if (y < 16 && melloriteCenter > 0.97) return BLOCKS.MELLORITE_ORE;
-            if (y < 24 && diamondCenter > 0.92) return BLOCKS.DIAMOND_ORE;
-            if (y < 30 && goldCenter > 0.88 && oreNoise.noise3D(x * 0.5 + 100, y * 0.5, z * 0.5 + 100) > 0.3) return BLOCKS.GOLD_ORE;
-
-            // Keep the full-height iron/coal veins, but accept only half of their
-            // coarse vein regions. This halves abundance without turning veins into
-            // salt-and-pepper single blocks.
-            const ironDetail = oreNoise.noise3D(x * 0.31 + 50, y * 0.31, z * 0.31 + 50);
-            const coalDetail = oreNoise.noise3D(x * 0.26, y * 0.26, z * 0.26);
-            const ironRegionEnabled = coordHash(Math.floor(x / 6), Math.floor(y / 6), Math.floor(z / 6), 4101) < 0.5;
-            const coalRegionEnabled = coordHash(Math.floor(x / 6), Math.floor(y / 6), Math.floor(z / 6), 4102) < 0.5;
-            if (ironRegionEnabled && ironCenter > 0.66 && ironDetail > -0.20) return BLOCKS.IRON_ORE;
-            if (coalRegionEnabled && coalCenter > 0.54 && coalDetail > -0.25) return BLOCKS.COAL_ORE;
+            if(y<=1)return null;
+            // Preserve original above-zero ore altitudes, with additional low-Y ores.
+            const voxelY=y;
+            y=y-WORLD_Y_ORIGIN;
+            const oreDepthY=y<0?Math.max(2,16+y*.2):y;
+            const melloriteCenter=oreNoise.noise3D(x*.3+200,y*.3,z*.3+200);
+            const diamondCenter=oreNoise.noise3D(x*.25+150,y*.25,z*.25+150);
+            const goldCenter=oreNoise.noise3D(x*.18+100,y*.18,z*.18+100);
+            if(y<16&&melloriteCenter>.97)return BLOCKS.MELLORITE_ORE;
+            // Diamond occurrence fades sharply between Y=6 and Y=24; never
+            // appears above 24. Lower depths retain recognizable small clusters.
+            const diamondThreshold=.915+Math.max(0,Math.min(1,(oreDepthY-6)/18))*.082;
+            if(y<24&&diamondCenter>diamondThreshold)return BLOCKS.DIAMOND_ORE;
+            if(y<30&&goldCenter>.88&&oreNoise.noise3D(x*.5+100,y*.5,z*.5+100)>.3)return BLOCKS.GOLD_ORE;
+            if(compactOreVeinAt(x,voxelY,z,4101,.54,3,10))return BLOCKS.IRON_ORE;
+            if(compactOreVeinAt(x,voxelY,z,4102,.25,3,8))return BLOCKS.COAL_ORE;
             return null;
         }
-
+        function getStoneVariant(x,y,z){
+            // Smooth, seeded transition from stone at displayed Y=20 to almost
+            // all deepslate at Y=-32. Never changes the surface height.
+            const displayY=y-WORLD_Y_ORIGIN;
+            const deepslateChance=Math.max(0,Math.min(1,(20-displayY)/52));
+            if(coordHash(x,y,z,WORLD_SEED+8302)<deepslateChance*deepslateChance*(3-2*deepslateChance))return BLOCKS.DEEPSLATE;
+            // Broad strata with fine irregular edges, for visible material contrast
+            // without replacing all stone or turning cave walls into random pixels.
+            const n=oreNoise.noise3D(x*.052+423,y*.052-117,z*.052+731);
+            const m=oreNoise.noise3D(x*.075-511,y*.075+227,z*.075-293);
+            // Rare, separated natural pockets: all five old IDs remain readable from
+            // existing saves, but only granite and diorite generate in new terrain.
+            // The chunk generator tests getOreType FIRST, so ores take precedence.
+            if(n>.66 && m>.12)return BLOCKS.GRANITE;
+            if(n<-.66 && m<-.12)return BLOCKS.DIORITE;
+            return BLOCKS.STONE;
+        }
 
         function getSurfaceStructure(wx, wz) {
             const candidates = [],cfg=activeWorldGen(),customized=cfg.type!=='normal',allBiomes=CUSTOM_BIOME_DEFS.map(b=>b.id);
@@ -5440,8 +5671,8 @@
                 }
             }
             scan(128, generatorStructureChance('mansion',0.05), 610, 'MANSION', 15, customized?allBiomes:[BIOMES.FOREST,BIOMES.FLOWER_FOREST]);
-            scan(128, generatorStructureChance('outpost',0.10), 620, 'OUTPOST', 4, customized?allBiomes:[BIOMES.PLAINS, BIOMES.SAVANNA, BIOMES.FOREST, BIOMES.FLOWER_FOREST]);
-            scan(64, generatorStructureChance('cabin',0.15), 630, 'CABIN', 3, customized?allBiomes:[BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID, BIOMES.MOUNTAINS_HIGH, BIOMES.TAIGA]);
+            scan(128, generatorStructureChance('outpost',0.05), 620, 'OUTPOST', 4, customized?allBiomes:[BIOMES.PLAINS, BIOMES.SAVANNA, BIOMES.FOREST, BIOMES.FLOWER_FOREST]);
+            scan(64, generatorStructureChance('cabin',0.075), 630, 'CABIN', 3, customized?allBiomes:[BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID, BIOMES.MOUNTAINS_HIGH, BIOMES.TAIGA]);
             const priority = { MANSION: 0, OUTPOST: 1, CABIN: 2 };
             candidates.sort((a, b) => priority[a.type] - priority[b.type]);
             return candidates[0] || null;
@@ -5527,34 +5758,18 @@
                     }
                 }
             } else if (type === 'CABIN') {
-                for (let dx = -3; dx <= 3; dx++) {
-                    for (let dz = -3; dz <= 3; dz++) {
-                        const wx = cx + dx, wz = cz + dz;
-                        const isWall = Math.abs(dx) === 3 || Math.abs(dz) === 3;
-                        for (let dy = -3; dy < 5; dy++) {
-                            const y = cy + dy;
-                            if (dy >= 0 && dy < 5) {
-                                if (dy === 0) setBlockRaw(wx, y, wz, structureWood);
-                                else if (dy === 4) setBlockRaw(wx, y, wz, structurePlanks);
-                                else if (isWall) setBlockRaw(wx, y, wz, structurePlanks);
-                                else {
-                                    setBlockRaw(wx, y, wz, BLOCKS.AIR);
-                                    if (dy === 1 && dx === 2 && dz === 2) {
-                                        const cRand = Math.random();
-                                        if (cRand < 0.02) setBlockRaw(wx, y, wz, BLOCKS.MELLORITE_BLOCK);
-                                        else if (cRand < 0.10) setBlockRaw(wx, y, wz, BLOCKS.DIAMOND_BLOCK);
-                                        else if (cRand < 0.20) setBlockRaw(wx, y, wz, BLOCKS.GOLD_BLOCK);
-                                        else if (cRand < 0.50) setBlockRaw(wx, y, wz, BLOCKS.IRON_BLOCK);
-                                        else setBlockRaw(wx, y, wz, BLOCKS.COAL_BLOCK);
-                                    }
-                                }
-                            } else if (dy < 0) {
-                                const existing = getBlock(wx, y, wz);
-                                if (existing === BLOCKS.AIR || existing === BLOCKS.GRASS || existing === BLOCKS.DIRT || existing === BLOCKS.SNOW || existing === BLOCKS.SAND) {
-                                    setBlockRaw(wx, y, wz, BLOCKS.COBBLESTONE);
-                                }
-                            }
-                        }
+                for(let dx=-3;dx<=3;dx++)for(let dz=-3;dz<=3;dz++){
+                    const wx=cx+dx,wz=cz+dz,ax=Math.abs(dx),az=Math.abs(dz);
+                    for(let dy=-3;dy<=8;dy++){
+                        const y=cy+dy;if(y<0||y>=WORLD_HEIGHT)continue;
+                        let b=null;
+                        if(dy>=0&&dy<=8){
+                            if(dy===0)b=structurePlanks;
+                            else if(dy>=5){const roofY=5+Math.max(0,3-az);b=dy===roofY?(dy===8?structureWood:(dz<0?BLOCKS.OAK_STAIRS_S:BLOCKS.OAK_STAIRS_N)):BLOCKS.AIR;}
+                            else if(ax===3||az===3){const door=dz===-3&&dx===0&&dy<=2,window=dy===2&&((az===3&&ax===1)||(ax===3&&az===1));b=door?BLOCKS.AIR:(ax===3&&az===3?BLOCKS.COBBLESTONE:window?BLOCKS.GLASS:structurePlanks);}
+                            else {b=dy===1&&dx===2&&dz===2?randomCabinBed(cx,cz):(dy===1&&dx===-2&&dz===2?BLOCKS.CRAFTING_TABLE:BLOCKS.AIR);}
+                        }else if(dy<0){const existing=getBlock(wx,y,wz);if([BLOCKS.AIR,BLOCKS.GRASS,BLOCKS.DIRT,BLOCKS.SNOW,BLOCKS.SAND].includes(existing))b=BLOCKS.COBBLESTONE;}
+                        if(b!==null)setBlockRaw(wx,y,wz,b);
                     }
                 }
             }
@@ -5730,7 +5945,7 @@
                     const sampleX = centerX + sx, sampleZ = centerZ + sz;
                     minimumSurface = Math.min(minimumSurface, getHeight(sampleX, sampleZ, getBiome(sampleX, sampleZ)));
                 }
-                const preferredY = 10 + Math.floor(coordHash(nx, nz, 0) * 7) * 3;
+                const preferredY = WORLD_Y_ORIGIN + 10 + Math.floor(coordHash(nx, nz, 0) * 7) * 3;
                 const maximumSafeY = minimumSurface - 16; // roof remains at least 11 blocks underground
                 return maximumSafeY >= 8 ? Math.min(preferredY, maximumSafeY) : -999;
             };
@@ -5786,7 +6001,7 @@
                     if (shaftBuried) columnTop = Math.max(columnTop, shaftY + 4);
                     if (struct) {
                         if (struct.type === 'MANSION') columnTop = Math.max(columnTop, structBaseY + 11);
-                        else if (struct.type === 'CABIN') columnTop = Math.max(columnTop, structBaseY + 4);
+                        else if (struct.type === 'CABIN') columnTop = Math.max(columnTop, structBaseY + 8);
                         else if (struct.type === 'OUTPOST') columnTop = Math.max(columnTop, structBaseY + 9);
                     }
                     generatedMaxY = Math.max(generatedMaxY, Math.min(WORLD_HEIGHT - 1, columnTop + 16));
@@ -5815,7 +6030,7 @@
                         if (struct) {
                             const ly = y - structBaseY;
                             if (struct.type === 'MANSION' && ly >= -10 && ly < 12) partOfStruct = true;
-                            if (struct.type === 'CABIN' && ly >= -5 && ly < 5) partOfStruct = true;
+                            if (struct.type === 'CABIN' && ly >= -5 && ly < 9) partOfStruct = true;
                             if (struct.type === 'OUTPOST' && ly >= -7 && ly < 10) partOfStruct = true;
                         }
 
@@ -5855,12 +6070,24 @@
                                 }
                                 if (ly < 0 && y >= structBaseY - 10 && y >= height) { chunk[idx] = BLOCKS.COBBLESTONE; continue; }
                             } else if (struct.type === 'CABIN') {
-                                const wall = Math.abs(struct.dx) === 3 || Math.abs(struct.dz) === 3;
-                                if (ly >= 0 && ly < 5) {
-                                    if (ly === 0) chunk[idx] = structWood;
-                                    else if (ly === 4) chunk[idx] = structPlanks;
-                                    else if (wall && !(struct.dz === -3 && struct.dx === 0 && ly < 3)) chunk[idx] = structPlanks;
-                                    else { chunk[idx] = BLOCKS.AIR; if (ly === 1 && struct.dx === 2 && struct.dz === 2) chunk[idx] = storageLootBlock(coordHash(struct.cx, struct.cz, 0)); }
+                                const ax=Math.abs(struct.dx),az=Math.abs(struct.dz),wall=ax===3||az===3;
+                                if(ly>=0&&ly<=8){
+                                    if(ly===0)chunk[idx]=structPlanks;
+                                    else if(ly>=5){
+                                        // Stepped gable roof with planked ridge; the roof
+                                        // follows the x-axis and pitches across z.
+                                        const roofY=5+Math.max(0,3-az);
+                                        chunk[idx]=(ly===roofY)?(ly===8?structWood:(struct.dz<0?BLOCKS.OAK_STAIRS_S:BLOCKS.OAK_STAIRS_N)):BLOCKS.AIR;
+                                    }else if(wall){
+                                        const doorway=struct.dz===-3&&struct.dx===0&&ly<=2;
+                                        const window=ly===2&&((az===3&&ax===1)||(ax===3&&az===1));
+                                        const pillar=ax===3&&az===3;
+                                        chunk[idx]=doorway?BLOCKS.AIR:(pillar?BLOCKS.COBBLESTONE:(window?BLOCKS.GLASS:structPlanks));
+                                    }else{
+                                        chunk[idx]=BLOCKS.AIR;
+                                        if(ly===1&&struct.dx===2&&struct.dz===2)chunk[idx]=randomCabinBed(struct.cx,struct.cz);
+                                        if(ly===1&&struct.dx===-2&&struct.dz===2)chunk[idx]=BLOCKS.CRAFTING_TABLE;
+                                    }
                                     continue;
                                 }
                                 if (ly < 0 && y >= structBaseY - 5 && y >= height) { chunk[idx] = BLOCKS.COBBLESTONE; continue; }
@@ -5882,7 +6109,7 @@
                         }
 
                         if(activeWorldGen().type==='flat'){chunk[idx]=flatBlockAtY(y);}
-                        else if (y < height - 4) chunk[idx] = getOreType(wx, y, wz) || BLOCKS.STONE;
+                        else if (y < height - 4) chunk[idx] = getOreType(wx, y, wz) || getStoneVariant(wx,y,wz);
                         else if (y < height) {
                             if ([BIOMES.DESERT_CACTUS, BIOMES.DESERT_BARREN].includes(biome)) chunk[idx] = BLOCKS.SAND;
                             else if (biome === BIOMES.BADLANDS) chunk[idx] = y % 5 === 0 ? BLOCKS.TERRACOTTA : BLOCKS.RED_SAND;
@@ -6045,13 +6272,15 @@
             const workerFunctions = [
                 SimplexNoise, clamp, smoothstep, mix, activeWorldGen, getClimate, getContinentValue, getBaseBiome,
                 coordHash, getMountainRegion, getMountainInfo, customBiomeForCell, getCustomBiomeInfo, biomeTerrainHeight, customTerrainHeight, flatWorldHeight, flatBlockAtY, getBiome, getAltBiome, getHeight,
-                posRand, posRand3D, isCave, getMegaCaveCell, isMegaCave, getRavineRange, isRavine,
+                posRand, posRand3D, isCave, getMegaCaveCell, deepChamberAt, isMegaCave, getRavineRange, isRavine,
                 storageLootBlock, oreLootBlock, generatorStructureChance, woodFamilyForBiome, getDungeonStructure, getSurfaceStructure,
-                getAltMazeAt, getAltStructure, stairStepAt, getOreType, getPlainsTreeSpot,
+                getAltMazeAt, getAltStructure, stairStepAt, compactOreVeinAt, getOreType, getStoneVariant, randomCabinBed, getPlainsTreeSpot,
                 isWaterBlock, isLavaBlock, isLiquidBlock, generateChunk
             ];
             const workerSource = [
                 `const BLOCKS=${JSON.stringify(BLOCKS)};`,
+                `const BED_DEFINITIONS=${JSON.stringify(BED_DEFINITIONS)};`,
+                `const WORLD_Y_ORIGIN=${WORLD_Y_ORIGIN};`,
                 `const BIOMES=${JSON.stringify(BIOMES)};`,
                 `const ALT_BIOMES=${JSON.stringify(ALT_BIOMES)};`,
                 `const CUSTOM_BIOME_DEFS=${JSON.stringify(CUSTOM_BIOME_DEFS)};`,
@@ -6200,17 +6429,27 @@
             }
         }
         function updateDungeonSpawners(dt) {
-            if (currentDimension !== 0 || !isMobHostForDimension(0)) return;
-            dungeonSpawnTimer += dt;
-            if (dungeonSpawnTimer < 4.0) return;
-            dungeonSpawnTimer = 0;
-            for (const key of [...knownDungeonSpawners]) {
-                const [dimS, xS, yS, zS] = key.split(':');
-                const x=Number(xS), y=Number(yS), z=Number(zS);
-                if (getBlock(x,y,z,Number(dimS)) !== BLOCKS.ZOMBIE_SPAWNER) { knownDungeonSpawners.delete(key); continue; }
-                if (Math.hypot(player.x-(x+0.5), player.z-(z+0.5)) > 28) continue;
-                const nearby = mobs.filter(m => m.dimension === 0 && m.typeKey === 'ZOMBIE' && Math.hypot(m.x-x,m.z-z) < 14).length;
-                if (nearby < 3 && getBlock(x, y + 1, z, 0) === BLOCKS.AIR) spawnSharedMob('ZOMBIE', x + 0.5, y + 1, z + 0.5, 0);
+            if(currentDimension!==0||!isMobHostForDimension(0)||!gameRules.doMobSpawning||!hostileSpawningAllowed())return;
+            dungeonSpawnTimer+=dt;
+            if(dungeonSpawnTimer<3.5)return;
+            dungeonSpawnTimer=0;
+            const anchors=mobSpawnAnchors(0);
+            for(const key of [...knownDungeonSpawners]){
+                const [dimS,xS,yS,zS]=key.split(':');
+                const dim=Number(dimS),x=Number(xS),y=Number(yS),z=Number(zS);
+                // Do not load remote terrain just to check an inactive spawner.
+                const block=peekLoadedBlock(x,y,z,dim);
+                if(block===null)continue;
+                if(block!==BLOCKS.ZOMBIE_SPAWNER){knownDungeonSpawners.delete(key);continue;}
+                if(!anchors.some(a=>Math.hypot(a.x-x-.5,a.z-z-.5)<27))continue;
+                if(mobs.filter(m=>m.dimension===0).length>=MOB_CAP)break;
+                const nearby=mobs.filter(m=>m.dimension===0&&m.typeKey==='ZOMBIE'&&Math.hypot(m.x-x,m.y-y,m.z-z)<12).length;
+                if(nearby>=5)continue;
+                const candidates=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[2,0],[0,2]];
+                const offset=candidates[nearby===0?0:Math.floor(Math.random()*candidates.length)];
+                const sx=x+offset[0],sz=z+offset[1];
+                if(peekLoadedBlock(sx,y+1,sz,0)===BLOCKS.AIR&&peekLoadedBlock(sx,y+2,sz,0)===BLOCKS.AIR&&SOLID_BLOCKS.has(peekLoadedBlock(sx,y,sz,0)))
+                    spawnSharedMob('ZOMBIE',sx+.5,y+1,sz+.5,0);
             }
         }
 
@@ -6301,6 +6540,20 @@
             const previousType = chunk[index];
             if (previousType === type) return;
             chunk[index] = type;
+            if (previousType===BLOCKS.ZOMBIE_SPAWNER || type===BLOCKS.ZOMBIE_SPAWNER){
+                const spKey=`${dim}:${x}:${y}:${z}`;
+                if(type===BLOCKS.ZOMBIE_SPAWNER)knownDungeonSpawners.add(spKey);
+                else knownDungeonSpawners.delete(spKey);
+            }
+            // Removing a furnace must also extinguish it and discard its state.
+            // The mining path (or multiplayer host) captures the contents first.
+            if(previousType===BLOCKS.FURNACE && type!==BLOCKS.FURNACE){
+                if(!networkApplyingBlock&&(singleplayerNetworkMode==='local'||singleplayerNetworkMode==='lan-host'))
+                    dropFurnaceContents(furnaceKey(dim,x,y,z),x,y,z,dim);
+                furnaceStates.delete(furnaceKey(dim,x,y,z));
+                if(openFurnaceKey===furnaceKey(dim,x,y,z))closeFurnace();
+                lastTorchScanAt=0;
+            }
             trackSaplingBlock(dim,x,y,z,type);
             if (type !== BLOCKS.AIR) chunk.generatedMaxY = Math.max(Number(chunk.generatedMaxY) || 1, y);
             recordSharedBlockEdit(dim, x, y, z, type);
@@ -6400,7 +6653,7 @@
                         if (!colors) continue;
                         const wx = worldX0 + x, wz = worldZ0 + z;
 
-                        if (block !== BLOCKS.GLASS && block !== BLOCKS.TORCH && block !== BLOCKS.ACTIVE_BOSS_PORTAL && !isPlantBlock(block)) {
+                        if (block !== BLOCKS.GLASS && block !== BLOCKS.TORCH && !isBedBlock(block) && block !== BLOCKS.ACTIVE_BOSS_PORTAL && !isPlantBlock(block)) {
                             const si = x + z * CHUNK_SIZE;
                             if (y + 1 > shadowTop[si]) shadowTop[si] = Math.min(255, y + 1);
                         }
@@ -6423,6 +6676,24 @@
                             continue;
                         }
 
+                        if (isStairBlock(block)) {
+                            // Directional stair: half-height slab plus a half-block riser.
+                            // The riser is farthest from the placing player's viewpoint.
+                            emitCuboid(pos,col,nor,uv,wx,y,wz,wx+1,y+.5,wz+1,colors,BLOCKS.PLANKS);
+                            const bx0=block===BLOCKS.OAK_STAIRS_E?.5:0;
+                            const bx1=block===BLOCKS.OAK_STAIRS_W?.5:1;
+                            const bz0=block===BLOCKS.OAK_STAIRS_S?.5:0;
+                            const bz1=block===BLOCKS.OAK_STAIRS_N?.5:1;
+                            emitCuboid(pos,col,nor,uv,wx+bx0,y+.5,wz+bz0,wx+bx1,y+1,wz+bz1,colors,BLOCKS.PLANKS);
+                            continue;
+                        }
+                        if(isBedBlock(block)){
+                            emitCuboid(pos,col,nor,uv,wx+.06,y+.02,wz+.06,wx+.94,y+.27,wz+.94,BLOCK_COLORS[BLOCKS.PLANKS],BLOCKS.PLANKS);
+                            const fabric=bedDefinition(block)?.[2]||BLOCKS.RED_WOOL_BLOCK;
+                            emitCuboid(pos,col,nor,uv,wx+.05,y+.28,wz+.06,wx+.95,y+.55,wz+.94,colors,fabric);
+                            emitCuboid(pos,col,nor,uv,wx+.09,y+.56,wz+.09,wx+.91,y+.62,wz+.34,BLOCK_COLORS[BLOCKS.WHITE_WOOL_BLOCK],BLOCKS.WHITE_WOOL_BLOCK);
+                            continue;
+                        }
                         if (block === BLOCKS.TORCH) {
                             const stickColors = {top:[0.72,0.47,0.18], side:[0.47,0.27,0.09], bottom:[0.30,0.16,0.05]};
                             const flameColors = {top:[1.0,0.98,0.62], side:[1.0,0.64,0.16], bottom:[0.92,0.38,0.08]};
@@ -6452,7 +6723,7 @@
                                 // A torch occupies only a narrow custom cuboid. Keep the
                                 // supporting wall/floor face behind it instead of cutting
                                 // a full-block hole that exposes the terrain interior.
-                                neighbor === BLOCKS.TORCH || isPlantBlock(neighbor) || neighbor === BLOCKS.GLASS || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL;
+                                neighbor === BLOCKS.TORCH || isBedBlock(neighbor) || isStairBlock(neighbor) || isPlantBlock(neighbor) || neighbor === BLOCKS.GLASS || neighbor === BLOCKS.ACTIVE_BOSS_PORTAL;
                             if (!visible) continue;
                             const faceColor = f === 0 ? colors.top : f === 1 ? colors.bottom : colors.side;
                             pushFace(pos, col, nor, uv, faces[f], faceColor, norms[f], wx, y, wz, blockTextureTile(block,f),1,1,1,f);
@@ -6591,7 +6862,7 @@
         }
 
         function getItemName(id) { return BLOCK_NAMES[id] || ITEM_NAMES[id] || 'Unknown'; }
-        function isBlock(id) { return id > 0 && id < 100; }
+        function isBlock(id) { return (id > 0 && id < 100) || BED_BLOCKS.has(id) || id===BLOCKS.DEEPSLATE; }
 
         function playMusicTrack(trackIndex, isLoop = false) {
             if (trackIndex < 0 || trackIndex >= MUSIC_TRACK_FILES.length) return;
@@ -6636,13 +6907,21 @@
             const x=Math.floor(Number(value.x)), y=Math.floor(Number(value.y)), z=Math.floor(Number(value.z));
             const dimension=Math.max(0,Math.min(2,Math.floor(Number(value.dimension)||0)));
             if (![x,y,z].every(Number.isFinite) || y < 0 || y >= getDimensionHeight(dimension)) return null;
-            return {x,y,z,dimension};
+            return {x,y,z,dimension,bedId:Number(value.bedId)||0};
         }
 
         function spawnPositionFromPoint(point) {
             const p=normalizePlayerSpawnPoint(point);
             if (!p) return null;
-            return {x:p.x+0.5,y:p.y+1.01,z:p.z+0.5,dimension:p.dimension};
+            for(const [dx,dz] of [[0,1],[1,0],[-1,0],[0,-1]]){
+                const sx=p.x+dx,sz=p.z+dz;
+                if(getBlock(sx,p.y,sz,p.dimension)===BLOCKS.AIR &&
+                    getBlock(sx,p.y+1,sz,p.dimension)===BLOCKS.AIR &&
+                    SOLID_BLOCKS.has(getBlock(sx,p.y-1,sz,p.dimension)))
+                    return {x:sx+.5,y:p.y,z:sz+.5,dimension:p.dimension};
+            }
+            // If a cabin is cramped, standing atop the bed is safer than inside walls.
+            return {x:p.x+.5,y:p.y+1.01,z:p.z+.5,dimension:p.dimension};
         }
 
         function rememberOriginalSpawnFromCurrent(force=false) {
@@ -6653,7 +6932,7 @@
 
         function activeRespawnSpawnPosition() {
             const point=normalizePlayerSpawnPoint(playerRespawnPoint);
-            if (point && getBlock(point.x,point.y,point.z,point.dimension) === BLOCKS.RESPAWN_BLOCK) return spawnPositionFromPoint(point);
+            if (point && isBedBlock(getBlock(point.x,point.y,point.z,point.dimension))) return spawnPositionFromPoint(point);
             if (point) playerRespawnPoint=null;
             if (playerOriginalSpawn && typeof playerOriginalSpawn==='object') {
                 const o=playerOriginalSpawn;
@@ -6681,15 +6960,10 @@
         }
 
         function activateRespawnBlock(hit) {
-            if (!hit || getBlock(hit.x,hit.y,hit.z,currentDimension)!==BLOCKS.RESPAWN_BLOCK) return false;
+            if (!hit || !isBedBlock(getBlock(hit.x,hit.y,hit.z,currentDimension))) return false;
             const point={x:Math.floor(hit.x),y:Math.floor(hit.y),z:Math.floor(hit.z),dimension:currentDimension};
-            // The player stands in the two blocks above the respawn block. Clear both
-            // through the normal shared-block path so every connected client agrees.
-            for (const y of [point.y+1,point.y+2]) {
-                if (y < getDimensionHeight(point.dimension) && getBlock(point.x,y,point.z,point.dimension)!==BLOCKS.AIR) {
-                    setBlock(point.x,y,point.z,BLOCKS.AIR,point.dimension);
-                }
-            }
+            // Setting a spawn never mines the roof or adjacent walls.
+            point.bedId=getBlock(point.x,point.y,point.z,currentDimension);
             playerRespawnPoint=point;
             sendNetwork({type:'set_respawn_point',point});
             addChatMessage(`Respawn point set at ${point.x}, ${point.y+1}, ${point.z}.`,'chatSuccess');
@@ -6860,7 +7134,7 @@
                     pathfinding: custom.pathfinding !== false,
                     pathRadius: Math.max(4, Math.min(24, Number(custom.pathRadius ?? (this.type.isBoss ? 18 : 12)))),
                     maxPathNodes: Math.max(40, Math.min(700, Number(custom.maxPathNodes ?? (this.type.isBoss ? 420 : 260)))),
-                    maxSafeDrop: Math.max(0, Math.min(6, Number(custom.maxSafeDrop ?? 2))),
+                    maxSafeDrop: Math.max(0, Math.min(6, Number(custom.maxSafeDrop ?? 3))),
                     avoidLava: custom.avoidLava !== false,
                     avoidCactus: custom.avoidCactus !== false,
                     repathInterval: Math.max(0.25, Number(custom.repathInterval ?? 0.8)),
@@ -6896,7 +7170,9 @@
                     if (this.dangerousBlock(id, behavior)) return false;
                     if (SOLID_BLOCKS.has(id)) supported++;
                 }
-                return supported >= 3;
+                // Two supporting corners are enough when approaching descending
+                // terrain; the ahead-footprint probe still prevents unsafe drops.
+                return supported >= 2;
             }
 
             canStandAt(x, y, z, behavior) {
@@ -6927,10 +7203,13 @@
                 // At a ledge the mob's body reaches the next block before its center has
                 // enough support there. Probe one body-radius ahead so a valid one-block
                 // ascent or configured safe descent can be committed instead of stalling.
-                const lookAhead = Math.max(0.58, this.type.width * 0.55 + 0.24);
+                const lookAhead = Math.max(0.78, this.type.width * 0.60 + 0.38);
                 const aheadX = x + (dirX / length) * lookAhead;
                 const aheadZ = z + (dirZ / length) * lookAhead;
-                const ahead = this.findStandYAt(aheadX, aheadZ, fromY, behavior);
+                let ahead = this.findStandYAt(aheadX, aheadZ, fromY, behavior);
+                // Ledges can have a full-block gap between the mob's current
+                // feet and the lower terrace. Probe another half stride.
+                if(ahead === null){const extX=aheadX+(dirX/length)*.48,extZ=aheadZ+(dirZ/length)*.48;ahead=this.findStandYAt(extX,extZ,fromY,behavior);}
                 if (ahead === null) return null;
                 const rise = ahead - fromY, drop = fromY - ahead;
                 if (rise > 1.05 || drop > behavior.maxSafeDrop + 0.05) return null;
@@ -7144,7 +7423,7 @@
                             if(target.distance>behavior.attackRange){goal={x:target.x,y:target.y,z:target.z};speed=this.type.speed;chasingTarget=target;}
                             else {this.vx=0;this.vz=0;this.clearPath();if(this.attackCooldown<=0&&Math.abs(target.y-this.y)<6){spawnSkeletonArrow(this,target);this.attackCooldown=1.6;}}
                         } else if(target.distance>behavior.attackRange){goal={x:target.x,y:target.y,z:target.z};speed=this.type.speed;chasingTarget=target;}
-                        else {this.vx=0;this.vz=0;this.clearPath();if(this.attackCooldown<=0&&Math.abs(target.y-this.y)<2.5){sendNetwork({type:'mob_attack_player',mobId:this.id,targetId:target.id});this.attackCooldown=1.25;}}
+                        else {this.vx=0;this.vz=0;this.clearPath();if(this.attackCooldown<=0&&Math.abs(target.y-this.y)<(this.type.isBoss?4.5:2.5)){sendNetwork({type:'mob_attack_player',mobId:this.id,targetId:target.id});this.attackCooldown=1.25;}}
                         targetHeadRotation=Math.atan2(-target.dx,target.dz);
                     } else {
                         this.chaseTargetId = null;
@@ -7592,11 +7871,27 @@
         function randomSheepKey(){const total=SHEEP_VARIANT_WEIGHTS.reduce((n,e)=>n+e[1],0);let r=Math.random()*total;for(const [key,weight] of SHEEP_VARIANT_WEIGHTS){r-=weight;if(r<0)return key;}return 'SHEEP_WHITE';}
         function passiveMobForBiome(biome){const r=Math.random(),grassy=[BIOMES.PLAINS,BIOMES.SAVANNA,BIOMES.FOREST,BIOMES.FLOWER_FOREST],desert=[BIOMES.DESERT_CACTUS,BIOMES.DESERT_BARREN,BIOMES.BADLANDS],snowMountains=[BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH];if(desert.includes(biome))return r<.55?'CAMEL':'RABBIT';if(biome===BIOMES.JUNGLE)return r<.58?'FOX':'BEAR';if(biome===BIOMES.TAIGA)return r<.48?'FOX':r<.78?'GOAT':'BEAR';if(biome===BIOMES.STONY_PEAKS||snowMountains.includes(biome))return 'GOAT';if(grassy.includes(biome)){if((biome===BIOMES.FOREST||biome===BIOMES.FLOWER_FOREST)&&r>.94)return 'BEAR';const q=(biome===BIOMES.FOREST||biome===BIOMES.FLOWER_FOREST)?r/.94:r;return q<.34?'PIG':q<.67?'COW':randomSheepKey();}return null;}
         function hostileMobKey(){const r=Math.random();return r<.38?'ZOMBIE':r<.72?'SKELETON':'SPIDER';}
-        function findUndergroundSpawnY(x,z,surface){const bx=Math.floor(x),bz=Math.floor(z),top=Math.max(6,Math.floor(surface)-5);for(let tries=0;tries<18;tries++){const y=4+Math.floor(Math.random()*Math.max(2,top-4));if(SOLID_BLOCKS.has(getBlock(bx,y-1,bz,0))&&getBlock(bx,y,bz,0)===BLOCKS.AIR&&getBlock(bx,y+1,bz,0)===BLOCKS.AIR&&!weatherColumnHasSky(x,z,y+1.5))return y;}return null;}
-        function chooseNaturalSpawn(x,z){const biome=getBiome(Math.floor(x),Math.floor(z)),surface=getHeight(Math.floor(x),Math.floor(z),biome);if(isRavine(x,surface-1,z))return null;const night=isNight();if(hostileSpawningAllowed()&&(night?Math.random()<.62:Math.random()<.72)){const underground=!night||Math.random()<.35;const y=underground?findUndergroundSpawnY(x,z,surface):surface+1;if(y!==null)return {typeKey:hostileMobKey(),y};}const passive=passiveMobForBiome(biome);return passive?{typeKey:passive,y:surface+1}:null;}
+        function findUndergroundSpawnY(x,z,surface){const bx=Math.floor(x),bz=Math.floor(z),top=Math.max(6,Math.floor(surface)-5);for(let tries=0;tries<36;tries++){const y=4+Math.floor(Math.random()*Math.max(2,top-4));if(SOLID_BLOCKS.has(peekLoadedBlock(bx,y-1,bz,0))&&peekLoadedBlock(bx,y,bz,0)===BLOCKS.AIR&&peekLoadedBlock(bx,y+1,bz,0)===BLOCKS.AIR&&!weatherColumnHasSky(x,z,y+1.5))return y;}return null;}
+        function chooseNaturalSpawn(x,z){const biome=getBiome(Math.floor(x),Math.floor(z)),surface=getHeight(Math.floor(x),Math.floor(z),biome);if(isRavine(x,surface-1,z))return null;const night=isNight();if(hostileSpawningAllowed()&&(night?Math.random()<.86:Math.random()<.92)){const underground=!night||Math.random()<.67;const y=underground?findUndergroundSpawnY(x,z,surface):surface+1;if(y!==null)return {typeKey:hostileMobKey(),y};}const passive=passiveMobForBiome(biome);return passive?{typeKey:passive,y:surface+1}:null;}
 
         
-        function mobSpawnAnchors(dimension){const out=[];if(currentDimension===dimension&&player.health>0)out.push({x:player.x,z:player.z,renderDistance:RENDER_DISTANCE});for(const rp of remotePlayers.values())if(rp.dimension===dimension&&rp.health>0&&rp.gamemode!=='spectator')out.push({x:rp.x,z:rp.z,renderDistance:rp.renderDistance||6});return out;}
+        function mobSpawnAnchors(dimension){const out=[];if(currentDimension===dimension&&player.health>0)out.push({x:player.x,y:player.y,z:player.z,renderDistance:RENDER_DISTANCE});for(const rp of remotePlayers.values())if(rp.dimension===dimension&&rp.health>0&&rp.gamemode!=='spectator')out.push({x:rp.x,y:rp.y,z:rp.z,renderDistance:rp.renderDistance||6});return out;}
+        function chooseNearbyCaveSpawn(){
+            if(currentDimension!==0||!hostileSpawningAllowed())return null;
+            const underground=mobSpawnAnchors(0).filter(a=>a.y<getHeight(Math.floor(a.x),Math.floor(a.z),getBiome(Math.floor(a.x),Math.floor(a.z)))-6);
+            if(!underground.length)return null;
+            for(let i=0;i<32;i++){
+                const a=underground[Math.floor(Math.random()*underground.length)];
+                const angle=Math.random()*Math.PI*2,d=14+Math.random()*25;
+                const x=Math.floor(a.x+Math.cos(angle)*d),z=Math.floor(a.z+Math.sin(angle)*d);
+                const y=Math.max(4,Math.floor(a.y)+(Math.floor(Math.random()*23)-11));
+                if(peekLoadedBlock(x,y-1,z,0)===null)continue;
+                if(!SOLID_BLOCKS.has(peekLoadedBlock(x,y-1,z,0))||peekLoadedBlock(x,y,z,0)!==BLOCKS.AIR||peekLoadedBlock(x,y+1,z,0)!==BLOCKS.AIR)continue;
+                if(weatherColumnHasSky(x,z,y+1.4)||mobs.some(m=>m.dimension===0&&Math.hypot(m.x-x,m.y-y,m.z-z)<7))continue;
+                return {x:x+.5,y,z:z+.5};
+            }
+            return null;
+        }
         function chooseDistributedMobSpawnPoint(dimension){const anchors=mobSpawnAnchors(dimension);if(!anchors.length)return null;for(let tries=0;tries<18;tries++){const a=anchors[Math.floor(Math.random()*anchors.length)],angle=Math.random()*Math.PI*2,d=CHUNK_SIZE*(2+Math.sqrt(Math.random())*4),x=a.x+Math.cos(angle)*d,z=a.z+Math.sin(angle)*d,cx=Math.floor(x/CHUNK_SIZE),cz=Math.floor(z/CHUNK_SIZE);let sameChunk=0,near=0;for(const m of mobs){if(m.dimension!==dimension||m.type.isBoss)continue;if(Math.floor(m.x/CHUNK_SIZE)===cx&&Math.floor(m.z/CHUNK_SIZE)===cz)sameChunk++;if(Math.hypot(m.x-x,m.z-z)<8)near++;}if(sameChunk<2&&near===0)return{x,z};}return null;}
 
         function spawnInitialMobs(dimension=currentDimension){
@@ -7720,7 +8015,7 @@
                 }
             };
             touchAction('btnJump',()=>{keys.Space=true;},()=>{keys.Space=false;});
-            touchAction('btnSprint',()=>{if(player.hunger<=6)return;mobileSprintHeld=true;document.getElementById('btnSprint').classList.add('sprint-active');},()=>{mobileSprintHeld=false;document.getElementById('btnSprint').classList.remove('sprint-active');});
+            touchAction('btnSprint',()=>{if(player.gamemode==='survival'&&player.hunger<=6)return;mobileSprintHeld=true;document.getElementById('btnSprint').classList.add('sprint-active');},()=>{mobileSprintHeld=false;document.getElementById('btnSprint').classList.remove('sprint-active');});
             touchAction('btnFlyDown', () => { keys.ShiftLeft = true; }, () => { keys.ShiftLeft = false; });
             touchAction('btnCrouch', pressCrouchControl, releaseCrouchControl);
             touchAction('btnMine', () => {
@@ -7778,7 +8073,7 @@
             if(craftingOpen&&(e.code==='KeyE'||e.key==='Escape')){e.preventDefault();toggleCrafting();return;}
             if(inventoryOpen&&(e.code==='KeyE'||e.key==='Escape')){e.preventDefault();toggleInventory();return;}
             
-            if(e.code==='KeyW'&&!e.repeat){const now=performance.now();if(now-lastForwardTap<320&&player.hunger>6)player.sprinting=true;lastForwardTap=now;}
+            if(e.code==='KeyW'&&!e.repeat){const now=performance.now();if(now-lastForwardTap<320&&(player.gamemode!=='survival'||player.hunger>6))player.sprinting=true;lastForwardTap=now;}
             keys[e.code] = true;
             if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight')) {
                 if (crouchControlMode === 'toggle' && !e.repeat && !settingsOpen) {
@@ -8041,7 +8336,7 @@
 
             const hit = raycast(false); if (!hit) return;
             const target = getBlock(hit.x,hit.y,hit.z);
-            if(target===BLOCKS.RESPAWN_BLOCK){activateRespawnBlock(hit);return;}
+            if(isBedBlock(target)){activateRespawnBlock(hit);return;}
             if(target===BLOCKS.CRAFTING_TABLE){toggleCrafting(true);return;}
             if(target===BLOCKS.FURNACE){openFurnace(hit.x,hit.y,hit.z);return;}
             if (target === BLOCKS.JUKEBOX) {
@@ -8064,7 +8359,7 @@
             }
 
             const px=hit.x+hit.n[0], py=hit.y+hit.n[1], pz=hit.z+hit.n[2];
-            const placeId = WOOL_ITEM_TO_BLOCK.get(slot.id) ?? (slot.id === ITEMS.MELLORITE ? BLOCKS.MELLORITE_CRYSTAL : slot.id);
+            const placeId = slot.id===BLOCKS.OAK_STAIRS_N?stairFacingFromYaw(player.yaw):(WOOL_ITEM_TO_BLOCK.get(slot.id) ?? (slot.id === ITEMS.MELLORITE ? BLOCKS.MELLORITE_CRYSTAL : slot.id));
             if (isBlock(placeId) && !isLiquidBlock(placeId)) {
                 if (!(px+1>player.x-0.3 && px<player.x+0.3 && py+1>player.y && py<player.y+1.8 && pz+1>player.z-0.3 && pz<player.z+0.3)) {
                     // Flowers may only be planted on grass/dirt-like ground with an empty target space.
@@ -8187,6 +8482,14 @@
             }
         }
 
+        function dropFurnaceContents(key,x,y,z,dim){
+            const f=furnaceStates.get(key);
+            if(!f)return;
+            for(const [idField,countField] of [['ingredientId','ingredientCount'],['fuelId','fuelCount'],['outputId','outputCount']]){
+                const item=Number(f[idField])||0,count=Math.max(0,Math.floor(Number(f[countField])||0));
+                if(item>0&&count>0)integratedSpawnItem(item,count,x+.5,y+.65,z+.5,dim,(Math.random()-.5)*1.3,1.8,(Math.random()-.5)*1.3,minedDropFloorY(x,y-1,z,dim));
+            }
+        }
         function breakBlock(x, y, z, block) {
             const requiredTier=ORE_TIER_REQUIRED[block];
             if (requiredTier && getCurrentToolTier()<requiredTier) { setBlock(x,y,z,BLOCKS.AIR); return; }
@@ -8203,6 +8506,7 @@
                 return;
             }
             let dropId = ORE_DROPS[block] || (block===BLOCKS.STONE ? BLOCKS.COBBLESTONE : block);
+            if(isStairBlock(block))dropId=BLOCKS.OAK_STAIRS_N;
             if (block===BLOCKS.MELLORITE_CRYSTAL) dropId=ITEMS.MELLORITE;
             if (WOOL_BLOCK_TO_ITEM.has(block)) dropId=WOOL_BLOCK_TO_ITEM.get(block);
             spawnMinedBlockDrop(dropId,1,x,y,z);
@@ -8343,7 +8647,7 @@
                 case 'tp':
                     if (args.length < 3) return addChatMessage("Usage: /tp [x] [y] [z]", "chatError");
                     const tx = parseFloat(args[0]), ty = parseFloat(args[1]), tz = parseFloat(args[2]);
-                    if (!isNaN(tx) && !isNaN(ty) && !isNaN(tz)) { player.x = tx; player.y = ty; player.z = tz; addChatMessage(`Teleported to ${tx}, ${ty}, ${tz}`, "chatSuccess"); } 
+                    if (!isNaN(tx) && !isNaN(ty) && !isNaN(tz)) { player.x=tx;player.y=voxelYFromWorld(ty);player.z=tz;player.vx=player.vy=player.vz=0;player.highestY=player.y;teleportFallProtected=true;resetChunkStreamingForDimension(currentDimension,player.x,player.z);addChatMessage(`Teleported to ${tx}, ${ty}, ${tz}`, "chatSuccess"); } 
                     else addChatMessage("Invalid coordinates.", "chatError");
                     break;
                 case 'time':
@@ -8737,6 +9041,13 @@
             checkPortalTeleport(dt);
             if (dimensionTransitionInProgress) return;
             checkBossDimensionTriggers(dt);
+            // Distant teleport destinations stream asynchronously; an absent chunk
+            // must NEVER be interpreted as empty air and cause a fatal fall.
+            if(!requestTravelAreaReady(player.x,player.z)){
+                player.vx=player.vy=player.vz=0;
+                player.highestY=player.y;
+                return;
+            }
             if (player.invincibleTime > 0) player.invincibleTime -= dt;
             const bodyBlock=getBlock(Math.floor(player.x),Math.floor(player.y+0.7),Math.floor(player.z));
             const headBlock=getBlock(Math.floor(player.x),Math.floor(player.y+1.55),Math.floor(player.z));
@@ -8760,15 +9071,15 @@
                 }
                 const len=Math.hypot(mx,mz); if(len>0){mx/=len;mz/=len;}
                 const flying=player.gamemode==='creative'||player.gamemode==='spectator';
-                if(player.hunger<=6&&(player.sprinting||mobileSprintHeld)){player.sprinting=false;mobileSprintHeld=false;const sprintBtn=document.getElementById('btnSprint');if(sprintBtn)sprintBtn.classList.remove('sprint-active');}
-                const sprinting=!flying&&!player.crouching&&player.hunger>6&&(mobileSprintHeld||(player.sprinting&&keys['KeyW']));
-                const speed=(flying?FLY_SPEED:MOVE_SPEED*(inWater?.65:inLava?.38:1)*(sprinting?1.55:1))*(player.crouching?.42:1);
+                if(player.gamemode==='survival'&&player.hunger<=6&&(player.sprinting||mobileSprintHeld)){player.sprinting=false;mobileSprintHeld=false;const sprintBtn=document.getElementById('btnSprint');if(sprintBtn)sprintBtn.classList.remove('sprint-active');}
+                const sprinting=!player.crouching&&(flying||player.hunger>6)&&(mobileSprintHeld||(player.sprinting&&keys['KeyW']));
+                const speed=(flying?FLY_SPEED*(sprinting?2.3:1):MOVE_SPEED*(inWater?.65:inLava?.38:1)*(sprinting?1.55:1))*(player.crouching?.42:1);
                 if(!flying&&len>0)addExhaustion(dt*(sprinting?.135:.012));
                 player.vx=mx*speed;player.vz=mz*speed;
             }
             const flying=player.gamemode==='creative'||player.gamemode==='spectator';
             if(flying){
-                player.vy=0;if(allowInput&&keys['Space'])player.vy=FLY_SPEED;if(allowInput&&keys['ShiftLeft'])player.vy=-FLY_SPEED;player.highestY=player.y;
+                player.vy=0;const fastFlight=(mobileSprintHeld||(player.sprinting&&keys['KeyW']))?2.3:1;if(allowInput&&keys['Space'])player.vy=FLY_SPEED*fastFlight;if(allowInput&&keys['ShiftLeft'])player.vy=-FLY_SPEED*fastFlight;player.highestY=player.y;
                 if(player.gamemode==='creative'){const w=.25,h=1.7,nx=player.x+player.vx*dt,ny=player.y+player.vy*dt,nz=player.z+player.vz*dt;if(requestTravelAreaReady(nx,player.z,w)&&!collides(nx,player.y,player.z,w,h))player.x=nx;if(requestTravelAreaReady(player.x,nz,w)&&!collides(player.x,player.y,nz,w,h))player.z=nz;if(!collides(player.x,ny,player.z,w,h))player.y=ny;}
                 else{const nx=player.x+player.vx*dt,nz=player.z+player.vz*dt;if(requestTravelAreaReady(nx,player.z))player.x=nx;if(requestTravelAreaReady(player.x,nz))player.z=nz;player.y+=player.vy*dt;}
             }else{
@@ -8777,9 +9088,20 @@
                     if(allowInput&&keys['Space'])player.vy=inWater?4.5:2.5; player.vy=Math.max(-5,Math.min(5,player.vy)); player.highestY=player.y;
                 }else{if(allowInput&&keys['Space']&&player.onGround){player.vy=JUMP_FORCE;player.onGround=false;addExhaustion(.08);}player.vy=Math.max(player.vy+GRAVITY*dt,-50);}
                 const w=.25,h=1.7,nx=player.x+player.vx*dt,ny=player.y+player.vy*dt,nz=player.z+player.vz*dt;
-                if(requestTravelAreaReady(nx,player.z,w)&&!collides(nx,player.y,player.z,w,h))player.x=nx;if(requestTravelAreaReady(player.x,nz,w)&&!collides(player.x,player.y,nz,w,h))player.z=nz;
-                if(!collides(player.x,ny,player.z,w,h)){player.y=ny;player.onGround=false;if(!inWater&&!inLava)player.highestY=Math.max(player.highestY,player.y);}
-                else{if(player.vy<0){const fall=player.highestY-player.y;if(fall>=4&&player.gamemode==='survival'&&!inWater&&!inLava){player.health=Math.max(0,player.health-armorAdjustedDamage(Math.floor(fall/4)));showDamage();updateHealthBar();}player.onGround=true;player.highestY=player.y;}player.vy=0;}
+                if(requestTravelAreaReady(nx,player.z,w)){
+                    if(!collides(nx,player.y,player.z,w,h))player.x=nx;
+                    else if(player.onGround&&isStairBlock(getBlock(Math.floor(nx),Math.floor(player.y),Math.floor(player.z)))){
+                        for(const rise of [.5,1])if(!collides(nx,player.y+rise,player.z,w,h)){player.y+=rise;player.x=nx;player.vy=Math.max(0,player.vy);player.highestY=player.y;break;}
+                    }
+                }
+                if(requestTravelAreaReady(player.x,nz,w)){
+                    if(!collides(player.x,player.y,nz,w,h))player.z=nz;
+                    else if(player.onGround&&isStairBlock(getBlock(Math.floor(player.x),Math.floor(player.y),Math.floor(nz)))){
+                        for(const rise of [.5,1])if(!collides(player.x,player.y+rise,nz,w,h)){player.y+=rise;player.z=nz;player.vy=Math.max(0,player.vy);player.highestY=player.y;break;}
+                    }
+                }
+                if(!collides(player.x,player.y+player.vy*dt,player.z,w,h)){player.y+=player.vy*dt;player.onGround=false;if(!inWater&&!inLava)player.highestY=Math.max(player.highestY,player.y);}
+                else{if(player.vy<0){const fall=player.highestY-player.y;if(fall>=4&&!teleportFallProtected&&player.gamemode==='survival'&&!inWater&&!inLava){player.health=Math.max(0,player.health-armorAdjustedDamage(Math.floor(fall/4)));showDamage();updateHealthBar();}player.onGround=true;player.highestY=player.y;teleportFallProtected=false;}player.vy=0;}
                 if(player.y<-20){player.health=0;updateHealthBar();}
             }
         }
@@ -8801,7 +9123,7 @@
             if(inventoryOpen)toggleInventory();
             craftingOpen=forceOpen?true:!craftingOpen;
             document.getElementById('craftingMenu').style.display=craftingOpen?'block':'none';
-            if(craftingOpen){if(!isMobilePlaying)document.exitPointerLock();updateCraftingUI();setTimeout(()=>document.getElementById('craftingSearch')?.focus(),0);}
+            if(craftingOpen){if(!isMobilePlaying)document.exitPointerLock();updateCraftingUI();if(!isMobilePlaying)setTimeout(()=>{if(craftingOpen)document.getElementById('craftingSearch')?.focus();},0);}
             else if(!isMobilePlaying&&gameStarted)canvas.requestPointerLock();
             updateMobileControlsVisibility();
         }
@@ -8975,7 +9297,7 @@
 
         function updateCreativeInventoryUI() {
             const container = document.getElementById('creativeItems'); container.innerHTML = '';
-            const allBlocks = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.OAK_SAPLING, BLOCKS.ACACIA_WOOD, BLOCKS.ACACIA_LEAVES, BLOCKS.ACACIA_PLANKS, BLOCKS.ACACIA_SAPLING, BLOCKS.SPRUCE_WOOD, BLOCKS.SPRUCE_LEAVES, BLOCKS.SPRUCE_PLANKS, BLOCKS.SPRUCE_SAPLING, BLOCKS.JUNGLE_WOOD, BLOCKS.JUNGLE_LEAVES, BLOCKS.JUNGLE_PLANKS, BLOCKS.JUNGLE_SAPLING, BLOCKS.SAND, BLOCKS.RED_SAND, BLOCKS.SNOW, BLOCKS.PACKED_ICE, BLOCKS.CACTUS, BLOCKS.PLANKS, BLOCKS.COBBLESTONE, BLOCKS.CRAFTING_TABLE, BLOCKS.FURNACE, BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK, BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX, BLOCKS.ZOMBIE_SPAWNER, BLOCKS.RESPAWN_BLOCK, BLOCKS.RED_FLOWER, BLOCKS.ORANGE_FLOWER, BLOCKS.YELLOW_FLOWER, BLOCKS.BLUE_FLOWER, BLOCKS.WHITE_FLOWER, BLOCKS.PINK_FLOWER, BLOCKS.PURPLE_FLOWER, BLOCKS.LIGHT_GRAY_FLOWER, BLOCKS.GRAY_FLOWER, BLOCKS.BLACK_FLOWER, BLOCKS.BROWN_FLOWER];
+            const allBlocks = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.GRANITE, BLOCKS.DIORITE, BLOCKS.ANDESITE, BLOCKS.LIMESTONE, BLOCKS.SLATE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.OAK_SAPLING, BLOCKS.ACACIA_WOOD, BLOCKS.ACACIA_LEAVES, BLOCKS.ACACIA_PLANKS, BLOCKS.ACACIA_SAPLING, BLOCKS.SPRUCE_WOOD, BLOCKS.SPRUCE_LEAVES, BLOCKS.SPRUCE_PLANKS, BLOCKS.SPRUCE_SAPLING, BLOCKS.JUNGLE_WOOD, BLOCKS.JUNGLE_LEAVES, BLOCKS.JUNGLE_PLANKS, BLOCKS.JUNGLE_SAPLING, BLOCKS.SAND, BLOCKS.RED_SAND, BLOCKS.SNOW, BLOCKS.PACKED_ICE, BLOCKS.CACTUS, BLOCKS.PLANKS, BLOCKS.COBBLESTONE, BLOCKS.CRAFTING_TABLE, BLOCKS.FURNACE, BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK, BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX, BLOCKS.ZOMBIE_SPAWNER, ...BED_BLOCKS, BLOCKS.DEEPSLATE, BLOCKS.RED_FLOWER, BLOCKS.ORANGE_FLOWER, BLOCKS.YELLOW_FLOWER, BLOCKS.BLUE_FLOWER, BLOCKS.WHITE_FLOWER, BLOCKS.PINK_FLOWER, BLOCKS.PURPLE_FLOWER, BLOCKS.LIGHT_GRAY_FLOWER, BLOCKS.GRAY_FLOWER, BLOCKS.BLACK_FLOWER, BLOCKS.BROWN_FLOWER];
             const allMats = [ITEMS.COAL, ITEMS.IRON_INGOT, ITEMS.GOLD_INGOT, ITEMS.DIAMOND, ITEMS.MELLORITE,ITEMS.STICK,ITEMS.RAW_MEAT,ITEMS.RAW_PORKCHOP,ITEMS.COOKED_PORKCHOP,ITEMS.RAW_BEEF,ITEMS.COOKED_BEEF,ITEMS.RAW_MUTTON,ITEMS.COOKED_MUTTON,ITEMS.RAW_RABBIT,ITEMS.COOKED_RABBIT,ITEMS.RAW_FOX,ITEMS.COOKED_FOX,ITEMS.RAW_CAMEL,ITEMS.COOKED_CAMEL,ITEMS.RAW_GOAT,ITEMS.COOKED_GOAT,ITEMS.WHITE_WOOL,ITEMS.BLACK_WOOL,ITEMS.GRAY_WOOL,ITEMS.LIGHT_GRAY_WOOL,ITEMS.BROWN_WOOL,ITEMS.PINK_WOOL,ITEMS.RED_WOOL,ITEMS.ORANGE_WOOL,ITEMS.YELLOW_WOOL,ITEMS.BLUE_WOOL,ITEMS.PURPLE_WOOL,ITEMS.RED_DYE,ITEMS.ORANGE_DYE,ITEMS.YELLOW_DYE,ITEMS.BLUE_DYE,ITEMS.WHITE_DYE,ITEMS.PINK_DYE,ITEMS.PURPLE_DYE,ITEMS.LIGHT_GRAY_DYE,ITEMS.GRAY_DYE,ITEMS.BLACK_DYE,ITEMS.BROWN_DYE,ITEMS.APPLE, ITEMS.PINEWOOD_SPRINT_DISC, ITEMS.LAST_CAMP_STANDING_DISC];
             const allArmor=[ITEMS.IRON_ARMOR,ITEMS.GOLD_ARMOR,ITEMS.DIAMOND_ARMOR,ITEMS.MELLORITE_ARMOR];
             const allTools = [ITEMS.WOOD_PICKAXE, ITEMS.WOOD_AXE, ITEMS.WOOD_SWORD, ITEMS.WOOD_SHOVEL, ITEMS.STONE_PICKAXE, ITEMS.STONE_AXE, ITEMS.STONE_SWORD, ITEMS.STONE_SHOVEL, ITEMS.IRON_PICKAXE, ITEMS.IRON_AXE, ITEMS.IRON_SWORD, ITEMS.IRON_SHOVEL, ITEMS.GOLD_PICKAXE, ITEMS.GOLD_AXE, ITEMS.GOLD_SWORD, ITEMS.GOLD_SHOVEL, ITEMS.DIAMOND_PICKAXE, ITEMS.DIAMOND_AXE, ITEMS.DIAMOND_SWORD, ITEMS.DIAMOND_SHOVEL, ITEMS.MELLORITE_PICKAXE, ITEMS.MELLORITE_AXE, ITEMS.MELLORITE_SWORD, ITEMS.MELLORITE_SHOVEL];
@@ -9121,7 +9443,11 @@
 
         document.getElementById('closeSettingsBtn').addEventListener('click', toggleSettings);
         document.getElementById('returnToMainMenuBtn').addEventListener('click',()=>{const button=document.getElementById('returnToMainMenuBtn');button.disabled=true;button.textContent='Saving...';sendFinalPlayerState();stopMusicPlayback();try{sessionStorage.setItem('mellorcraftReturnMainMenu','1');}catch(_){}setTimeout(()=>{try{socket?.close();}catch(_){}try{relaySocket?.close();}catch(_){}window.location.reload();},100);});
-        document.getElementById('closeCraftingMobile').addEventListener('click', toggleCrafting);
+        const mobileCraftClose=document.getElementById('closeCraftingMobile');
+        mobileCraftClose.addEventListener('pointerdown',e=>e.stopPropagation());
+        mobileCraftClose.addEventListener('pointerup',e=>e.stopPropagation());
+        mobileCraftClose.addEventListener('touchend',e=>e.stopPropagation(),{passive:true});
+        mobileCraftClose.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(craftingOpen)toggleCrafting(false);});
         document.getElementById('closeInventoryMobile').addEventListener('click', toggleInventory);
         document.getElementById('closeCreativeMobile').addEventListener('click', toggleCreativeInventory);
         document.getElementById('setGamemode').addEventListener('change', (e) => {
@@ -9247,7 +9573,7 @@
                 bName = BIOME_NAMES[getBiome(bx, bz)] || 'Unknown';
             }
 
-            document.getElementById('position').textContent = `${player.x.toFixed(1)}, ${player.y.toFixed(1)}, ${player.z.toFixed(1)}`;
+            document.getElementById('position').textContent = `${player.x.toFixed(1)}, ${worldYFromVoxel(player.y).toFixed(1)}, ${player.z.toFixed(1)}`;
             document.getElementById('biome').textContent = bName;
         }
 
@@ -9255,7 +9581,21 @@
             for (let x = Math.floor(nx - w); x <= Math.floor(nx + w); x++) {
                 for (let y = Math.floor(ny); y <= Math.floor(ny + h); y++) {
                     for (let z = Math.floor(nz - w); z <= Math.floor(nz + w); z++) {
-                        if (SOLID_BLOCKS.has(getBlock(x, y, z))) return true;
+                        const block=getBlock(x,y,z);
+                        if(!SOLID_BLOCKS.has(block))continue;
+                        const feet=ny,head=ny+h;
+                        if(isStairBlock(block)){
+                            if(feet<y+.5 && head>y)return true;
+                            if(head<=y+.5||feet>=y+1)continue;
+                            const bx0=block===BLOCKS.OAK_STAIRS_E?x+.5:x;
+                            const bx1=block===BLOCKS.OAK_STAIRS_W?x+.5:x+1;
+                            const bz0=block===BLOCKS.OAK_STAIRS_S?z+.5:z;
+                            const bz1=block===BLOCKS.OAK_STAIRS_N?z+.5:z+1;
+                            if(nx+w>bx0&&nx-w<bx1&&nz+w>bz0&&nz-w<bz1)return true;
+                            continue;
+                        }
+                        if(isBedBlock(block)){if(feet<y+.62&&head>y) return true;continue;}
+                        return true;
                     }
                 }
             }
@@ -9544,8 +9884,14 @@
                     const hostingMobs=isMobHostForDimension(currentDimension);
                     if(hostingMobs&&gameRules.difficulty==='peaceful')for(const m of [...mobs])if(m.dimension===currentDimension&&m.type.hostile&&!m.type.isBoss)requestRemoveSharedMob(m,'despawn');
                     if (hostingMobs && gameRules.doMobSpawning && dimensionMobCount === 0) spawnInitialMobs(currentDimension);
+                    // Caves get additional nearby hostile encounters, rather than
+                    // relying solely on the long-range surface-spawn ring.
+                    if(hostingMobs&&gameRules.doMobSpawning&&dimensionMobCount<MOB_CAP&&Math.random()<.82){
+                        const cave=chooseNearbyCaveSpawn();
+                        if(cave){spawnSharedMob(hostileMobKey(),cave.x,cave.y,cave.z,0);dimensionMobCount++;}
+                    }
                     // Spread new spawns around all active players from two through six chunks away.
-                    if (hostingMobs && gameRules.doMobSpawning && dimensionMobCount < MOB_CAP && Math.random() < 0.75) {
+                    if (hostingMobs && gameRules.doMobSpawning && dimensionMobCount < MOB_CAP && Math.random() < 0.95) {
                         const spot=chooseDistributedMobSpawnPoint(currentDimension);
                         if(spot){
                             const x=spot.x,z=spot.z; let typeKey=null,h=50;
@@ -9669,15 +10015,12 @@
             gl.uniform1f(uShadowMapSize, SHADOW_MAP_SIZE);
             const torchLights = nearestTorchLights(liteShaderEnabled ? (isMobilePlaying ? 3 : 4) : 2);
             const zeroTorch = [0, -1000, 0];
-            gl.uniform3fv(uTorchPos0, torchLights[0] || zeroTorch);
-            gl.uniform3fv(uTorchPos1, torchLights[1] || zeroTorch);
-            gl.uniform3fv(uTorchPos2, torchLights[2] || zeroTorch);
-            gl.uniform3fv(uTorchPos3, torchLights[3] || zeroTorch);
-            gl.uniform1f(uTorchCount, torchLights.length);
+            setPointLights(torchLights);
             updateShaderSun(shaderSunState.dir, sunAboveHorizon, cloudTransmission, shaderSunState.strength);
 
             const dirX = Math.sin(player.yaw), dirZ = Math.cos(player.yaw);
             const visibleChunkMeshes = [];
+            const allPointLights=allLoadedPointLights();
             let hasVisibleGlass = false;
             gl.uniform1f(uAlpha, 1.0);
             gl.uniform1f(uEmission, 0.0);
@@ -9691,6 +10034,9 @@
                 visibleChunkMeshes.push(mesh);
                 if (mesh.glassCount > 0) hasVisibleGlass = true;
 
+                // Per-chunk light selection keeps torches glowing even after the
+                // camera moves far from their original positions.
+                setPointLights(chunkPointLights(mesh,allPointLights));
                 if (mesh.count > 0) {
                     // Use the same texture-aware mesh path used elsewhere. The atlas provides the
                     // final block color, so terrain uses tintMode=0 rather than multiplying by flat vertex color.
@@ -9707,6 +10053,7 @@
                 }
             }
 
+            setPointLights(torchLights); // restore player-local lights for mobs/items
             setTexturePass(null,false);
             renderWeatherClouds();
 

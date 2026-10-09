@@ -1,3 +1,101 @@
+MellorCraft v1.8.1 — Terrain fidelity and colored beds correction
+=================================================================
+
+This v1.8.1 package supersedes the previous v1.8.1 playtest ZIP. Use the matching
+mellorcraft.html and mellorcraft_server.py; dedicated protocol is **16**.
+
+RESTORED SURFACE AND ACTUAL DEEPER UNDERGROUND
+- Normal Overworld surface heights use the original v1.8.0 getHeight() algorithm,
+  with no additional v1.8.1 rolling/cliff terms. Existing original mountain shapes
+  and elevation differences remain unchanged. The original surface Y appears in
+  the HUD and in /tp. Custom/flat heights also keep their old displayed levels.
+- The Overworld now has 248 internal voxel layers instead of 200. There are 48
+  additional layers below old Y=0 (down to displayed Y=-48, where bedrock lies).
+  The engine translates Overworld internal voxel Y to displayed Y by subtracting 48.
+  Other dimensions retain their existing coordinate systems.
+- Only the underground is extended with additional caves and chambers. Ravine
+  placement and displayed ravine depth have not been extended.
+- Deepslate (block 157) transitions gradually from rare near displayed Y=20,
+  to common in deeper underground and fully replacing ordinary stone at Y=-32.
+  Ore generation still takes priority. Rare granite and diorite can appear only
+  where there is not deepslate; andesite, limestone, and slate no longer generate.
+- Retains background chunk workers and adds memoization of large underground
+  cavern region parameters. Internal column storage increases by 24% (200 to 248
+  voxels high), so actual peak memory and worldgen cost may rise modestly.
+
+BEDS AND RESPAWN
+- Replaced craftable respawn blocks with 11 colored beds: red, white, black,
+  gray, light gray, brown, pink, orange, yellow, blue, and purple.
+- Craft a bed using exactly 3 oak planks + 3 wool pieces all of one color.
+  Both sheep-dropped wool items and placed wool blocks are accepted.
+- Each generated snow cabin contains one deterministically chosen colored bed,
+  rather than an ore block; existing cabin exterior improvements remain.
+- Beds have partial-height geometry and collision. Neighboring wall faces are
+  preserved when meshing beside beds, eliminating missing-wall see-through gaps.
+- Right-click/tap a placed bed to set your respawn location. Respawns use a
+  free adjacent floor spot when available and do not remove overhead walls.
+- Legacy placed respawn blocks and saved inventory items convert to red beds.
+
+SAVE MIGRATION & COMPATIBILITY
+- Save format version is now 12. Older Overworld blocks, players, mob positions,
+  drops, furnaces and respawn points are translated upward by 48 internal voxels
+  *once*, leaving their displayed physical elevations unchanged. Alt/Boss
+  dimension locations remain untouched. Existing blocks/structures are preserved.
+- Back up all worlds and player files before upgrading; reverting to the old
+  200-layer client/server after migration is not supported without backups.
+- Do not combine the new client with previous v1.8.1 servers: protocol 16 is
+  required on both ends.
+
+OTHER v1.8.1 PLAYTEST CHANGES RETAINED
+- Bounded 3–10-block iron veins, less coal, stronger coal texture contrast,
+  high-Y diamonds rarer; ore overrides granite and diorite.
+- Fixed furnace lighting and returned contents on breaking; torch lighting is
+  continuous in loaded terrain; cave mobs and dungeon spawners are improved.
+- Corrected long-distance teleports, faster sprint-flight, stronger Mellorite boss,
+  downhill mob movement and mobile crafting Close behavior.
+- Fewer outposts/cabins, adjusted mansion frequency, detailed snow cabins and
+  directional half-block oak stairs.
+
+VALIDATION
+- Node syntax check for extracted inline JavaScript; Python syntax checks.
+- tests/test_worker_generation.js checks 169 sampled normal-world surface heights
+  against the original v1.8.0 height function, generates a full new-world chunk,
+  and checks real negative-Y caverns, deepslate and cabin-bed color selection.
+- tests/test_beds.js checks 11 recipes and wall-face culling protection.
+- tests/test_save_migration.py checks one-time legacy save conversion on server.
+- Additional terrain, ore, furnace and boss regression tests are included.
+- An interactive browser gameplay smoke test could not run in this environment;
+  mobile camera and multiplayer movement merit a follow-up hands-on check.
+
+------------------------------------------------------------------------
+
+MellorCraft v1.8.0 server account-lock + username rules
+========================================================
+- Server operators can now lock public account creation. The setting persists in `server_accounts.json` and can be changed live with `/account signup off` or `/account signup on`.
+- Starting the dedicated server with `--lock-account-creation` immediately locks public Sign Up and persists that setting.
+- When public signup is locked, Sign Up requests are rejected server-side even from modified clients. The normal client also reads `/server-policy.json`, hides the Sign Up button, and explains that the operator must create the account.
+- Added `/account create <username> <password> <skin>` so the server console can create accounts directly. Valid skins are `steve`, `alex`, `mellorite`, `ember`, `frost`, and `forest`.
+- `/account list` now also reports whether public account creation is enabled or locked. Existing `/account setpassword` and `/account delete` commands remain available.
+- Dedicated-server usernames now allow only 1-20 letters, numbers, underscores, or hyphens. Spaces are rejected by both the client UI and the authoritative server validation.
+- Account-file format advances to version 2 only to persist the signup policy; existing version-1 account files load with public signup enabled by default. Multiplayer protocol remains 13.
+
+MellorCraft v1.8.0 HTTP connection-reset traceback fix
+======================================================
+- The dedicated HTTP server now suppresses expected client-disconnect socket exceptions such as `ConnectionResetError`, `BrokenPipeError`, `ConnectionAbortedError`, and Windows socket reset/abort codes (including WinError 10054) that can occur when a browser or Internet scanner closes a connection while `mellorcraft.html` is still being transmitted.
+- These routine disconnects no longer produce multi-line `socketserver.py` tracebacks in the operator console.
+- Genuine unexpected HTTP-server exceptions are still passed to Python's normal error handler and remain visible.
+- With `--http-log`, routine disconnects are represented by a single concise line instead of a traceback. Quiet mode remains the default.
+- This is server-only; multiplayer protocol remains 13 and no client update is required.
+
+MellorCraft v1.8.0 quiet HTTP logging / scanner-noise fix
+=========================================================
+- The dedicated server's static HTTP endpoint is now quiet by default. Generic Internet scanner traffic, malformed HTTP/TLS/RDP probes, favicon requests, unsupported methods, and routine GET/HEAD request lines no longer flood or interrupt the live operator console.
+- MellorCraft-specific logs remain visible, including WebSocket connection attempts, authenticated joins/leaves, `Client ready`, startup failures, commands, saves, and shutdowns.
+- Added `--http-log` to restore verbose HTTP request/error logging when troubleshooting the web server.
+- `/favicon.ico` returns 204 instead of a noisy 404. OPTIONS probes receive a harmless 204 response and POST receives 405 without the default Python 501 noise.
+- The HTTP response banner no longer advertises the host Python version.
+- This is a server-only logging/hardening change; dedicated multiplayer remains protocol 13 and existing v1.8.0 clients remain compatible.
+
 MellorCraft v1.8.0 server disconnect + /tp fix
 ================================================
 

@@ -41,11 +41,15 @@ except ImportError:  # websockets 10/11 compatibility
 HTTP_PORT = 8000
 WEBSOCKET_PORT = 8765
 DAY_LENGTH_SECONDS = 600.0
-PROTOCOL_VERSION = 13
-SUPPORTED_PROTOCOLS = (13,)
-WORLD_HEIGHT = 200
+PROTOCOL_VERSION = 16
+SUPPORTED_PROTOCOLS = (16,)
+WORLD_HEIGHT = 248
 PORTAL_BLOCK = 31
 RESPAWN_BLOCK = 48
+RED_BED = 93
+BED_BLOCK_IDS = {48,93,94,95,96,97,98,99,153,154,155,156}
+WORLD_Y_ORIGIN = 48
+FURNACE_BLOCK = 22
 AIR_BLOCK = 0
 RAW_MEAT_ITEM = 106
 RAW_PORKCHOP_ITEM = 112
@@ -132,7 +136,8 @@ MOB_LOOT: dict[str, list[tuple[int, int, int]]] = {
 FURNACE_RECIPES = {15: 101, 16: 102, 6: 24, 2: 25, 112: 113, 114: 115, 116: 117, 118: 119, 120: 121, 122: 123, 128: 129}
 FURNACE_FUEL_SECONDS = {100: 80.0, 18: 800.0, 4: 15.0, 10: 15.0, 104: 5.0}
 DIFFICULTY_DAMAGE_SCALE = {"peaceful": 0.0, "easy": 0.5, "normal": 1.0, "hard": 1.5, "hardcore": 1.5}
-USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_ -]{1,20}$")
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
+LEGACY_ACCOUNT_USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_ -]{1,20}$")
 ENTITY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 SCRIPT_DIR = Path(__file__).resolve().parent
 CLIENT_FILENAME = "mellorcraft.html"
@@ -463,7 +468,7 @@ class MellorCraftWorld:
         if isinstance(respawn, dict):
             player.respawnPoint = {
                 "x": bounded_int(respawn.get("x"), -2_000_000, 2_000_000), "y": bounded_int(respawn.get("y"), 0, WORLD_HEIGHT - 1),
-                "z": bounded_int(respawn.get("z"), -2_000_000, 2_000_000), "dimension": bounded_int(respawn.get("dimension"), 0, 2),
+                "z": bounded_int(respawn.get("z"), -2_000_000, 2_000_000), "dimension": bounded_int(respawn.get("dimension"), 0, 2), "bedId": bounded_int(respawn.get("bedId"),0,255),
             }
         return player, True
 
@@ -485,8 +490,8 @@ class MellorCraftWorld:
                     continue
                 try:
                     index, block_type = int(pair[0]), int(pair[1])
-                    lz = index // (chunk_size * WORLD_HEIGHT)
-                    rem = index - lz * chunk_size * WORLD_HEIGHT
+                    lz = index // (chunk_size * 200)
+                    rem = index - lz * chunk_size * 200
                     y = rem // chunk_size
                     lx = rem - y * chunk_size
                     x, z = cx * chunk_size + lx, cz * chunk_size + lz
@@ -500,6 +505,46 @@ class MellorCraftWorld:
             return
         try:
             raw = json.loads(self.save_path.read_text(encoding="utf-8"))
+            if int(raw.get('formatVersion',0) or 0)<12:
+                # Shift only overworld internal coordinates. Preserve the visible
+                # height (old voxel Y) and all non-overworld structures as-is.
+                def migrate_point(entry):
+                    if isinstance(entry,dict) and int(entry.get('dimension',0) or 0)==0:
+                        for prop in ('y','highestY','groundY','floorY'):
+                            if entry.get(prop) is not None:
+                                try: entry[prop]=float(entry[prop])+WORLD_Y_ORIGIN
+                                except (ValueError,TypeError): pass
+                    return entry
+                if not isinstance(raw.get('blocks'),dict):
+                    raw['blocks']=self.legacy_chunk_edits_to_blocks(raw.get('chunkEdits'))
+                relocated={}
+                for key,typ in raw['blocks'].items():
+                    try:
+                        d,x,y,z=self.parse_block_key(key)
+                        relocated[f'{d},{x},{y+(WORLD_Y_ORIGIN if d==0 else 0)},{z}']=RED_BED if int(typ)==RESPAWN_BLOCK else int(typ)
+                    except (ValueError,TypeError): pass
+                raw['blocks']=relocated
+                for profile in list((raw.get('playerProfiles') or {}).values())+list((raw.get('lanPlayerProfiles') or {}).values()):
+                    migrate_point(profile)
+                    if isinstance(profile,dict):
+                        migrate_point(profile.get('originalSpawn'))
+                        migrate_point(profile.get('respawnPoint'))
+                        if isinstance(profile.get('inventory'),list):
+                            for slot in profile['inventory']:
+                                if isinstance(slot,dict) and slot.get('id')==RESPAWN_BLOCK: slot['id']=RED_BED
+                migrate_point(raw.get('playerState'))
+                for entry in raw.get('mobs',[]): migrate_point(entry)
+                for entry in raw.get('items',[]): migrate_point(entry)
+                furnaces={}
+                for key,value in (raw.get('furnaces') or {}).items():
+                    try:
+                        d,x,y,z=(int(v) for v in str(key).split(','))
+                        key=f'{d},{x},{y+(WORLD_Y_ORIGIN if d==0 else 0)},{z}'
+                    except (TypeError,ValueError): pass
+                    furnaces[key]=value
+                raw['furnaces']=furnaces
+                raw['formatVersion']=12
+                self.dirty=True
             self.world_name = str(raw.get("name", raw.get("worldName", self.world_name))).strip()[:48] or self.world_name
             self.seed = int(raw.get("seed", self.seed)) % 2_147_483_647
             self.world_time = float(raw.get("worldTime", self.world_time))
@@ -588,7 +633,7 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 11, "version": "1.8.0", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 12, "version": "1.8.1", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
             "bossDefeated": self.boss_defeated, "gameRules": self.game_rules, "worldGen": self.world_gen,
             "blocks": self.blocks, "operators": sorted(self.operators), "bannedPlayers": sorted(self.banned_players), "playerProfiles": profiles,
@@ -642,6 +687,7 @@ class MellorCraftWorld:
 
 _console_ui = None
 _server_stop_event: asyncio.Event | None = None
+HTTP_VERBOSE_LOGGING = False
 
 
 def console_log(message: Any = "") -> None:
@@ -836,6 +882,7 @@ class ServerAccountStore:
         self.worlds_dir = worlds_dir
         self.accounts: dict[str, dict[str, Any]] = {}
         self.reserved_names: dict[str, str] = {}
+        self.public_signup_enabled = True
         self.load()
         self.refresh_reserved_names()
 
@@ -848,6 +895,8 @@ class ServerAccountStore:
             return
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict) and "publicSignupEnabled" in raw:
+                self.public_signup_enabled = bool(raw.get("publicSignupEnabled", True))
             source = raw.get("accounts", raw) if isinstance(raw, dict) else {}
             if not isinstance(source, dict):
                 return
@@ -855,7 +904,10 @@ class ServerAccountStore:
                 if not isinstance(entry, dict):
                     continue
                 username = str(entry.get("username", key)).strip()[:20]
-                if not USERNAME_PATTERN.fullmatch(username):
+                # Keep pre-v1.8 account records with spaces in memory so toggling the
+                # signup policy cannot silently delete them from disk. New logins and
+                # all newly-created accounts still use the stricter no-space rule.
+                if not LEGACY_ACCOUNT_USERNAME_PATTERN.fullmatch(username):
                     continue
                 salt = str(entry.get("salt", "")); verifier = str(entry.get("verifier", ""))
                 if not salt or not verifier:
@@ -870,7 +922,7 @@ class ServerAccountStore:
             console_log(f"Warning: could not load {self.path.name}: {exc}")
 
     def save(self) -> None:
-        payload = {"format": "MellorCraftServerAccounts", "version": 1, "accounts": self.accounts}
+        payload = {"format": "MellorCraftServerAccounts", "version": 2, "publicSignupEnabled": bool(self.public_signup_enabled), "accounts": self.accounts}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, temp_name = tempfile.mkstemp(prefix=self.path.name + ".", suffix=".tmp", dir=self.path.parent)
         try:
@@ -922,6 +974,8 @@ class ServerAccountStore:
         return PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH
 
     def signup(self, username: str, password: str, skin: str) -> tuple[dict[str, Any] | None, str | None]:
+        if not self.public_signup_enabled:
+            return None, "Account creation is locked on this server. Ask the server operator to create an account for you."
         self.refresh_reserved_names()
         key = self.key(username)
         if key in self.accounts:
@@ -950,9 +1004,32 @@ class ServerAccountStore:
             return None, "Incorrect password."
         return entry, None
 
+    def create_account(self, username: str, password: str, skin: str) -> str:
+        cleaned = username.strip()
+        if not USERNAME_PATTERN.fullmatch(cleaned):
+            return "Invalid username. Use 1-20 letters, numbers, _ or -; spaces are not allowed."
+        if not self._valid_password(password):
+            return f"Password must be {PASSWORD_MIN_LENGTH}-{PASSWORD_MAX_LENGTH} characters."
+        if skin not in ALLOWED_SKINS:
+            return "Invalid skin. Choose one of: " + ", ".join(sorted(ALLOWED_SKINS))
+        key = self.key(cleaned)
+        if key in self.accounts:
+            return f"An account already exists for {self.accounts[key]['username']}."
+        self.refresh_reserved_names()
+        # Reserved legacy names are intentionally claimable only by the server operator.
+        salt = secrets.token_bytes(16); verifier = self._derive(password, salt, PBKDF2_ITERATIONS)
+        self.accounts[key] = {"username": cleaned, "skin": skin, "salt": salt.hex(), "verifier": verifier.hex(), "iterations": PBKDF2_ITERATIONS}
+        self.save(); self.refresh_reserved_names()
+        return f"Created account {cleaned} with skin {skin}."
+
+    def set_public_signup(self, enabled: bool) -> str:
+        self.public_signup_enabled = bool(enabled)
+        self.save()
+        return "Public account creation enabled." if self.public_signup_enabled else "Public account creation locked; only the server console can create accounts."
+
     def set_password(self, username: str, password: str, skin: str | None = None) -> str:
         cleaned = username.strip()
-        if not USERNAME_PATTERN.fullmatch(cleaned): return "Invalid username."
+        if not USERNAME_PATTERN.fullmatch(cleaned): return "Invalid username. Use 1-20 letters, numbers, _ or -; spaces are not allowed."
         if not self._valid_password(password): return f"Password must be {PASSWORD_MIN_LENGTH}-{PASSWORD_MAX_LENGTH} characters."
         key = self.key(cleaned); previous = self.accounts.get(key, {})
         salt = secrets.token_bytes(16); verifier = self._derive(password, salt, PBKDF2_ITERATIONS)
@@ -975,14 +1052,84 @@ class ServerAccountStore:
 account_store: ServerAccountStore
 
 
+class QuietThreadingHTTPServer(ThreadingHTTPServer):
+    """Threading HTTP server that suppresses expected client disconnect noise.
+
+    Browsers, scanners, mobile radios, and reverse proxies can close a socket after
+    the server has begun sending a static file.  socketserver normally prints a full
+    traceback for those routine disconnects.  Ignore only connection-abort errors;
+    delegate every other exception to the standard handler so real server bugs are
+    still visible.
+    """
+
+    _QUIET_WINERRORS = {64, 995, 10053, 10054, 10058}
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        exc = sys.exc_info()[1]
+        quiet = isinstance(exc, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError))
+        if isinstance(exc, OSError) and getattr(exc, "winerror", None) in self._QUIET_WINERRORS:
+            quiet = True
+        if quiet:
+            if HTTP_VERBOSE_LOGGING:
+                console_log(f"HTTP {client_address[0] if client_address else '?'}: client disconnected during response ({type(exc).__name__})")
+            return
+        super().handle_error(request, client_address)
+
+
 class ClientRequestHandler(SimpleHTTPRequestHandler):
+    """Static MellorCraft HTTP server with quiet-by-default request logging.
+
+    Internet-facing game servers are routinely hit by generic scanners that send
+    malformed HTTP, TLS, RDP, and arbitrary-method probes to every open port.
+    Those probes are irrelevant to MellorCraft and previously flooded the live
+    operator console.  Keep the HTTP service functional but suppress routine
+    request/error noise unless --http-log is explicitly enabled.
+    """
+
+    # Do not advertise the host Python version to random scanners.
+    server_version = "MellorCraftHTTP/1.8"
+    sys_version = ""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, directory=str(SCRIPT_DIR), **kwargs)
 
     def do_GET(self) -> None:  # noqa: N802
+        clean_path = self.path.split("?", 1)[0]
+        if clean_path == "/server-policy.json":
+            payload = json.dumps({
+                "publicSignupEnabled": bool(getattr(account_store, "public_signup_enabled", True)),
+                "usernamePattern": "^[A-Za-z0-9_-]{1,20}$",
+                "usernameHint": "1-20 letters, numbers, _ or -; no spaces",
+            }, separators=(",", ":")).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if self.path in {"/", ""}:
             self.path = f"/{CLIENT_FILENAME}"
+        elif clean_path == "/favicon.ico":
+            # Browsers request this automatically.  A 204 avoids a pointless 404
+            # and keeps the console quiet even in verbose mode.
+            self.send_response(204)
+            self.end_headers()
+            return
         super().do_GET()
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        # Answer generic capability probes without invoking the default 501 path.
+        self.send_response(204)
+        self.send_header("Allow", "GET, HEAD, OPTIONS")
+        self.end_headers()
+
+    def do_POST(self) -> None:  # noqa: N802
+        # MellorCraft's static HTTP endpoint does not accept POST bodies.
+        self.send_response(405)
+        self.send_header("Allow", "GET, HEAD, OPTIONS")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def end_headers(self) -> None:
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
@@ -991,7 +1138,14 @@ class ClientRequestHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        console_log(f"HTTP {self.address_string()}: {fmt % args}")
+        if HTTP_VERBOSE_LOGGING:
+            console_log(f"HTTP {self.address_string()}: {fmt % args}")
+
+    def log_error(self, fmt: str, *args: Any) -> None:
+        # BaseHTTPRequestHandler routes malformed request/version errors here.
+        # Suppress them by default because they are overwhelmingly scanner noise.
+        if HTTP_VERBOSE_LOGGING:
+            console_log(f"HTTP {self.address_string()}: {fmt % args}")
 
 
 world: MellorCraftWorld
@@ -1073,7 +1227,7 @@ async def reset_respawns_for_broken_block(dimension: int, x: int, y: int, z: int
         player.respawnPoint = None; changed = True
         ws = world.connections.get(player.id)
         if ws is not None:
-            await send_json(ws, {"type": "respawn_point_update", "respawnPoint": None, "originalSpawn": player.originalSpawn, "message": "Your respawn block was broken. Respawn reset to your original world spawn."})
+            await send_json(ws, {"type": "respawn_point_update", "respawnPoint": None, "originalSpawn": player.originalSpawn, "message": "Your bed was broken. Respawn reset to your original world spawn."})
     for profile in world.player_profiles.values():
         if respawn_point_matches(profile.get("respawnPoint"), dimension, x, y, z):
             profile["respawnPoint"] = None; changed = True
@@ -1084,8 +1238,9 @@ async def reset_respawns_for_broken_block(dimension: int, x: int, y: int, z: int
 def valid_respawn_block(point: Any) -> dict[str, int] | None:
     if not isinstance(point, dict):
         return None
-    p = {"x": bounded_int(point.get("x"), -2_000_000, 2_000_000), "y": bounded_int(point.get("y"), 0, WORLD_HEIGHT - 1), "z": bounded_int(point.get("z"), -2_000_000, 2_000_000), "dimension": bounded_int(point.get("dimension"), 0, 2)}
-    if world.blocks.get(world.block_key(p["dimension"], p["x"], p["y"], p["z"])) == RESPAWN_BLOCK:
+    p = {"x": bounded_int(point.get("x"), -2_000_000, 2_000_000), "y": bounded_int(point.get("y"), 0, WORLD_HEIGHT - 1), "z": bounded_int(point.get("z"), -2_000_000, 2_000_000), "dimension": bounded_int(point.get("dimension"), 0, 2), "bedId": bounded_int(point.get("bedId"),0,255)}
+    saved=world.blocks.get(world.block_key(p["dimension"], p["x"], p["y"], p["z"]))
+    if saved in BED_BLOCK_IDS or (saved is None and bounded_int(point.get('bedId'),0,255) in BED_BLOCK_IDS):
         return p
     return None
 
@@ -1099,6 +1254,25 @@ def player_respawn_position(player: PlayerState) -> dict[str, float | int]:
     if isinstance(o, dict):
         return {"x": finite_number(o.get("x"), player.x), "y": finite_number(o.get("y"), player.y), "z": finite_number(o.get("z"), player.z), "dimension": bounded_int(o.get("dimension"), 0, 2)}
     return {"x": player.x, "y": player.y, "z": player.z, "dimension": player.dimension}
+
+
+async def spill_furnace_contents(dimension: int, x: int, y: int, z: int) -> None:
+    """Remove a broken furnace's persistent inventory and spill each stack once.
+
+    The dedicated server, not clients, owns the contents while online.
+    """
+    key = f"{dimension},{x},{y},{z}"
+    state = world.furnaces.pop(key, None)
+    if state is None:
+        return
+    world.dirty = True
+    for id_field, count_field in (("ingredientId", "ingredientCount"), ("fuelId", "fuelCount"), ("outputId", "outputCount")):
+        item_id = int(state.get(id_field, 0))
+        amount = int(state.get(count_field, 0))
+        if item_id > 0 and amount > 0:
+            await spawn_dropped_item(item_id, amount, x + .5, y + .65, z + .5, dimension,
+                                     random.uniform(-.7, .7), 1.8, random.uniform(-.7, .7))
+    await broadcast({"type": "furnace_removed", "key": key}, minimum_protocol=6)
 
 
 async def handle_block_change(player_id: str, data: dict[str, Any]) -> None:
@@ -1115,7 +1289,9 @@ async def handle_block_change(player_id: str, data: dict[str, Any]) -> None:
     # corrupting terrain and causing repeated teleport loops. Portal changes are
     # therefore stored only in the explicitly requested dimension.
     world.blocks[key] = block_type
-    if previous_type == RESPAWN_BLOCK and block_type != RESPAWN_BLOCK:
+    if block_type != FURNACE_BLOCK and (previous_type == FURNACE_BLOCK or f"{dimension},{x},{y},{z}" in world.furnaces):
+        await spill_furnace_contents(dimension, x, y, z)
+    if previous_type in BED_BLOCK_IDS and block_type != previous_type:
         await reset_respawns_for_broken_block(dimension, x, y, z)
     await broadcast({
         "type": "block_update", "playerId": player_id, "dimension": dimension,
@@ -1139,7 +1315,9 @@ async def handle_block_batch(player_id: str, data: dict[str, Any]) -> None:
         block_type = bounded_int(entry.get("blockType"), 0, 255)
         key = world.block_key(dimension, x, y, z); previous_type = world.blocks.get(key, AIR_BLOCK)
         world.blocks[key] = block_type
-        if previous_type == RESPAWN_BLOCK and block_type != RESPAWN_BLOCK:
+        if block_type != FURNACE_BLOCK and (previous_type == FURNACE_BLOCK or f"{dimension},{x},{y},{z}" in world.furnaces):
+            await spill_furnace_contents(dimension, x, y, z)
+        if previous_type in BED_BLOCK_IDS and block_type != previous_type:
             await reset_respawns_for_broken_block(dimension, x, y, z)
         sanitized.append({"dimension": dimension, "x": x, "y": y, "z": z, "blockType": block_type})
     if not sanitized:
@@ -1470,7 +1648,10 @@ async def handle_mob_attack_player(player_id: str, data: dict[str, Any]) -> None
     if now < world.mob_attack_cooldowns.get(mob.id, 0.0):
         return
     dx, dy, dz = victim.x - mob.x, victim.y - mob.y, victim.z - mob.z
-    if math.sqrt(dx * dx + dy * dy + dz * dz) > 2.2:
+    # The large Mellorite boss attacks through its wider hitbox; the 2.2
+    # normal-mob sphere previously rejected almost every legitimate hit.
+    reach = 4.0 if mob.typeKey == "MELLOR_BOSS" else 2.2
+    if math.hypot(dx, dz) > reach or abs(dy) > (4.5 if mob.typeKey == "MELLOR_BOSS" else 2.2):
         return
     world.mob_attack_cooldowns[mob.id] = now + 1.25
     await damage_player(victim, float(definition["damage"]) * difficulty_damage_scale(), definition.get("name", mob.typeKey.replace("_", " ").title()), dx, dz)
@@ -1515,6 +1696,14 @@ async def handle_furnace_update(player_id: str, data: dict[str, Any]) -> None:
         return
     key = str(data.get("key", ""))[:96]
     if not re.fullmatch(r"[0-2],-?\d+,-?\d+,-?\d+", key):
+        return
+    # Never recreate a furnace state after its block was removed. The block may
+    # be procedurally present when no explicit world edit exists yet.
+    try:
+        dimension, x, y, z = (int(v) for v in key.split(','))
+    except ValueError:
+        return
+    if world.blocks.get(world.block_key(dimension, x, y, z)) == AIR_BLOCK:
         return
     world.furnaces[key] = sanitize_furnace_state(data.get("state"))
     world.dirty = True
@@ -1671,9 +1860,24 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             player.originalSpawn = {"x": finite_number(point.get("x"), player.x), "y": finite_number(point.get("y"), player.y), "z": finite_number(point.get("z"), player.z), "dimension": bounded_int(point.get("dimension"), 0, 2)}
             world.dirty = True
     elif message_type == "set_respawn_point":
-        point = valid_respawn_block(data.get("point"))
+        requested=data.get('point')
+        if isinstance(requested,dict):
+            d=bounded_int(requested.get('dimension'),0,2)
+            x=bounded_int(requested.get('x'),-2_000_000,2_000_000)
+            y=bounded_int(requested.get('y'),0,WORLD_HEIGHT-1)
+            z=bounded_int(requested.get('z'),-2_000_000,2_000_000)
+            requestedId=bounded_int(requested.get('bedId'),0,255)
+            key=world.block_key(d,x,y,z)
+            existing=world.blocks.get(key)
+            nearby=d==player.dimension and math.dist((player.x,player.y,player.z),(x+.5,y+.5,z+.5))<=7
+            if nearby and existing is None and requestedId in BED_BLOCK_IDS:
+                requested=dict(requested,bedId=requestedId)
+            elif existing in BED_BLOCK_IDS:
+                requested=dict(requested,bedId=existing)
+            else: requested=None
+        point = valid_respawn_block(requested) if requested is not None else None
         if point is None:
-            await send_json(world.connections[player_id], {"type": "error", "message": "That respawn block is no longer present."})
+            await send_json(world.connections[player_id], {"type": "error", "message": "That bed is no longer present."})
         else:
             player.respawnPoint = point; world.dirty = True
             await send_json(world.connections[player_id], {"type": "respawn_point_update", "respawnPoint": point, "originalSpawn": player.originalSpawn})
@@ -1983,8 +2187,8 @@ async def save_loop() -> None:
                 console_log(f"Could not save world: {exc}")
 
 
-def start_http_server() -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), ClientRequestHandler)
+def start_http_server() -> QuietThreadingHTTPServer:
+    server = QuietThreadingHTTPServer(("0.0.0.0", HTTP_PORT), ClientRequestHandler)
     thread = threading.Thread(target=server.serve_forever, name="MellorCraftHTTP", daemon=True)
     thread.start()
     return server
@@ -2055,8 +2259,9 @@ async def teleport_player_to_position(player: PlayerState, x: float, y: float, z
     player.y = max(-100.0, min(1000.0, y))
     player.z = max(-2_000_000.0, min(2_000_000.0, z))
     player.dimension = max(0, min(2, int(dimension)))
-    world.teleport_locks[player.id] = time.monotonic() + 0.75
-    world.damage_locks[player.id] = max(world.damage_locks.get(player.id, 0.0), time.monotonic() + 0.5)
+    world.teleport_locks[player.id] = time.monotonic() + 1.5
+    # Remote terrain can require multiple server/client chunk batches to stream.
+    world.damage_locks[player.id] = max(world.damage_locks.get(player.id, 0.0), time.monotonic() + 4.0)
     world.dirty = True
     websocket = world.connections.get(player.id)
     message = f"Teleported to {description}."
@@ -2100,7 +2305,8 @@ async def process_teleport_command(args: list[str]) -> str:
             return "Usage: /tp <player> <x> <y> <z> <dimension 1|2|3>"
         internal_dimension = command_dimension - 1
         dim_name = DIMENSION_COMMAND_NAMES[internal_dimension]
-        result = await teleport_player_to_position(source, x, y, z, internal_dimension, f"{x:g}, {y:g}, {z:g} in {dim_name}")
+        actual_y = y + 48 if internal_dimension == 0 else y
+        result = await teleport_player_to_position(source, x, actual_y, z, internal_dimension, f"{x:g}, {y:g}, {z:g} in {dim_name}")
         await broadcast({"type": "system", "message": f"{source.username} was teleported to {x:g}, {y:g}, {z:g} ({dim_name})."})
         return result
 
@@ -2162,8 +2368,10 @@ COMMAND_HELP: tuple[tuple[str, str], ...] = (
     ("/gamemode <player> <survival|creative|spectator>", "Change a connected player's gamemode."),
     ("/tp <player> <targetPlayer>", "Teleport one connected player to another."),
     ("/tp <player> <x> <y> <z> <dimension 1|2|3>", "Teleport a player to coordinates."),
-    ("/account list", "List registered server accounts."),
-    ("/account setpassword <username> <password>", "Create/reset an account password; use quotes around names/passwords containing spaces."),
+    ("/account list", "List registered server accounts and public-signup status."),
+    ("/account create <username> <password> <skin>", "Create a server account. Skins: steve, alex, mellorite, ember, frost, forest."),
+    ("/account signup <on|off>", "Allow or lock public account creation."),
+    ("/account setpassword <username> <password>", "Reset an account password."),
     ("/account delete <username>", "Delete a server account login. World player data is not deleted."),
 )
 
@@ -2175,7 +2383,7 @@ COMMAND_USAGE = {
     "/gamemode": "Usage: /gamemode <player> <survival|creative|spectator>",
     "/gm": "Usage: /gamemode <player> <survival|creative|spectator>",
     "/tp": "Usage: /tp <player> <targetPlayer> OR /tp <player> <x> <y> <z> <dimension 1|2|3>",
-    "/account": "Usage: /account <list|setpassword|delete> ...",
+    "/account": "Usage: /account <list|create|signup|setpassword|delete> ...",
 }
 
 
@@ -2188,7 +2396,19 @@ async def process_account_command(args: list[str]) -> str:
         return COMMAND_USAGE["/account"]
     sub = args[0].lower()
     if sub == "list":
-        return account_store.list_text() if len(args) == 1 else "Usage: /account list"
+        if len(args) != 1:
+            return "Usage: /account list"
+        status = "enabled" if account_store.public_signup_enabled else "locked"
+        return account_store.list_text() + f"\nPublic account creation: {status}"
+    if sub == "create":
+        if len(args) != 4:
+            return "Usage: /account create <username> <password> <skin>"
+        return account_store.create_account(args[1], args[2], args[3].lower())
+    if sub == "signup":
+        if len(args) != 2 or args[1].lower() not in {"on", "off", "true", "false", "enable", "disable", "enabled", "disabled", "1", "0"}:
+            return "Usage: /account signup <on|off>"
+        enabled = args[1].lower() in {"on", "true", "enable", "enabled", "1"}
+        return account_store.set_public_signup(enabled)
     if sub == "setpassword":
         if len(args) != 3:
             return "Usage: /account setpassword <username> <password>"
@@ -2311,7 +2531,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.8.0 World Selection")
+    print("\nMellorCraft v1.8.1 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -2402,7 +2622,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.8.0 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.8.1 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -2411,12 +2631,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--list-worlds", action="store_true", help="List named world saves and exit.")
     parser.add_argument("--open-browser", action="store_true", help="Open the local game page after startup.")
     parser.add_argument("--no-menu", action="store_true", help="Skip the interactive world selection menu.")
+    parser.add_argument("--http-log", action="store_true", help="Show verbose HTTP request/error logs (normally suppressed to hide Internet scanner noise).")
+    parser.add_argument("--lock-account-creation", action="store_true", help="Disable public Sign Up; accounts must be created from the server console.")
     return parser.parse_args()
 
 
 def main() -> None:
-    global world, account_store
+    global world, account_store, HTTP_VERBOSE_LOGGING
     args = parse_args()
+    HTTP_VERBOSE_LOGGING = bool(args.http_log)
     client_path = SCRIPT_DIR / CLIENT_FILENAME
     if not client_path.exists():
         raise SystemExit(f"Missing client file: {client_path}")
@@ -2424,10 +2647,12 @@ def main() -> None:
     world_name, save_path, seed, open_game = resolve_world(args)
     world = MellorCraftWorld(save_path, requested_seed=seed, world_name=world_name)
     account_store = ServerAccountStore(SCRIPT_DIR / ACCOUNTS_FILENAME, SCRIPT_DIR / WORLDS_DIRNAME)
+    if args.lock_account_creation and account_store.public_signup_enabled:
+        account_store.set_public_signup(False)
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.8.0 multiplayer server is running")
+    print("\nMellorCraft v1.8.1 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")
@@ -2437,7 +2662,9 @@ def main() -> None:
     print(f"  Save file:     {save_path.relative_to(SCRIPT_DIR)}")
     print("Join this same world on the host PC using the Host PC address above.")
     print("Console: type /help to list all commands. Incoming logs will preserve what you are typing.")
+    print(f"  HTTP logging:  {'verbose' if HTTP_VERBOSE_LOGGING else 'quiet (use --http-log for request logs)'}")
     print(f"  Accounts:      {(SCRIPT_DIR / ACCOUNTS_FILENAME).relative_to(SCRIPT_DIR)}")
+    print(f"  Public signup: {'enabled' if account_store.public_signup_enabled else 'LOCKED (console-created accounts only)'}")
     print("Type /stop to save and shut down cleanly, or press Ctrl+C.\n")
     if open_game:
         try:
