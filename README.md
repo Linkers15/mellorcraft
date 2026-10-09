@@ -1,3 +1,35 @@
+MellorCraft v1.8.2 — Grass Growth, Universal Pause Settings, Relay Identities + Host Console
+=======================================================================================
+
+Changes from the attached v1.8.1 release:
+
+GRASS AND DIRT
+- Grass blocks with a block directly above them slowly change to dirt. Any non-air block directly above counts as cover.
+- Exposed dirt can slowly become grass if a neighboring horizontal block is grass at the same elevation.
+- Random ticks run only in actively loaded areas around players, with extra attention to blocks players recently placed/removed. Unloaded areas do not advance until loaded.
+- Conversion uses normal block edits: terrain remesh, world autosave, shared relay sync and dedicated-server block synchronization all receive the changes.
+- Dedicated servers rely on connected clients to produce these random soil ticks, since dedicated server stores block edits and clients generate procedural terrain. Ticks occur near active players, not in empty chunks.
+
+SETTINGS
+- Look sensitivity, render distance, master volume, FOV, and resolution are all editable in the in-game pause menu on desktop and mobile.
+- Resolution now scales the WebGL framebuffer on both desktop and mobile (40–100%), and persists locally as `mellorcraftMobileResolution`; mobile adaptive scaling remains in effect below the selected cap.
+- Texture and shader controls remain accessible when paused.
+
+RELAY IDENTITY / AUTHORIZATION
+- Relay guests explicitly enter a username and pick one of six skins before joining. Usernames are 1–20 A–Z, 0–9, underscore or hyphen; names already in use are rejected case-insensitively.
+- No relay password or account database is created. Relay guests enter a fresh session; for safety, older profile inventories and permanent operator privileges cannot be claimed merely by reusing an unauthenticated username. Dedicated-server login/password behavior is unchanged.
+- The browser world host's chat supports relay console-only commands: /help, /save, /stop, /seed, /list, /ops, /op, /deop, /ban, /kill, /mobs, /gamerule, /gamemode <player> <mode>, and /tp <player> <target> or <x> <y> <z> <dimension 1-3>.
+- /stop saves and closes only the host's shared world, without stopping the relay process (which may be serving other worlds). /account intentionally reports that password-free relay sessions have no accounts.
+- Console-only management actions are authorized against the actual host connection, not against a username. Guests cannot spoof host commands or automatically get operator rights by using old saved names. Operators explicitly designated by the host may still use the pre-existing /ban and /kill commands.
+- Dedicated server remains on protocol 16; relay protocol stays 1, with identity validation on relay join. Use the updated client together with the updated relay for consistent behavior.
+
+TESTING
+- Run `python mellorcraft_relay.py --port 8000` for hosted browser worlds, OR `python mellorcraft_server.py` for a dedicated server.
+- Open `index.html` using the same web server/static host as before, or open the standalone `mellorcraft.html` directly.
+- Back up worlds and other files before upgrading; v1.8.2 retains v1.8.1 format 12 and world-height layout.
+
+===============================================================================
+
 MellorCraft v1.8.1 — Terrain fidelity and colored beds correction
 =================================================================
 

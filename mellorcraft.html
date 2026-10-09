@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MellorCraft v1.8.1</title>
+    <title>MellorCraft v1.8.2</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Courier New', monospace; background: #000; }
@@ -569,7 +569,7 @@
         /* Mobile UI copied from the supplied MellorCraft mobile edition. */
         #mobileControls { display: none; }
         #chatInputBox { display: contents; }
-        #chatSendBtn, .mobile-menu-close, .mobile-only-setting { display: none; }
+        #chatSendBtn, .mobile-menu-close { display: none; }
 
         html.mobile-mode, html.mobile-mode body {
             /* Keep the page itself fixed while allowing menu scroll containers to own pan gestures. */
@@ -759,7 +759,7 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2 id="versionSubtitle">v1.8.1</h2>
+        <h2 id="versionSubtitle">v1.8.2</h2>
         <div id="startupPage" class="main-menu-panel start-page active">
             <p class="startup-copy">Press Start to enable the soundtrack and open the main menu.</p>
             <button class="menuBtn greenBtn" id="startClientBtn">Start MellorCraft</button>
@@ -860,6 +860,14 @@
                     <input id="relayJoinPort" type="number" min="1" max="65535" value="8000" placeholder="Port" aria-label="Relay port" inputmode="numeric">
                     <button class="menuBtn blueBtn full" id="refreshRelayWorldsBtn" style="margin:0;">Find Worlds on Relay</button>
                     <select class="full" id="relayWorldSelect"><option value="">Connect to a relay first</option></select>
+                    <label class="full" for="relayUsernameInput">Choose a relay username (no account or password)</label>
+                    <input class="full" id="relayUsernameInput" maxlength="20" autocomplete="off" placeholder="1–20 letters, numbers, _ or -" spellcheck="false">
+                    <label class="full" for="relaySkinInput">Choose your skin</label>
+                    <select class="full" id="relaySkinInput" aria-label="Relay player skin">
+                        <option value="">Select a skin...</option>
+                        <option value="steve">Steve (Blue)</option><option value="alex">Alex (Green)</option><option value="mellorite">Mellorite (Purple)</option>
+                        <option value="ember">Ember (Red)</option><option value="frost">Frost (Light Blue)</option><option value="forest">Forest (Dark Green)</option>
+                    </select>
                     <button class="menuBtn greenBtn full" id="joinRelayWorldBtn" style="margin:0;">Join Selected Relay World</button>
                 </div>
                 <div id="relayJoinStatus" class="lan-status">Default relay: 192.168.0.1:8000</div>
@@ -912,7 +920,7 @@
             <div class="setting-group"><label>Master Volume: <span id="menuVolVal">45</span>%</label><input type="range" id="menuSetVol" min="0" max="100" value="45"></div>
             <div class="setting-group"><label>Field of View: <span id="menuFovVal">60</span></label><input type="range" id="menuSetFov" min="30" max="110" value="60"></div>
             <div class="setting-group"><label>Look Sensitivity: <span id="menuSensVal">100</span>%</label><input type="range" id="menuSetSens" min="10" max="300" value="100"></div>
-            <div class="setting-group"><label class="shader-toggle-row"><span>Block &amp; Mob Textures</span><input type="checkbox" id="menuSetTextures" checked></label><div class="setting-help">v1.8.1 pixel textures. Uses one shared GPU atlas and can be disabled for the lightest fallback renderer.</div></div>
+            <div class="setting-group"><label class="shader-toggle-row"><span>Block &amp; Mob Textures</span><input type="checkbox" id="menuSetTextures" checked></label><div class="setting-help">v1.8.2 pixel textures. Uses one shared GPU atlas and can be disabled for the lightest fallback renderer.</div></div>
             
           </section><button class="menuBtn blueBtn backBtn" data-start-page="mainMenuPage">Back</button>
         </div>
@@ -991,11 +999,11 @@
                 <div class="shader-setting-row"><label>Cloud Detail: <span id="cloudDetailVal">2</span></label><input type="range" id="setCloudDetail" min="1" max="3" step="1" value="2"></div>
             </div>
         </div>
-        <div class="setting-group mobile-only-setting">
+        <div class="setting-group">
             <label>Look Sensitivity: <span id="sensVal">100</span>%</label>
             <input type="range" id="setSens" min="10" max="300" value="100">
         </div>
-        <div class="setting-group mobile-only-setting">
+        <div class="setting-group">
             <label>Resolution: <span id="resolutionVal">70</span>%</label>
             <input type="range" id="setResolution" min="40" max="100" step="5" value="70">
         </div>
@@ -1161,7 +1169,7 @@
         // Game state
         let WORLD_SEED = 0;
         let gameStarted = false;
-        // v1.8.1 intentionally uses the exact mobile detection that shipped in v1.7.1.
+        // v1.8.2 intentionally uses the exact mobile detection that shipped in v1.7.1.
         // That path was proven on iPhone/iPad and also controls all of the existing mobile UI/performance branches.
         const mobileUserAgent = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile|Silk|Kindle/i.test(navigator.userAgent);
         const iPadDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
@@ -1181,7 +1189,7 @@
         ));
         document.documentElement.classList.toggle('mobile-mode', isMobilePlaying);
         if (isMobilePlaying) {
-            document.getElementById('versionSubtitle').textContent = 'v1.8.1';
+            document.getElementById('versionSubtitle').textContent = 'v1.8.2';
             document.getElementById('positionLabel').textContent = 'Pos:';
             document.getElementById('gamemodeLabel').textContent = 'Mode:';
             const mobileDefaultDistance = isIOSDevice ? 2 : 4;
@@ -1235,7 +1243,7 @@
         let crouchToggleActive=false;
         let mobileCrouchHeld=false;
         let mobileSprintHeld=false,lastForwardTap=0;
-        let texturesEnabled = safeStorageGet('mellorcraftTextures') !== '0'; // v1.8.1: 16x16 block + mob textures default on.
+        let texturesEnabled = safeStorageGet('mellorcraftTextures') !== '0'; // v1.8.2: 16x16 block + mob textures default on.
         let liteShaderEnabled = safeStorageGet('mellorcraftLiteShader') !== null ? safeStorageGet('mellorcraftLiteShader') === '1' : !isMobilePlaying;
         let shaderShadowStrength = loadShaderNumber('mellorcraftShaderShadowV2', 105, 0, 125) / 100;
         let shaderSunrayStrength = loadShaderNumber('mellorcraftShaderSunrays', 125, 0, 200) / 100;
@@ -1859,6 +1867,9 @@
         function integratedProcessServerCommand(actor,command) {
             if(!actor || !actor.isOperator){integratedSend(actor?.id,{type:'error',message:'Only server operators can run server-management commands.'});return;}
             const parts=String(command||'').trim().split(/\s+/),name=(parts.shift()||'').toLowerCase(),arg=parts.join(' ');
+            if(actor.id!==localClientId && !['/ban','/kill'].includes(name)){
+                integratedSend(actor.id,{type:'error',message:'This console command is reserved for the relay world host.'});return;
+            }
             if(name==='/ban')return integratedBanUsername(arg,actor.id);
             if(name==='/kill')return integratedKillUsername(arg,actor.id);
             if(actor.id!==localClientId){integratedSend(actor.id,{type:'error',message:'Only the LAN world host can run this server-management command.'});return;}
@@ -1868,7 +1879,56 @@
             if(name==='/list'){const names=[...integratedPlayers.values()].map(p=>`${p.username}${p.isOperator?' [OP]':''}`);integratedSend(actor.id,{type:'system',message:`Players (${names.length}): ${names.join(', ')}`});return;}
             if(name==='/mobs'){const counts=[0,1,2].map(dim=>mobs.filter(m=>m.dimension===dim).length);integratedSend(actor.id,{type:'system',message:`Mobs: overworld=${counts[0]}, alternate=${counts[1]}, boss=${counts[2]}`});return;}
             if(name==='/gamerule')return integratedGameRuleCommand(actor,parts);
-            integratedSend(actor.id,{type:'system',message:'Server commands: /ban <username>, /kill <username>, /op <username>, /deop <username>, /ops, /list, /mobs, /gamerule [rule] [value]'});
+            if(name==='/help'){
+                integratedSend(actor.id,{type:'system',message:'Relay console: /help, /save, /stop, /list, /ops, /op, /deop, /ban, /kill, /mobs, /seed, /gamerule [rule] [value], /gamemode <player> <mode>, /tp <player> <target> or /tp <player> <x> <y> <z> <dimension 1-3>. No /account: relays have no accounts.'});return;
+            }
+            if(name==='/account'){
+                integratedSend(actor.id,{type:'system',message:'Relay worlds use temporary usernames/skins without accounts or passwords. /account applies only to dedicated servers.'});return;
+            }
+            if(name==='/seed'){
+                integratedSend(actor.id,{type:'system',message:`World seed: ${WORLD_SEED}`});return;
+            }
+            if(name==='/save'){
+                const saved=saveSingleplayerWorld(true);
+                integratedSend(actor.id,{type:saved?'system':'error',message:saved?'Browser world saved.':'Could not save browser world.'});return;
+            }
+            if(name==='/stop'){
+                if(!saveSingleplayerWorld(true)){
+                    integratedSend(actor.id,{type:'error',message:'Could not save world. Shared world remains open.'});return;
+                }
+                integratedBroadcast({type:'system',message:'Host saved and closed this shared world.'});
+                if(singleplayerNetworkMode==='lan-host')closeWorldToLan();
+                integratedSend(actor.id,{type:'system',message:'Shared world closed; relay service is still running.'});return;
+            }
+            if(name==='/gamemode'||name==='/gm'){
+                if(parts.length!==2||!['survival','creative','spectator'].includes(parts[1].toLowerCase())){
+                    integratedSend(actor.id,{type:'error',message:'Usage: /gamemode <player> <survival|creative|spectator>'});return;
+                }
+                const target=integratedFindPlayerByUsername(parts[0]);
+                if(!target){integratedSend(actor.id,{type:'error',message:`Player not found: ${parts[0]}`});return;}
+                target.gamemode=parts[1].toLowerCase();if(target.gamemode!=='survival')target.health=10;
+                integratedSend(target.id,{type:'gamemode_update',gamemode:target.gamemode});
+                integratedSend(actor.id,{type:'system',message:`Changed ${target.username} to ${target.gamemode}.`});singleplayerDirty=true;return;
+            }
+            if(name==='/tp'){
+                const source=integratedFindPlayerByUsername(parts[0]);
+                if(!source){integratedSend(actor.id,{type:'error',message:`Player not found: ${parts[0]||''}`});return;}
+                let target=null,description='';
+                if(parts.length===2){
+                    const destination=integratedFindPlayerByUsername(parts[1]);
+                    if(destination){target={x:destination.x,y:destination.y,z:destination.z,dimension:destination.dimension};description=destination.username;}
+                }else if(parts.length===5){
+                    const numbers=parts.slice(1,4).map(Number),dim=Number(parts[4]);
+                    if(numbers.every(Number.isFinite)&&[1,2,3].includes(dim)){
+                        target={x:numbers[0],y:voxelYFromWorld(numbers[1],dim-1),z:numbers[2],dimension:dim-1};
+                        description=`${parts.slice(1).join(' ')}`;
+                    }
+                }
+                if(!target){integratedSend(actor.id,{type:'error',message:'Usage: /tp <player> <targetPlayer> or /tp <player> <x> <y> <z> <dimension 1|2|3>'});return;}
+                Object.assign(source,target);integratedSend(source.id,{type:'teleport_position',position:target,message:`Teleported to ${description}.`});
+                integratedRecomputeMobHosts();integratedSend(actor.id,{type:'system',message:`Teleported ${source.username} to ${description}.`});singleplayerDirty=true;return;
+            }
+            integratedSend(actor.id,{type:'error',message:'Unknown relay console command. Type /help for available commands.'});
         }
 
         function integratedServerReceive(clientId,payload) {
@@ -2051,9 +2111,16 @@
                 relaySend({type:'host_disconnect',guestId:info.guestId,reason:'Banned from this world'});
                 return;
             }
-            const username=integratedUniqueUsername(requested);
-            const profile=singleplayerLanProfiles[String(username).toLowerCase()];
-            const isOp=singleplayerOperators.has(String(username).toLowerCase());
+            const username=requested;
+            if(integratedFindPlayerByUsername(username)){
+                integratedSend(info.guestId,{type:'error',message:'That username is already in use.'});
+                relaySend({type:'host_disconnect',guestId:info.guestId,reason:'Username is already in use'});
+                return;
+            }
+            // A relay has no authenticated accounts: never load another user's inventory
+            // or revive saved administrator privileges just by typing that username.
+            const profile=null;
+            const isOp=false;
             const state={id:info.guestId,username,skin:PLAYER_SKINS[info.skin]?info.skin:'steve',x:0.5,y:50,z:0.5,yaw:0,pitch:0,dimension:0,health:10,hunger:20,gamemode:'survival',heldItem:0,selectedSlot:0,armorId:0,inventory:Array.from({length:30},()=>({id:0,count:0})),originalSpawn:null,respawnPoint:null,isOperator:isOp,deviceClass:info.deviceClass==='mobile'?'mobile':'desktop'};
             if(profile)Object.assign(state,JSON.parse(JSON.stringify(profile)),{id:info.guestId,username,isOperator:isOp,deviceClass:state.deviceClass});
             integratedPlayers.set(info.guestId,state); integratedRecomputeMobHosts();
@@ -2064,7 +2131,7 @@
         }
 
         function integratedGuestLeft(guestId) {
-            const state=integratedPlayers.get(guestId); if(!state)return; integratedRememberProfile(state); integratedPlayers.delete(guestId); integratedBroadcast({type:'player_left',playerId:guestId}); integratedRecomputeMobHosts();
+            const state=integratedPlayers.get(guestId); if(!state)return; integratedPlayers.delete(guestId); integratedBroadcast({type:'player_left',playerId:guestId}); integratedRecomputeMobHosts();
         }
 
         function integratedTick(dt) {
@@ -2125,7 +2192,7 @@
             safeStorageSet('mellorcraftRelayPort',String(address.port));
             relayStatus('relayHostStatus',`Connecting to ${address.host}:${address.port}...`);
             const ws=new WebSocket(address.url); relaySocket=ws;
-            ws.addEventListener('open',()=>{ if(relaySocket!==ws)return; relaySend({type:'host_world',worldName:singleplayerWorldName,seed:WORLD_SEED,protocol:1}); });
+            ws.addEventListener('open',()=>{ if(relaySocket!==ws)return; relaySend({type:'host_world',worldName:singleplayerWorldName,seed:WORLD_SEED,username:localUsername,protocol:1}); });
             ws.addEventListener('message',event=>{
                 let msg;try{msg=JSON.parse(event.data)}catch(_){return;}
                 if(msg.type==='hosted'){relayWorldId=msg.worldId||'';relayHostConnected=true;singleplayerNetworkMode='lan-host';setConnectionBadge(true);document.getElementById('openLanBtn').style.display='none';document.getElementById('closeLanBtn').style.display='block';relayStatus('relayHostStatus',`Open to LAN as “${singleplayerWorldName}” on ${address.host}:${address.port}.`);return;}
@@ -2159,7 +2226,11 @@
                 let msg;try{msg=JSON.parse(event.data)}catch(_){return;}
                 if(msg.type==='worlds'){
                     const select=document.getElementById('relayWorldSelect'), worlds=Array.isArray(msg.worlds)?msg.worlds:[];
-                    select.innerHTML=worlds.length?worlds.map(w=>`<option value="${String(w.worldId).replace(/"/g,'&quot;')}">${w.worldName} — ${w.players||1} player${(w.players||1)===1?'':'s'}</option>`).join(''):'<option value="">No open worlds on this relay</option>';
+                    // World names come from other relay clients; create text nodes,
+                    // not innerHTML, so untrusted names cannot inject markup.
+                    select.replaceChildren(...(worlds.length
+                        ? worlds.map(w=>new Option(`${String(w.worldName||'World')} — ${w.players||1} player${(w.players||1)===1?'':'s'}`,String(w.worldId||'')))
+                        : [new Option('No open worlds on this relay','')]));
                     relayStatus('relayJoinStatus',worlds.length?`Found ${worlds.length} open world${worlds.length===1?'':'s'}.`:'No worlds are currently open on this relay.');
                     if(joinAfter&&worlds.length)joinSelectedRelayWorld(); return;
                 }
@@ -2175,10 +2246,15 @@
         function joinSelectedRelayWorld() {
             const worldId=document.getElementById('relayWorldSelect').value; if(!worldId){relayStatus('relayJoinStatus','Select an open world first.',true);return;}
             if(!relaySocket||relaySocket.readyState!==WebSocket.OPEN){connectRelayForWorldList(true);return;}
-            const identity=selectedSingleplayerIdentity(false);
-            if(!identity){relayStatus('relayJoinStatus','Use 1-20 letters, numbers, spaces, _ or -.',true);return;}
+            const username=String(document.getElementById('relayUsernameInput').value||'').trim();
+            const skin=String(document.getElementById('relaySkinInput').value||'');
+            if(!/^[A-Za-z0-9_-]{1,20}$/.test(username)){
+                relayStatus('relayJoinStatus','Choose a unique username (1–20 letters, digits, _ or -; no spaces).',true);return;
+            }
+            if(!PLAYER_SKINS[skin]){relayStatus('relayJoinStatus','Choose a skin before joining.',true);return;}
+            const identity={username,skin};
             if(socket){try{socket.close();}catch(_){}socket=null;}
-            localUsername=identity.username;localSkin=identity.skin;applySingleplayerIdentity(identity,true);singleplayerNetworkMode='lan-guest';singleplayerWorldName='';activeJoinProtocol=5;localIsOperator=false;
+            localUsername=identity.username;localSkin=identity.skin;singleplayerNetworkMode='lan-guest';singleplayerWorldName='';activeJoinProtocol=5;localIsOperator=false;
             relaySend({type:'join_world',worldId,username:localUsername,skin:localSkin,deviceClass:isMobilePlaying?'mobile':'desktop'});
             relayStatus('relayJoinStatus','Joining selected world...');
         }
@@ -2349,7 +2425,7 @@
                 const authoritativeSkin=String(data.skin||(data.playerState&&data.playerState.skin)||'');
                 if(PLAYER_SKINS[authoritativeSkin])localSkin=authoritativeSkin;
                 WORLD_SEED = Number(data.seed) || 0;
-                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.8.1 - ${data.worldName}`; }
+                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.8.2 - ${data.worldName}`; }
                 worldTime = Number(data.worldTime) || 0.25;
                 if(Number.isFinite(data.weatherSeed))weatherSeed=data.weatherSeed|0;if(Number.isFinite(data.weatherPhase))weatherPhase=Number(data.weatherPhase);
                 applyGameRules(data.gameRules);
@@ -2633,7 +2709,7 @@
                 setServerAuthStatus(mode==='signup'?'Creating account and loading world...':'Signing in and loading world...');
                 joinTimeoutId=setTimeout(()=>{
                     if(!gameStarted&&socket&&socket.readyState===WebSocket.OPEN){
-                        lastJoinError='The server accepted the connection but did not finish authentication/world loading. Make sure the matching v1.8.1 protocol 16 server is running.';
+                        lastJoinError='The server accepted the connection but did not finish authentication/world loading. Make sure the matching v1.8.2 protocol 16 server is running.';
                         try{socket.close(4002,'Authentication/world load timeout');}catch(_){}
                     }
                 },12000);
@@ -2780,11 +2856,12 @@
             const operators=Array.isArray(data.operators)?data.operators.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
             const bannedPlayers=Array.isArray(data.bannedPlayers)?data.bannedPlayers.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
             const seed=Number(data.seed)||0;
-            return {format:'MellorCraftWorld',formatVersion:12,version:'1.8.1',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],bannedPlayers:[...new Set(bannedPlayers)],playerProfiles:profiles,mobs:migratedMobs,items:migratedItems,furnaces:migratedFurnaces,updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
+            return {format:'MellorCraftWorld',formatVersion:12,version:'1.8.2',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],bannedPlayers:[...new Set(bannedPlayers)],playerProfiles:profiles,mobs:migratedMobs,items:migratedItems,furnaces:migratedFurnaces,updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
         }
         function canonicalPlayerProfilesForSave() {
             const profiles=JSON.parse(JSON.stringify(singleplayerLanProfiles||{}));
-            for(const state of integratedPlayers.values())if(state.id!==localClientId&&state.username)profiles[String(state.username).toLowerCase()]={username:state.username,skin:state.skin,x:state.x,y:state.y,z:state.z,yaw:state.yaw,pitch:state.pitch,dimension:state.dimension,health:state.health,hunger:Number.isFinite(Number(state.hunger))?Number(state.hunger):20,gamemode:state.gamemode,heldItem:state.heldItem,selectedSlot:state.selectedSlot,armorId:Number(state.armorId)||0,inventory:Array.isArray(state.inventory)?state.inventory.map(v=>({...v})):[],originalSpawn:state.originalSpawn?{...state.originalSpawn}:null,respawnPoint:state.respawnPoint?{...state.respawnPoint}:null};
+            // Guest relay sessions are ephemeral and not password-authenticated.
+            // Do not record their inventories as username-claimable profiles.
             const hostKey=String(localUsername||'Player').toLowerCase();
             profiles[hostKey]=currentPlayerSnapshot();
             return profiles;
@@ -2792,7 +2869,7 @@
         function saveSingleplayerWorld(force=false) {
             if (!singleplayerWorldName || !gameStarted || (singleplayerNetworkMode!=='local' && singleplayerNetworkMode!=='lan-host')) return false;
             if (!force && !singleplayerDirty) return true;
-            const data={format:'MellorCraftWorld',formatVersion:12,version:'1.8.1',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),bannedPlayers:[...singleplayerBannedPlayers].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),updatedAt:Date.now()};
+            const data={format:'MellorCraftWorld',formatVersion:12,version:'1.8.2',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),bannedPlayers:[...singleplayerBannedPlayers].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),updatedAt:Date.now()};
             try {localStorage.setItem(singleplayerStorageKey(singleplayerWorldName),JSON.stringify(data));singleplayerDirty=false;listSingleplayerWorlds();return true;}catch(error){addChatMessage(`Autosave failed: ${error.message}`,'chatError');return false;}
         }
         function launchSingleplayerWorld(rawData) {
@@ -2811,7 +2888,7 @@
             singleplayerLanProfiles={};for(const [key,value] of Object.entries(profiles)){const profileKey=String(key).toLowerCase();if(profileKey!==hostKey&&value&&typeof value==='object')singleplayerLanProfiles[profileKey]={...value};}
             pendingBlockSnapshot=snapshotFromBlocksDict(data.blocks);pendingMobSnapshot=(Array.isArray(data.mobs)?data.mobs:[]).filter(m=>!(bossDefeated&&m&&m.typeKey==='MELLOR_BOSS'));pendingItemSnapshot=Array.isArray(data.items)?data.items:[];furnaceStates.clear();for(const [k,v] of Object.entries(data.furnaces||{}))furnaceStates.set(k,normalizeFurnaceState(v));
             playerOriginalSpawn=pendingPlayerState?.originalSpawn?{...pendingPlayerState.originalSpawn}:null;playerRespawnPoint=normalizePlayerSpawnPoint(pendingPlayerState?.respawnPoint);
-            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.8.1 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
+            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.8.2 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
         }
         let gameConfirmResolver = null;
         function showGameConfirm(message, options={}) {
@@ -3771,7 +3848,7 @@
         };
         const MOB_TYPE_KEY_BY_OBJECT = new Map(Object.entries(MOB_TYPES).map(([key, value]) => [value, key]));
 
-        // v1.8.1 shared procedural texture atlas. Every block face is authored as a
+        // v1.8.2 shared procedural texture atlas. Every block face is authored as a
         // logical 16x16 texture. Each logical texel is stored as a 2x2 physical texel
         // in the atlas for crisp nearest-neighbor sampling, while all blocks/mobs still
         // share one texture object and the existing batched geometry/draw calls.
@@ -3852,16 +3929,16 @@
         const DEFAULT_MOBILE_RESOLUTION = LOW_END_MOBILE ? (isIOSDevice ? 55 : 60) : (isIOSDevice ? 62 : 78);
         const savedMobileResolutionRaw = safeStorageGet('mellorcraftMobileResolution');
         const savedMobileResolution = Number(savedMobileResolutionRaw);
-        let mobileResolutionPercent = isMobilePlaying && savedMobileResolutionRaw !== null && savedMobileResolutionRaw !== '' && Number.isFinite(savedMobileResolution)
+        let mobileResolutionPercent = savedMobileResolutionRaw !== null && savedMobileResolutionRaw !== '' && Number.isFinite(savedMobileResolution)
             ? Math.max(40, Math.min(100, Math.round(savedMobileResolution / 5) * 5))
-            : DEFAULT_MOBILE_RESOLUTION;
-        let MOBILE_RENDER_SCALE = isMobilePlaying ? mobileResolutionPercent / 100 : 1.0;
+            : (isMobilePlaying ? DEFAULT_MOBILE_RESOLUTION : 100);
+        let MOBILE_RENDER_SCALE = mobileResolutionPercent / 100;
         // Dynamic scale only changes the internal framebuffer. UI, textures, weather,
         // entities and gameplay remain enabled. It recovers slowly when headroom returns.
         let mobileAdaptiveScale = 1.0;
         let mobilePerfWindowTime = 0, mobilePerfWindowFrames = 0, mobileLastScaleChange = 0;
         function effectiveMobileRenderScale(){
-            return isMobilePlaying ? Math.max(0.40, Math.min(1.0, MOBILE_RENDER_SCALE * mobileAdaptiveScale)) : 1.0;
+            return Math.max(0.40, Math.min(1.0, MOBILE_RENDER_SCALE * (isMobilePlaying ? mobileAdaptiveScale : 1.0)));
         }
         function updateMobilePerformanceGovernor(dt, nowMs){
             if(!isMobilePlaying || !gameStarted || deathScreenOpen || settingsOpen)return;
@@ -6517,6 +6594,72 @@
             }
         }
 
+
+        // v1.8.2 random soil ticks. All conversions pass through setBlock so world
+        // autosaves, relay synchronization, dedicated-server packets and remeshing work.
+        const soilCandidates=new Map();
+        let soilClock=0;
+        function queueSoilNeighborhood(dim,x,y,z){
+            if(dim!==0)return;
+            for(const [dx,dy,dz] of [[0,0,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]]){
+                const a=x+dx,b=y+dy,c=z+dz;
+                if(b<0||b>=getDimensionHeight(dim))continue;
+                const key=`${dim}:${a}:${b}:${c}`;
+                if(soilCandidates.size>=4096)soilCandidates.delete(soilCandidates.keys().next().value);
+                soilCandidates.set(key,[a,b,c,dim]);
+            }
+        }
+        function evaluateSoil(x,y,z,dim,probability){
+            const soil=peekLoadedBlock(x,y,z,dim);
+            if(soil!==BLOCKS.GRASS&&soil!==BLOCKS.DIRT)return false;
+            const above=peekLoadedBlock(x,y+1,z,dim);
+            if(above===null)return false;
+            if(soil===BLOCKS.GRASS&&above!==BLOCKS.AIR){
+                if(Math.random()<probability)setBlock(x,y,z,BLOCKS.DIRT,dim);
+                return true;
+            }
+            if(soil===BLOCKS.DIRT&&above===BLOCKS.AIR){
+                const adjacent=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>peekLoadedBlock(x+dx,y,z+dz,dim)===BLOCKS.GRASS);
+                if(adjacent&&Math.random()<probability)setBlock(x,y,z,BLOCKS.GRASS,dim);
+                return adjacent;
+            }
+            return false;
+        }
+        function updateSoil(dt){
+            if(!gameStarted||currentDimension!==0||singleplayerNetworkMode==='lan-guest')return;
+            if(settingsOpen&&singleplayerNetworkMode==='local')return;
+            soilClock+=dt;
+            if(soilClock<0.25)return;
+            soilClock=Math.min(soilClock-0.25,0.25);
+            // Recent player modifications are favored; natural columns still get
+            // random ticks even when no player has modified a block.
+            let n=0;
+            for(const [key,point] of soilCandidates){
+                const [x,y,z,dim]=point;
+                const eligible=peekLoadedBlock(x,y,z,dim)!==null&&evaluateSoil(x,y,z,dim,0.035);
+                // Rotate candidates so recent edits beyond the first batch also tick.
+                soilCandidates.delete(key);
+                if(eligible)soilCandidates.set(key,point);
+                if(++n>=24)break;
+            }
+            const players=(singleplayerNetworkMode==='lan-host'?[...integratedPlayers.values()]:[player]);
+            const nearby=players.filter(p=>p.dimension===0&&Number.isFinite(p.x)&&Number.isFinite(p.z));
+            if(!nearby.length)return;
+            for(let i=0;i<16;i++){
+                const p=nearby[Math.floor(Math.random()*nearby.length)];
+                const x=Math.floor(p.x)+(Math.random()*15|0)-7,z=Math.floor(p.z)+(Math.random()*15|0)-7;
+                const y0=getHeight(x,z);
+                // Consider native surface as well as blocks above/below it.
+                for(let y=Math.max(0,y0-3);y<=Math.min(WORLD_HEIGHT-2,y0+3);y++){
+                    if(evaluateSoil(x,y,z,0,0.065))break;
+                }
+                // Allows subterranean or elevated player-built dirt patches to grow.
+                if(i%4===0){const nearY=Math.floor(p.y);for(let y=Math.max(0,nearY-3);y<=Math.min(WORLD_HEIGHT-2,nearY+3);y++){
+                    if(evaluateSoil(x,y,z,0,0.065))break;
+                }}
+            }
+        }
+
         function setBlock(x, y, z, type, dim = currentDimension) {
             x = Math.floor(Number(x)); y = Math.floor(Number(y)); z = Math.floor(Number(z));
             type = Math.floor(Number(type)); dim = Math.floor(Number(dim));
@@ -6555,6 +6698,7 @@
                 lastTorchScanAt=0;
             }
             trackSaplingBlock(dim,x,y,z,type);
+            queueSoilNeighborhood(dim,x,y,z);
             if (type !== BLOCKS.AIR) chunk.generatedMaxY = Math.max(Number(chunk.generatedMaxY) || 1, y);
             recordSharedBlockEdit(dim, x, y, z, type);
             if (isSingleplayerEdition) singleplayerDirty = true;
@@ -8578,7 +8722,10 @@
                 sendNetwork({type:'server_command',command:`/gamerule mobCap ${args.join(' ')}`.trim()});
                 return;
             }
-            if (['op','deop','ops','list','mobs','gamerule','ban','kill'].includes(cmd) || (singleplayerNetworkMode==='dedicated' && ['gamemode','gm','tp'].includes(cmd))) {
+            if (['op','deop','ops','list','mobs','gamerule','ban','kill'].includes(cmd)
+                || (singleplayerNetworkMode==='dedicated' && ['gamemode','gm','tp'].includes(cmd))
+                || (singleplayerNetworkMode==='lan-host' && (['save','stop','seed','account'].includes(cmd)
+                    || (['gamemode','gm','tp'].includes(cmd) && args.length>=2)))) {
                 sendNetwork({type:'server_command',command:cmdStr});
                 return;
             }
@@ -8586,6 +8733,10 @@
             switch(cmd) {
                 case 'help':
                     addChatMessage("--- Help Menu ---", "chatSystem");
+                    if(singleplayerNetworkMode==='lan-host'){
+                        addChatMessage("Relay host console: /save, /stop, /list, /ops, /op, /deop, /ban, /kill, /mobs, /gamerule, /gamemode <player> <mode>, /tp <player> <player|x y z dimension>, /seed, /help",'chatSystem');
+                        addChatMessage("/stop saves/closes your shared world, not the relay process. /account does not apply to password-free relays.",'chatSystem');
+                    }
                     addChatMessage(singleplayerNetworkMode==='dedicated' ? "/gamemode <player> <survival|creative|spectator>" : "/gamemode [survival|creative|spectator]", "chatSystem");
                     addChatMessage("/health [0-10] - Set health", "chatSystem");
                     addChatMessage("/hunger [0-20] - Set hunger", "chatSystem");
@@ -9550,8 +9701,7 @@
         document.getElementById('setCloudDetail').addEventListener('input',e=>{cloudDetail=parseInt(e.target.value);document.getElementById('cloudDetailVal').textContent=String(cloudDetail);safeStorageSet('mellorcraftCloudDetail',String(cloudDetail));});
         syncShaderSettingsUI();
         document.getElementById('setResolution').addEventListener('input', (e) => {
-            if (!isMobilePlaying) return;
-            mobileResolutionPercent = Math.max(40, Math.min(100, parseInt(e.target.value) || DEFAULT_MOBILE_RESOLUTION));
+            mobileResolutionPercent = Math.max(40, Math.min(100, parseInt(e.target.value) || 100));
             MOBILE_RENDER_SCALE = mobileResolutionPercent / 100;
             mobileAdaptiveScale = 1.0; mobilePerfWindowTime = 0; mobilePerfWindowFrames = 0; mobileLastScaleChange = performance.now();
             document.getElementById('resolutionVal').textContent = String(mobileResolutionPercent);
@@ -9862,6 +10012,7 @@
                 processFluidUpdates(dt);
                 updateDungeonSpawners(dt);
                 updateSaplingGrowth(dt);
+                updateSoil(dt);
                 updateRemotePlayers(dt);
                 updateDroppedItems(dt);
                 updateFurnaces(dt);

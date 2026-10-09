@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MellorCraft v1.7.1 singleplayer LAN relay.
+"""MellorCraft v1.8.2 password-free browser-world relay.
 
 The relay is intentionally world-agnostic. A browser that owns a singleplayer save
 registers as the authoritative host. Other singleplayer clients discover that world
@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import socket
 import uuid
 from dataclasses import dataclass, field
@@ -24,6 +25,8 @@ except ImportError:
 
 DEFAULT_PORT = 8000
 RELAY_PROTOCOL = 1
+VALID_RELAY_USERNAME = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
+VALID_SKINS = {"steve", "alex", "mellorite", "ember", "frost", "forest"}
 
 @dataclass
 class Room:
@@ -31,7 +34,9 @@ class Room:
     world_name: str
     seed: int
     host: Any
+    host_username: str = "Player"
     guests: dict[str, Any] = field(default_factory=dict)
+    guest_usernames: dict[str, str] = field(default_factory=dict)
 
 rooms: dict[str, Room] = {}
 connection_roles: dict[Any, tuple[str, str]] = {}
@@ -75,6 +80,7 @@ async def host_message(ws: Any, room: Room, data: dict[str, Any]) -> None:
                 dead.append(guest_id)
         for guest_id in dead:
             room.guests.pop(guest_id, None)
+            room.guest_usernames.pop(guest_id, None)
     elif kind == "host_disconnect":
         guest_id = str(data.get("guestId", ""))
         guest = room.guests.get(guest_id)
@@ -108,7 +114,8 @@ async def handler(ws: Any, *_args: Any) -> None:
                 name = str(data.get("worldName", "World")).strip()[:48] or "World"
                 seed = int(data.get("seed", 0) or 0)
                 room_id = uuid.uuid4().hex[:12]
-                room = Room(room_id, name, seed, ws)
+                host_username = str(data.get("username", "Player")).strip()[:20] or "Player"
+                room = Room(room_id, name, seed, ws, host_username=host_username)
                 rooms[room_id] = room
                 role = "host"
                 connection_roles[ws] = (role, room_id)
@@ -122,16 +129,29 @@ async def handler(ws: Any, *_args: Any) -> None:
                 if room is None:
                     await send_json(ws, {"type": "error", "message": "That LAN world is no longer open."})
                     continue
+                username = str(data.get("username", "")).strip()
+                skin = str(data.get("skin", "")).strip().lower()
+                if not VALID_RELAY_USERNAME.fullmatch(username):
+                    await send_json(ws, {"type": "error", "message": "Choose a username of 1–20 letters, digits, _ or - (no spaces)."})
+                    continue
+                if skin not in VALID_SKINS:
+                    await send_json(ws, {"type": "error", "message": "Choose one of the six supported player skins."})
+                    continue
+                used = {room.host_username.casefold(), *(value.casefold() for value in room.guest_usernames.values())}
+                if username.casefold() in used:
+                    await send_json(ws, {"type": "error", "message": "That username is already in use in this world."})
+                    continue
                 guest_id = uuid.uuid4().hex
                 room_id = requested
                 room.guests[guest_id] = ws
+                room.guest_usernames[guest_id] = username
                 role = "guest"
                 connection_roles[ws] = (role, room_id)
                 await send_json(ws, {"type": "join_pending", "guestId": guest_id, "worldId": room_id})
                 await send_json(room.host, {
                     "type": "guest_joined", "guestId": guest_id,
-                    "username": str(data.get("username", "Player"))[:20],
-                    "skin": str(data.get("skin", "steve"))[:20],
+                    "username": username,
+                    "skin": skin,
                     "deviceClass": "mobile" if str(data.get("deviceClass", "desktop")).lower() == "mobile" else "desktop",
                 })
                 print(f"Guest {guest_id[:8]} joined {room_id}")
@@ -170,16 +190,17 @@ async def handler(ws: Any, *_args: Any) -> None:
             room = rooms.get(room_id)
             if room is not None:
                 room.guests.pop(guest_id, None)
+                room.guest_usernames.pop(guest_id, None)
                 try:
                     await send_json(room.host, {"type": "guest_left", "guestId": guest_id})
                 except Exception:
                     pass
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="MellorCraft v1.7.1 singleplayer LAN relay")
+    parser = argparse.ArgumentParser(description="MellorCraft v1.8.2 singleplayer LAN relay")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="WebSocket relay port (default: 8000)")
     args = parser.parse_args()
-    print("MellorCraft v1.7.1 Singleplayer LAN Relay")
+    print("MellorCraft v1.8.2 Singleplayer LAN Relay")
     print(f"Relay: ws://127.0.0.1:{args.port}")
     print(f"LAN:   ws://{lan_ip()}:{args.port}")
     print("Keep this window open while singleplayer worlds are shared to LAN.")
