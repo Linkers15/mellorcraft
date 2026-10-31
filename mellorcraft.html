@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MellorCraft v1.8.2</title>
+    <title>MellorCraft v1.8.3 (Biome Hotfix)</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Courier New', monospace; background: #000; }
@@ -759,7 +759,7 @@
 <body>
     <div id="startScreen">
         <h1>MellorCraft</h1>
-        <h2 id="versionSubtitle">v1.8.2</h2>
+        <h2 id="versionSubtitle">v1.8.3</h2>
         <div id="startupPage" class="main-menu-panel start-page active">
             <p class="startup-copy">Press Start to enable the soundtrack and open the main menu.</p>
             <button class="menuBtn greenBtn" id="startClientBtn">Start MellorCraft</button>
@@ -841,7 +841,8 @@
               <div class="world-rule-row"><label for="ruleMobSpawning">Mob Spawning<span class="world-rule-help">Allow natural mob spawning.</span></label><input type="checkbox" id="ruleMobSpawning" checked></div>
               <div class="world-rule-row"><label for="rulePvp">Player vs Player<span class="world-rule-help">Allow players to damage each other.</span></label><input type="checkbox" id="rulePvp" checked></div>
               <div class="world-rule-row"><label for="ruleDifficulty">Difficulty<span class="world-rule-help">Controls hostile spawning and damage. Hardcore uses Hard damage and disables respawning after death.</span></label><select class="joinField" id="ruleDifficulty"><option value="peaceful">Peaceful</option><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="hardcore">Hardcore</option></select></div>
-              <div class="world-rule-row"><label for="ruleMobCap">Mob Cap<span class="world-rule-help">Maximum mobs per dimension.</span></label><input class="joinField" type="number" id="ruleMobCap" min="0" max="200" step="1" value="30"></div>
+              <div class="world-rule-row"><label for="ruleDocileCap">Docile Mob Cap<span class="world-rule-help">Maximum passive mobs per dimension (independent of hostile mobs).</span></label><input class="joinField" type="number" id="ruleDocileCap" min="0" max="200" step="1" value="18"></div>
+              <div class="world-rule-row"><label for="ruleHostileCap">Hostile Mob Cap<span class="world-rule-help">Maximum hostile mobs per dimension (independent of passive mobs).</span></label><input class="joinField" type="number" id="ruleHostileCap" min="0" max="200" step="1" value="12"></div>
               <div class="world-rule-row"><label for="ruleDayLength">Day Length<span class="world-rule-help">Seconds in a full day (60–3600).</span></label><input class="joinField" type="number" id="ruleDayLength" min="60" max="3600" step="30" value="600"></div>
             </div>
             <div class="world-settings-actions">
@@ -854,10 +855,11 @@
         <div id="multiplayerPage" class="start-page"><h2 class="start-page-title">Multiplayer</h2><div class="start-menu-grid">
             <section id="lanJoinPanel" class="menu-section">
                 <h3>Find Worlds on a Relay</h3>
-                <p>Discover browser worlds opened through a MellorCraft relay.</p>
+                <p>Discover browser worlds opened through a MellorCraft relay. Select <b>ws://</b> for LAN connections or <b>wss://</b> for TLS-secured relays.</p>
                 <div class="lan-grid">
-                    <input id="relayJoinAddress" value="192.168.0.1" placeholder="Relay IP" aria-label="Relay IP" spellcheck="false">
+                    <input id="relayJoinAddress" value="192.168.0.1" placeholder="Relay IP or wss://host" aria-label="Relay IP" spellcheck="false">
                     <input id="relayJoinPort" type="number" min="1" max="65535" value="8000" placeholder="Port" aria-label="Relay port" inputmode="numeric">
+                    <label class="full" for="relayJoinScheme">Relay connection protocol: <select id="relayJoinScheme" aria-label="Relay scheme"><option value="ws">ws:// (unencrypted)</option><option value="wss">wss:// (TLS)</option></select></label>
                     <button class="menuBtn blueBtn full" id="refreshRelayWorldsBtn" style="margin:0;">Find Worlds on Relay</button>
                     <select class="full" id="relayWorldSelect"><option value="">Connect to a relay first</option></select>
                     <label class="full" for="relayUsernameInput">Choose a relay username (no account or password)</label>
@@ -879,6 +881,7 @@
                 <div class="lan-grid">
                     <input id="serverHostInput" type="text" value="" placeholder="Server IP" aria-label="Multiplayer server IP" spellcheck="false">
                     <input id="serverPortInput" type="number" min="1" max="65535" value="8765" placeholder="Port" aria-label="Multiplayer server port" inputmode="numeric">
+                    <label class="full" for="serverSchemeInput">WebSocket connection: <select id="serverSchemeInput" aria-label="Server scheme"><option value="ws">ws:// (unencrypted)</option><option value="wss">wss:// (TLS)</option></select></label>
                     <button class="menuBtn greenBtn full" id="joinBtn" style="margin:0;">Join Multiplayer Server</button>
                 </div>
             </section>
@@ -920,7 +923,7 @@
             <div class="setting-group"><label>Master Volume: <span id="menuVolVal">45</span>%</label><input type="range" id="menuSetVol" min="0" max="100" value="45"></div>
             <div class="setting-group"><label>Field of View: <span id="menuFovVal">60</span></label><input type="range" id="menuSetFov" min="30" max="110" value="60"></div>
             <div class="setting-group"><label>Look Sensitivity: <span id="menuSensVal">100</span>%</label><input type="range" id="menuSetSens" min="10" max="300" value="100"></div>
-            <div class="setting-group"><label class="shader-toggle-row"><span>Block &amp; Mob Textures</span><input type="checkbox" id="menuSetTextures" checked></label><div class="setting-help">v1.8.2 pixel textures. Uses one shared GPU atlas and can be disabled for the lightest fallback renderer.</div></div>
+            <div class="setting-group"><label class="shader-toggle-row"><span>Block &amp; Mob Textures</span><input type="checkbox" id="menuSetTextures" checked></label><div class="setting-help">v1.8.3 pixel textures. Uses one shared GPU atlas and can be disabled for the lightest fallback renderer.</div></div>
             
           </section><button class="menuBtn blueBtn backBtn" data-start-page="mainMenuPage">Back</button>
         </div>
@@ -990,8 +993,8 @@
                 <div class="shader-setting-row"><label>Shadow Strength: <span id="shaderShadowVal">105</span>%</label><input type="range" id="setShaderShadow" min="0" max="125" value="105"></div>
                 <div class="shader-setting-row"><label>Sunray Strength: <span id="shaderSunrayVal">125</span>%</label><input type="range" id="setShaderSunray" min="0" max="200" value="125"></div>
                 <div class="shader-setting-row"><label>Shadow Softness: <span id="shaderSoftVal">45</span>%</label><input type="range" id="setShaderSoft" min="0" max="100" value="45"></div>
-                <div class="shader-setting-row"><label>Torch Brightness: <span id="shaderTorchVal">125</span>%</label><input type="range" id="setShaderTorch" min="50" max="200" value="125"></div>
-                <div class="shader-setting-row"><label>Torch Range: <span id="shaderTorchRangeVal">100</span>%</label><input type="range" id="setShaderTorchRange" min="60" max="150" value="100"></div>
+                <div class="shader-setting-row"><label>Torch Brightness: <span id="shaderTorchVal">85</span>%</label><input type="range" id="setShaderTorch" min="30" max="160" value="85"></div>
+                <div class="shader-setting-row"><label>Torch Range: <span id="shaderTorchRangeVal">80</span>%</label><input type="range" id="setShaderTorchRange" min="40" max="120" value="80"></div>
                 <div class="shader-setting-row"><label>Night Darkness: <span id="shaderNightVal">55</span>%</label><input type="range" id="setShaderNight" min="0" max="90" value="55"></div>
                 <div class="shader-setting-row"><label>Cave Darkness: <span id="shaderCaveVal">65</span>%</label><input type="range" id="setShaderCave" min="0" max="90" value="65"></div>
                 <div class="shader-setting-row"><label>Cloud Thickness: <span id="cloudThicknessVal">8</span> blocks</label><input type="range" id="setCloudThickness" min="4" max="16" step="2" value="8"></div>
@@ -1013,6 +1016,7 @@
             <div class="lan-grid">
                 <input type="text" id="relayHostAddress" value="192.168.0.1" placeholder="Relay IP" aria-label="Host relay IP" spellcheck="false">
                 <input type="number" id="relayHostPort" min="1" max="65535" value="8000" placeholder="Port" aria-label="Host relay port" inputmode="numeric">
+                <label class="full" for="relayHostScheme">WebSocket connection: <select id="relayHostScheme" aria-label="Relay host scheme"><option value="ws">ws:// (unencrypted)</option><option value="wss">wss:// (TLS)</option></select></label>
             </div>
         </div>
         <button class="menuBtn blueBtn" id="openLanBtn" style="width:100%; margin:0;">Open World to LAN</button>
@@ -1169,7 +1173,7 @@
         // Game state
         let WORLD_SEED = 0;
         let gameStarted = false;
-        // v1.8.2 intentionally uses the exact mobile detection that shipped in v1.7.1.
+        // v1.8.3 intentionally uses the exact mobile detection that shipped in v1.7.1.
         // That path was proven on iPhone/iPad and also controls all of the existing mobile UI/performance branches.
         const mobileUserAgent = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile|Silk|Kindle/i.test(navigator.userAgent);
         const iPadDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
@@ -1189,7 +1193,7 @@
         ));
         document.documentElement.classList.toggle('mobile-mode', isMobilePlaying);
         if (isMobilePlaying) {
-            document.getElementById('versionSubtitle').textContent = 'v1.8.2';
+            document.getElementById('versionSubtitle').textContent = 'v1.8.3';
             document.getElementById('positionLabel').textContent = 'Pos:';
             document.getElementById('gamemodeLabel').textContent = 'Mode:';
             const mobileDefaultDistance = isIOSDevice ? 2 : 4;
@@ -1206,6 +1210,40 @@
         let currentDimension = 0; // 0 = Overworld, 1 = Alt Dimension, 2 = Boss Dimension
         let overworldPortal = null;
         let altDimensionSpawn = null;
+        const linkedPortals = new Map(); // dimension,x,y,z -> linked portal position
+        function portalKey(p) { return `${p.dimension},${p.x},${p.y},${p.z}`; }
+        function normalizedPortalPoint(p){
+            if(!p||typeof p!=='object')return null;
+            const v={dimension:Number(p.dimension),x:Number(p.x),y:Number(p.y),z:Number(p.z)};
+            if(!Object.values(v).every(Number.isInteger)||!([0,1].includes(v.dimension))||v.y<0||v.y>=getDimensionHeight(v.dimension)||Math.abs(v.x)>2000000||Math.abs(v.z)>2000000)return null;
+            return v;
+        }
+        function removePortalLink(point){
+            const key=portalKey(point),other=linkedPortals.get(key);
+            if(other){linkedPortals.delete(key);linkedPortals.delete(portalKey(other));}
+            return other||null;
+        }
+        function linkPortalBlocks(a,b){
+            a=normalizedPortalPoint(a);b=normalizedPortalPoint(b);
+            if(!a||!b||a.dimension!==0||b.dimension!==1)return false;
+            removePortalLink(a);removePortalLink(b);
+            linkedPortals.set(portalKey(a),b);linkedPortals.set(portalKey(b),a);
+            if(singleplayerNetworkMode==='local'||singleplayerNetworkMode==='lan-host')singleplayerDirty=true;
+            return true;
+        }
+        function savedPortalLinks(){
+            const result=[];
+            for(const [key,other] of linkedPortals){
+                const parts=key.split(',').map(Number);
+                if(parts[0]===0)result.push([{dimension:parts[0],x:parts[1],y:parts[2],z:parts[3]},{...other}]);
+            }
+            return result;
+        }
+        function restorePortalLinks(links){
+            linkedPortals.clear();
+            for(const pair of (Array.isArray(links)?links:[]).slice(0,10000))if(Array.isArray(pair)&&pair.length===2)linkPortalBlocks(pair[0],pair[1]);
+        }
+
         let teleportCooldown = 0;
         let teleportFallProtected = false;
         let portalExitRequired = false;
@@ -1234,22 +1272,23 @@
         const MOBILE_DEFAULT_RENDER_DISTANCE = LOW_END_MOBILE ? 2 : (isIOSDevice ? 2 : 4);
         const MOBILE_MAX_RENDER_DISTANCE = LOW_END_MOBILE ? 4 : (isIOSDevice ? 5 : 10);
         let RENDER_DISTANCE = Math.max(2,Math.min(isMobilePlaying?MOBILE_MAX_RENDER_DISTANCE:16,parseInt(safeStorageGet('mellorcraftRenderDistance'))||(isMobilePlaying?MOBILE_DEFAULT_RENDER_DISTANCE:6)));
-        const DEVICE_DEFAULT_MOB_CAP = 30;
-        let MOB_CAP = DEVICE_DEFAULT_MOB_CAP;
-        let espEnabled = false;
+        const DEFAULT_DOCILE_CAP = 18;
+        const DEFAULT_HOSTILE_CAP = 12;
+        let DOCILE_CAP = DEFAULT_DOCILE_CAP;
+        let HOSTILE_CAP = DEFAULT_HOSTILE_CAP;
         let masterVolume = Math.max(0,Math.min(1,(safeStorageGet('mellorcraftVolume')===null?45:parseInt(safeStorageGet('mellorcraftVolume')))/100));
         let FOV = Math.max(30,Math.min(110,parseInt(safeStorageGet('mellorcraftFov'))||60));
         let crouchControlMode = safeStorageGet('mellorcraftCrouchMode') === 'toggle' ? 'toggle' : 'hold';
         let crouchToggleActive=false;
         let mobileCrouchHeld=false;
         let mobileSprintHeld=false,lastForwardTap=0;
-        let texturesEnabled = safeStorageGet('mellorcraftTextures') !== '0'; // v1.8.2: 16x16 block + mob textures default on.
+        let texturesEnabled = safeStorageGet('mellorcraftTextures') !== '0'; // v1.8.3: 16x16 block + mob textures default on.
         let liteShaderEnabled = safeStorageGet('mellorcraftLiteShader') !== null ? safeStorageGet('mellorcraftLiteShader') === '1' : !isMobilePlaying;
         let shaderShadowStrength = loadShaderNumber('mellorcraftShaderShadowV2', 105, 0, 125) / 100;
         let shaderSunrayStrength = loadShaderNumber('mellorcraftShaderSunrays', 125, 0, 200) / 100;
         let shaderShadowSoftness = loadShaderNumber('mellorcraftShaderSoft', 45, 0, 100) / 100;
-        let shaderTorchBrightness = loadShaderNumber('mellorcraftShaderTorch', 125, 50, 200) / 100;
-        let shaderTorchRange = loadShaderNumber('mellorcraftShaderTorchRange', 100, 60, 150) / 100;
+        let shaderTorchBrightness = loadShaderNumber('mellorcraftShaderTorch', 85, 30, 160) / 100;
+        let shaderTorchRange = loadShaderNumber('mellorcraftShaderTorchRange', 80, 40, 120) / 100;
         let shaderNightDarkness = loadShaderNumber('mellorcraftShaderNight', 55, 0, 90) / 100;
         let shaderCaveDarkness = loadShaderNumber('mellorcraftShaderCave', 65, 0, 90) / 100;
         let cloudThickness = loadShaderNumber('mellorcraftCloudThickness', 8, 4, 16);
@@ -1263,12 +1302,12 @@
         let MOUSE_SENSITIVITY = 0.002*Math.max(10,Math.min(300,parseInt(safeStorageGet('mellorcraftSensitivity'))||100))/100;
 
         const DEFAULT_DAY_LENGTH = 600;
-        const GAME_RULE_ORDER = ['doDaylightCycle','doWeatherCycle','keepInventory','doMobSpawning','pvp','difficulty','mobCap','dayLength'];
+        const GAME_RULE_ORDER = ['doDaylightCycle','doWeatherCycle','keepInventory','doMobSpawning','pvp','difficulty','docileCap','hostileCap','dayLength'];
         const GAME_RULE_LABELS = {
             doDaylightCycle:'Daylight Cycle',doWeatherCycle:'Weather Cycle',keepInventory:'Keep Inventory',
-            doMobSpawning:'Mob Spawning',pvp:'Player vs Player',difficulty:'Difficulty',mobCap:'Mob Cap',dayLength:'Day Length'
+            doMobSpawning:'Mob Spawning',pvp:'Player vs Player',difficulty:'Difficulty',docileCap:'Docile Cap',hostileCap:'Hostile Cap',dayLength:'Day Length'
         };
-        function normalizeGameRules(value,defaultMobCap=DEVICE_DEFAULT_MOB_CAP) {
+        function normalizeGameRules(value) {
             const raw=value&&typeof value==='object'?value:{};
             const intRule=(name,fallback,min,max)=>{const parsed=Math.round(Number(raw[name]));return Number.isFinite(parsed)?Math.max(min,Math.min(max,parsed)):fallback;};
             const boolRule=name=>{if(raw[name]===undefined)return true;if(typeof raw[name]==='string'){const parsed=raw[name].trim().toLowerCase();if(['false','off','0','no'].includes(parsed))return false;if(['true','on','1','yes'].includes(parsed))return true;}return Boolean(raw[name]);};
@@ -1279,7 +1318,8 @@
                 doMobSpawning:boolRule('doMobSpawning'),
                 pvp:boolRule('pvp'),
                 difficulty:['peaceful','easy','normal','hard','hardcore'].includes(String(raw.difficulty||'normal').toLowerCase())?String(raw.difficulty||'normal').toLowerCase():'normal',
-                mobCap:intRule('mobCap',defaultMobCap,0,200),
+                docileCap:intRule('docileCap',Math.max(0,Math.round((Number.isFinite(Number(raw.mobCap)) && raw.mobCap!==undefined ? Number(raw.mobCap) : 30)*.6)),0,200),
+                hostileCap:intRule('hostileCap',Math.max(0,Math.round((Number.isFinite(Number(raw.mobCap)) && raw.mobCap!==undefined ? Number(raw.mobCap) : 30)*.4)),0,200),
                 dayLength:intRule('dayLength',DEFAULT_DAY_LENGTH,60,3600)
             };
         }
@@ -1287,7 +1327,8 @@
         let worldGenSettings=null; // Immutable terrain generator settings for the active world.
         function applyGameRules(value,announce=false) {
             gameRules=normalizeGameRules(value);
-            MOB_CAP=gameRules.mobCap;
+            DOCILE_CAP=gameRules.docileCap;
+            HOSTILE_CAP=gameRules.hostileCap;
             if(announce&&gameStarted)addChatMessage('World game rules updated.','chatSystem');
             return gameRules;
         }
@@ -1447,6 +1488,7 @@
         let relaySocket = null;
         let relayWorldId = '';
         let relayGuestId = '';
+        let pendingRelayWorlds = new Map();
         let relayHostConnected = false;
         let integratedStateBroadcastTimer = 0;
         const integratedPlayers = new Map();
@@ -1517,6 +1559,7 @@
             if(singleplayerNetworkMode!=='dedicated')return;
             const message=String(reason||'The multiplayer server went offline.');
             gameStarted=false;gameStartInProgress=false;preserveStreamedWorldEditsForStart=false;
+            deathScreenOpen=false;
             multiplayerConnected=false;setConnectionBadge(false);remotePlayers.clear();localClientId=null;
             isMouseDown=false;mobileMineTarget=null;breakingBlock=null;breakProgress=0;
             for(const key of Object.keys(keys))keys[key]=false;
@@ -1537,7 +1580,10 @@
             setServerAuthStatus(message,true);
         }
 
-        function parseSocketEndpoint(rawHost, rawPort, fallbackHost, fallbackPort) {
+        function selectedSocketScheme(elementId) {
+            return document.getElementById(elementId)?.value === 'wss' ? 'wss' : 'ws';
+        }
+        function parseSocketEndpoint(rawHost, rawPort, fallbackHost, fallbackPort, chosenScheme=null) {
             let value = String(rawHost || '').trim();
             const explicitSecure = /^(wss|https):\/\//i.test(value);
             value = value.replace(/^wss?:\/\//i,'').replace(/^https?:\/\//i,'').split('/')[0];
@@ -1558,9 +1604,10 @@
             const requestedPort = String(rawPort || '').trim();
             const port = requestedPort ? Number(requestedPort) : (embeddedPort || fallbackPort);
             if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Enter a port from 1 to 65535.');
-            const secure = explicitSecure || window.location.protocol === 'https:';
+            const explicitlyInsecure = /^(ws|http):\/\//i.test(String(rawHost||'').trim());
+            const secure = explicitSecure || (!explicitlyInsecure && (chosenScheme ? chosenScheme === 'wss' : window.location.protocol === 'https:'));
             const bracketedHost = host.includes(':') ? `[${host}]` : host;
-            return { host, port, url: `${secure ? 'wss' : 'ws'}://${bracketedHost}:${port}` };
+            return { host, port, scheme: secure ? 'wss' : 'ws', url: `${secure ? 'wss' : 'ws'}://${bracketedHost}:${port}` };
         }
 
         function defaultServerEndpoint() {
@@ -1580,7 +1627,8 @@
                 document.getElementById('serverHostInput').value,
                 document.getElementById('serverPortInput').value,
                 defaults.host,
-                8765
+                8765,
+                selectedSocketScheme('serverSchemeInput')
             );
         }
 
@@ -1613,8 +1661,8 @@
             el.style.color = isError ? '#ff6b6b' : '#aaa';
         }
 
-        function parseRelayAddress(rawHost, rawPort) {
-            return parseSocketEndpoint(rawHost, rawPort, '192.168.0.1', 8000);
+        function parseRelayAddress(rawHost, rawPort, schemeId='relayJoinScheme') {
+            return parseSocketEndpoint(rawHost, rawPort, '192.168.0.1', 8000, selectedSocketScheme(schemeId));
         }
 
         function relaySend(message) {
@@ -1635,7 +1683,7 @@
                 id:localClientId || 'singleplayer', username:localUsername || 'Player', skin:localSkin || 'steve',
                 x:Number(player?.x)||0.5, y:Number(player?.y)||50, z:Number(player?.z)||0.5,
                 yaw:Number(player?.yaw)||0, pitch:Number(player?.pitch)||0, dimension:currentDimension,
-                health:Number(player?.health)||10, hunger:Number.isFinite(Number(player?.hunger))?Number(player.hunger):20, gamemode:player?.gamemode||'survival', heldItem:slot?Number(slot.id)||0:0,
+                health:Number.isFinite(Number(player?.health))?Number(player.health):10, hunger:Number.isFinite(Number(player?.hunger))?Number(player.hunger):20, gamemode:player?.gamemode||'survival', heldItem:slot?Number(slot.id)||0:0,
                 crouching:Boolean(player?.crouching), renderDistance:RENDER_DISTANCE,
                 selectedSlot:Number(player?.selectedSlot)||0, armorId:Number(player?.armorId)||0,
                 inventory:(player?.inventory||[]).map(item=>({id:Number(item?.id)||0,count:Number(item?.count)||0})),
@@ -1647,7 +1695,8 @@
 
         function integratedRememberProfile(state) {
             if (!state || state.id === localClientId || !state.username) return;
-            singleplayerLanProfiles[String(state.username).toLowerCase()] = {
+            if(!/^[0-9a-f]{64}$/.test(String(state.profileToken||'')))return;
+            singleplayerLanProfiles[`token:${state.profileToken}`] = {
                 username:state.username, skin:state.skin, x:state.x, y:state.y, z:state.z, yaw:state.yaw, pitch:state.pitch,
                 dimension:state.dimension, health:state.health, hunger:Number.isFinite(Number(state.hunger))?Number(state.hunger):20, gamemode:state.gamemode, heldItem:state.heldItem,
                 selectedSlot:state.selectedSlot, armorId:Number(state.armorId)||0, inventory:Array.isArray(state.inventory)?state.inventory.map(v=>({...v})):[],
@@ -1840,7 +1889,7 @@
 
         function canonicalGameRuleName(value) {
             const key=String(value||'').replace(/[_\s-]/g,'').toLowerCase();
-            const aliases={daylightcycle:'doDaylightCycle',dodaylightcycle:'doDaylightCycle',weathercycle:'doWeatherCycle',doweathercycle:'doWeatherCycle',keepinventory:'keepInventory',mobspawning:'doMobSpawning',domobspawning:'doMobSpawning',pvp:'pvp',mobcap:'mobCap',daylength:'dayLength'};
+            const aliases={daylightcycle:'doDaylightCycle',dodaylightcycle:'doDaylightCycle',weathercycle:'doWeatherCycle',doweathercycle:'doWeatherCycle',keepinventory:'keepInventory',mobspawning:'doMobSpawning',domobspawning:'doMobSpawning',pvp:'pvp',docilecap:'docileCap',passivecap:'docileCap',hostilecap:'hostileCap',daylength:'dayLength'};
             return aliases[key]||null;
         }
         function gameRuleValueText(name,value=gameRules[name]) { return typeof value==='boolean'?(value?'true':'false'):String(value); }
@@ -1857,7 +1906,7 @@
             if(!name){integratedSend(actor.id,{type:'error',message:`Unknown game rule. Available: ${GAME_RULE_ORDER.join(', ')}`});return;}
             if(args.length===1){integratedSend(actor.id,{type:'system',message:`${name} = ${gameRuleValueText(name)}`});return;}
             const value=parseGameRuleValue(name,args[1]);
-            if(value===null){const expected=['mobCap','dayLength'].includes(name)?(name==='mobCap'?'0–200':'60–3600'):'true or false';integratedSend(actor.id,{type:'error',message:`Usage: /gamerule ${name} <${expected}>`});return;}
+            if(value===null){const expected=['docileCap','hostileCap','dayLength'].includes(name)?(name==='dayLength'?'60–3600':'0–200'):'true or false';integratedSend(actor.id,{type:'error',message:`Usage: /gamerule ${name} <${expected}>`});return;}
             applyGameRules({...gameRules,[name]:value});
             if(name==='difficulty'&&value==='peaceful'){player.hunger=20;player.exhaustion=0;updateHungerBar();for(const state of integratedPlayers.values())state.hunger=20;}
             singleplayerDirty=true;
@@ -1935,17 +1984,17 @@
             if (!payload || typeof payload!=='object') return false;
             const type=String(payload.type||'');
             const actor=integratedPlayerFor(clientId);
-            if (!actor && type!=='player_update') return false;
+            if (!actor) return false;
             const now=performance.now()/1000;
 
             if (type==='player_update') {
-                const state=actor || {id:clientId,username:'Player',skin:'steve',health:10,gamemode:'survival',deviceClass:'desktop'};
+                const state=actor;
                 state.x=Math.max(-2000000,Math.min(2000000,Number(payload.x)||0));
                 state.y=Math.max(-100,Math.min(1000,Number(payload.y)||0));
                 state.z=Math.max(-2000000,Math.min(2000000,Number(payload.z)||0));
                 state.yaw=Number(payload.yaw)||0; state.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,Number(payload.pitch)||0));
                 state.dimension=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0)));
-                if (now >= (integratedDamageLocks.get(clientId)||0)) state.health=Math.max(0,Math.min(10,Number(payload.health)||state.health||10));
+                if (state.health>0 && now >= (integratedDamageLocks.get(clientId)||0) && Number.isFinite(Number(payload.health))) state.health=Math.max(0,Math.min(10,Number(payload.health)));
                 state.hunger=gameRules.difficulty==='peaceful'?20:Math.max(0,Math.min(20,Number.isFinite(Number(payload.hunger))?Number(payload.hunger):(Number.isFinite(Number(state.hunger))?Number(state.hunger):20)));
                 state.heldItem=Math.max(0,Math.min(255,Math.floor(Number(payload.heldItem)||0)));
                 state.crouching=Boolean(payload.crouching);state.renderDistance=Math.max(2,Math.min(32,Number(payload.renderDistance)||Number(state.renderDistance)||6));
@@ -1958,6 +2007,12 @@
                 integratedPlayers.set(clientId,state);
                 if(state.health<=0&&gameRules.difficulty==='hardcore'&&clientId!==localClientId){integratedHardcoreBan(state);return true;}
                 integratedRecomputeMobHosts(); singleplayerDirty=true; return true;
+            }
+            if (type==='portal_link') {
+                // The authoritative browser world host stores the connection,
+                // so any guest can subsequently mine either end correctly.
+                linkPortalBlocks(payload.overworld,payload.alternate);
+                return true;
             }
             if (type==='block_change') {
                 const dim=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0))),x=Math.floor(Number(payload.x)),y=Math.floor(Number(payload.y)),z=Math.floor(Number(payload.z));
@@ -2010,7 +2065,7 @@
             }
             if (type==='mob_spawn') {
                 const dim=Math.max(0,Math.min(2,Math.floor(Number(payload.dimension)||0)));
-                if (!gameRules.doMobSpawning || mobHosts[dim]!==clientId || !MOB_TYPES[payload.typeKey] || mobs.filter(m=>m.dimension===dim).length>=gameRules.mobCap) return true;
+                if (!gameRules.doMobSpawning || mobHosts[dim]!==clientId || !MOB_TYPES[payload.typeKey] || (!MOB_TYPES[payload.typeKey].isBoss && mobCountForCap(dim,isHostileMobType(payload.typeKey))>=mobCapForType(payload.typeKey))) return true;
                 let id=String(payload.id||''); if(!/^[A-Za-z0-9_-]{1,64}$/.test(id)||mobById.has(id)) id=`m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
                 const typeObj=MOB_TYPES[payload.typeKey];
                 const mob=upsertSharedMob({id,typeKey:payload.typeKey,x:Number(payload.x)||0,y:Number(payload.y)||50,z:Number(payload.z)||0,dimension:dim,health:typeObj.health,bodyRotation:Number(payload.bodyRotation)||0,headRotation:Number(payload.headRotation)||0});
@@ -2090,6 +2145,7 @@
                 const hour=Number(payload.hour); if(Number.isFinite(hour)&&hour>=0&&hour<=24){worldTime=Math.floor(worldTime)+hour/24;integratedBroadcast({type:'system',message:`${actor.username} set the time to ${hour}:00`});singleplayerDirty=true;} return true;
             }
             if (type==='respawn') {
+                if(actor.health>0 || gameRules.difficulty==='hardcore')return true;
                 let pos=null,p=normalizePlayerSpawnPoint(actor.respawnPoint);
                 if(p&&isBedBlock(getBlock(p.x,p.y,p.z,p.dimension)))pos=spawnPositionFromPoint(p);else {actor.respawnPoint=null;const o=actor.originalSpawn;if(o&&[o.x,o.y,o.z].every(v=>Number.isFinite(Number(v))))pos={x:Number(o.x),y:Number(o.y),z:Number(o.z),dimension:Math.max(0,Math.min(2,Math.floor(Number(o.dimension)||0)))};}
                 if(!pos)pos={x:Number(payload.x)||actor.x,y:Number(payload.y)||actor.y,z:Number(payload.z)||actor.z,dimension:Math.max(0,Math.min(2,Number(payload.dimension)||0))};
@@ -2119,10 +2175,19 @@
             }
             // A relay has no authenticated accounts: never load another user's inventory
             // or revive saved administrator privileges just by typing that username.
-            const profile=null;
+            const token=String(info.identityToken||'');
+            const profile=/^[0-9a-f]{64}$/.test(token)?singleplayerLanProfiles[`token:${token}`]||null:null;
+            if(/^[0-9a-f]{64}$/.test(token) && [...integratedPlayers.values()].some(p=>p.profileToken===token)){
+                integratedSend(info.guestId,{type:'error',message:'This relay identity is already connected.'});
+                relaySend({type:'host_disconnect',guestId:info.guestId,reason:'Character already connected'});return;
+            }
             const isOp=false;
-            const state={id:info.guestId,username,skin:PLAYER_SKINS[info.skin]?info.skin:'steve',x:0.5,y:50,z:0.5,yaw:0,pitch:0,dimension:0,health:10,hunger:20,gamemode:'survival',heldItem:0,selectedSlot:0,armorId:0,inventory:Array.from({length:30},()=>({id:0,count:0})),originalSpawn:null,respawnPoint:null,isOperator:isOp,deviceClass:info.deviceClass==='mobile'?'mobile':'desktop'};
-            if(profile)Object.assign(state,JSON.parse(JSON.stringify(profile)),{id:info.guestId,username,isOperator:isOp,deviceClass:state.deviceClass});
+            const state={id:info.guestId,username,skin:PLAYER_SKINS[info.skin]?info.skin:'steve',x:0.5,y:50,z:0.5,yaw:0,pitch:0,dimension:0,health:10,hunger:20,gamemode:'survival',heldItem:0,selectedSlot:0,armorId:0,inventory:Array.from({length:30},()=>({id:0,count:0})),originalSpawn:null,respawnPoint:null,isOperator:isOp,deviceClass:info.deviceClass==='mobile'?'mobile':'desktop',profileToken:token};
+            if(profile)Object.assign(state,JSON.parse(JSON.stringify(profile)),{id:info.guestId,username,isOperator:isOp,profileToken:token,skin:state.skin,deviceClass:state.deviceClass,gamemode:'survival'});
+            if(state.health<=0&&gameRules.difficulty==='hardcore'){
+                integratedSend(info.guestId,{type:'banned',message:'This character has died in Hardcore.'});
+                relaySend({type:'host_disconnect',guestId:info.guestId,reason:'Hardcore death'});return;
+            }
             integratedPlayers.set(info.guestId,state); integratedRecomputeMobHosts();
             const blocks=snapshotFromChunkEdits(serializeChunkEdits());
             integratedSend(info.guestId,{type:'welcome',protocol:6,negotiatedProtocol:6,clientId:info.guestId,username,seed:WORLD_SEED,worldName:singleplayerWorldName,worldTime,weatherSeed,weatherPhase,dayLength:currentDayLength(),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),bossDefeated:Boolean(bossDefeated),isOperator:isOp,blocks,playerState:profile?{...profile}:null,players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
@@ -2131,7 +2196,7 @@
         }
 
         function integratedGuestLeft(guestId) {
-            const state=integratedPlayers.get(guestId); if(!state)return; integratedPlayers.delete(guestId); integratedBroadcast({type:'player_left',playerId:guestId}); integratedRecomputeMobHosts();
+            const state=integratedPlayers.get(guestId); if(!state)return; integratedRememberProfile(state);integratedPlayers.delete(guestId); integratedBroadcast({type:'player_left',playerId:guestId}); integratedRecomputeMobHosts();
         }
 
         function integratedTick(dt) {
@@ -2186,10 +2251,11 @@
             }
             if (relaySocket) { try{relaySocket.close();}catch(_){} relaySocket=null; }
             let address;
-            try { address=parseRelayAddress(document.getElementById('relayHostAddress').value,document.getElementById('relayHostPort').value); }
+            try { address=parseRelayAddress(document.getElementById('relayHostAddress').value,document.getElementById('relayHostPort').value,'relayHostScheme'); }
             catch(error) { relayStatus('relayHostStatus',error.message||'Invalid relay address.',true); return; }
             safeStorageSet('mellorcraftRelayAddress',`${address.host}:${address.port}`);
             safeStorageSet('mellorcraftRelayPort',String(address.port));
+            safeStorageSet('mellorcraftRelayScheme',address.scheme);
             relayStatus('relayHostStatus',`Connecting to ${address.host}:${address.port}...`);
             const ws=new WebSocket(address.url); relaySocket=ws;
             ws.addEventListener('open',()=>{ if(relaySocket!==ws)return; relaySend({type:'host_world',worldName:singleplayerWorldName,seed:WORLD_SEED,username:localUsername,protocol:1}); });
@@ -2215,10 +2281,11 @@
         function connectRelayForWorldList(joinAfter=false) {
             if (relaySocket) { try{relaySocket.close();}catch(_){} relaySocket=null; }
             let address;
-            try { address=parseRelayAddress(document.getElementById('relayJoinAddress').value,document.getElementById('relayJoinPort').value); }
+            try { address=parseRelayAddress(document.getElementById('relayJoinAddress').value,document.getElementById('relayJoinPort').value,'relayJoinScheme'); }
             catch(error) { relayStatus('relayJoinStatus',error.message||'Invalid relay address.',true); return; }
             safeStorageSet('mellorcraftRelayAddress',`${address.host}:${address.port}`);
             safeStorageSet('mellorcraftRelayPort',String(address.port));
+            safeStorageSet('mellorcraftRelayScheme',address.scheme);
             relayStatus('relayJoinStatus',`Connecting to ${address.host}:${address.port}...`);
             const ws=new WebSocket(address.url); relaySocket=ws;
             ws.addEventListener('open',()=>{ if(relaySocket===ws) relaySend({type:'list_worlds'}); });
@@ -2231,6 +2298,7 @@
                     select.replaceChildren(...(worlds.length
                         ? worlds.map(w=>new Option(`${String(w.worldName||'World')} — ${w.players||1} player${(w.players||1)===1?'':'s'}`,String(w.worldId||'')))
                         : [new Option('No open worlds on this relay','')]));
+                    pendingRelayWorlds=new Map(worlds.map(w=>[String(w.worldId||''),w]));
                     relayStatus('relayJoinStatus',worlds.length?`Found ${worlds.length} open world${worlds.length===1?'':'s'}.`:'No worlds are currently open on this relay.');
                     if(joinAfter&&worlds.length)joinSelectedRelayWorld(); return;
                 }
@@ -2255,7 +2323,19 @@
             const identity={username,skin};
             if(socket){try{socket.close();}catch(_){}socket=null;}
             localUsername=identity.username;localSkin=identity.skin;singleplayerNetworkMode='lan-guest';singleplayerWorldName='';activeJoinProtocol=5;localIsOperator=false;
-            relaySend({type:'join_world',worldId,username:localUsername,skin:localSkin,deviceClass:isMobilePlaying?'mobile':'desktop'});
+            // A browser-held random credential is scoped to the relay and saved world,
+            // never to just a username (which anyone on the LAN can reuse).
+            const worldInfo=pendingRelayWorlds.get(worldId)||{};
+            const relayHost=document.getElementById('relayJoinAddress').value.trim().toLowerCase();
+            const identityKey=`mellorcraftRelayIdentity:${relayHost}:${document.getElementById('relayJoinPort').value}:${String(worldInfo.worldName||worldId)}:${String(worldInfo.seed||0)}:${localUsername.toLowerCase()}`;
+            let identityToken=safeStorageGet(identityKey);
+            if(!/^[0-9a-f]{64}$/.test(identityToken||'')){
+                if(!window.crypto?.getRandomValues){relayStatus('relayJoinStatus','Secure random identity generation is unavailable in this browser.',true);return;}
+                const bytes=new Uint8Array(32);window.crypto.getRandomValues(bytes);
+                identityToken=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+                safeStorageSet(identityKey,identityToken);
+            }
+            relaySend({type:'join_world',worldId,username:localUsername,skin:localSkin,identityToken,deviceClass:isMobilePlaying?'mobile':'desktop'});
             relayStatus('relayJoinStatus','Joining selected world...');
         }
 
@@ -2425,7 +2505,7 @@
                 const authoritativeSkin=String(data.skin||(data.playerState&&data.playerState.skin)||'');
                 if(PLAYER_SKINS[authoritativeSkin])localSkin=authoritativeSkin;
                 WORLD_SEED = Number(data.seed) || 0;
-                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.8.2 - ${data.worldName}`; }
+                if (data.worldName) { singleplayerWorldName=String(data.worldName); document.title = `MellorCraft v1.8.3 - ${data.worldName}`; }
                 worldTime = Number(data.worldTime) || 0.25;
                 if(Number.isFinite(data.weatherSeed))weatherSeed=data.weatherSeed|0;if(Number.isFinite(data.weatherPhase))weatherPhase=Number(data.weatherPhase);
                 applyGameRules(data.gameRules);
@@ -2695,7 +2775,7 @@
             const serverAddress=endpoint.url;
             document.getElementById('serverHostInput').value=endpoint.host;
             document.getElementById('serverPortInput').value=String(endpoint.port);
-            safeStorageSet('mellorcraftServerAddress',endpoint.host);safeStorageSet('mellorcraftServerPort',String(endpoint.port));
+            safeStorageSet('mellorcraftServerAddress',endpoint.host);safeStorageSet('mellorcraftServerPort',String(endpoint.port));safeStorageSet('mellorcraftServerScheme',endpoint.scheme);
             const submit=document.getElementById('serverAuthSubmit');if(submit)submit.disabled=true;
             gameStarted=false;gameStartInProgress=false;preserveStreamedWorldEditsForStart=false;
             lastJoinError='';singleplayerNetworkMode='dedicated';
@@ -2709,7 +2789,7 @@
                 setServerAuthStatus(mode==='signup'?'Creating account and loading world...':'Signing in and loading world...');
                 joinTimeoutId=setTimeout(()=>{
                     if(!gameStarted&&socket&&socket.readyState===WebSocket.OPEN){
-                        lastJoinError='The server accepted the connection but did not finish authentication/world loading. Make sure the matching v1.8.2 protocol 16 server is running.';
+                        lastJoinError='The server accepted the connection but did not finish authentication/world loading. Make sure the matching v1.8.3 protocol 16 server is running.';
                         try{socket.close(4002,'Authentication/world load timeout');}catch(_){}
                     }
                 },12000);
@@ -2814,7 +2894,7 @@
             const name=String(data.name||data.worldName||'').trim().slice(0,48); if(!name)throw new Error('World name is missing');
             let blocks=(data.blocks&&typeof data.blocks==='object'&&!Array.isArray(data.blocks))?{...data.blocks}:null;
             const legacy=Number(data.formatVersion||0)<12;
-            if(!blocks&&data.chunkEdits&&typeof data.chunkEdits==='object'){blocks={};for(const b of snapshotFromChunkEdits(data.chunkEdits,legacy?200:WORLD_HEIGHT))blocks[`${b.dimension},${b.x},${b.y},${b.z}`]=Number(b.blockType)||0;}
+            if(!blocks&&data.chunkEdits&&typeof data.chunkEdits==='object'){blocks={};for(const b of snapshotFromChunkEdits(data.chunkEdits,legacy?200:(Number(data.formatVersion||0)<=12?248:WORLD_HEIGHT)))blocks[`${b.dimension},${b.x},${b.y},${b.z}`]=Number(b.blockType)||0;}
             blocks=blocks||{};
             if(legacy){
                 const migrated={};
@@ -2856,12 +2936,12 @@
             const operators=Array.isArray(data.operators)?data.operators.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
             const bannedPlayers=Array.isArray(data.bannedPlayers)?data.bannedPlayers.map(v=>String(v).trim().toLowerCase()).filter(Boolean):[];
             const seed=Number(data.seed)||0;
-            return {format:'MellorCraftWorld',formatVersion:12,version:'1.8.2',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],bannedPlayers:[...new Set(bannedPlayers)],playerProfiles:profiles,mobs:migratedMobs,items:migratedItems,furnaces:migratedFurnaces,updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
+            return {format:'MellorCraftWorld',formatVersion:12,version:'1.8.3',name,seed,worldTime:Number.isFinite(Number(data.worldTime))?Number(data.worldTime):0.25,weatherSeed:Number.isFinite(Number(data.weatherSeed))?Math.trunc(Number(data.weatherSeed)):weatherSeedForWorldSeed(seed),weatherPhase:Number.isFinite(Number(data.weatherPhase))?Number(data.weatherPhase):0,bossDefeated:Boolean(data.bossDefeated),gameRules:normalizeGameRules(data.gameRules),worldGen:normalizeWorldGenSettings(data.worldGen),blocks,operators:[...new Set(operators)],bannedPlayers:[...new Set(bannedPlayers)],playerProfiles:profiles,mobs:migratedMobs,items:migratedItems,furnaces:migratedFurnaces,portalLinks:Array.isArray(data.portalLinks)?data.portalLinks:[],updatedAt:Number(data.updatedAt)||Math.floor((Number(data.savedAtUnix)||Date.now()/1000)*1000)};
         }
         function canonicalPlayerProfilesForSave() {
+            // Persist only profiles authenticated through the browser-held secret token.
+            for(const state of integratedPlayers.values())integratedRememberProfile(state);
             const profiles=JSON.parse(JSON.stringify(singleplayerLanProfiles||{}));
-            // Guest relay sessions are ephemeral and not password-authenticated.
-            // Do not record their inventories as username-claimable profiles.
             const hostKey=String(localUsername||'Player').toLowerCase();
             profiles[hostKey]=currentPlayerSnapshot();
             return profiles;
@@ -2869,7 +2949,7 @@
         function saveSingleplayerWorld(force=false) {
             if (!singleplayerWorldName || !gameStarted || (singleplayerNetworkMode!=='local' && singleplayerNetworkMode!=='lan-host')) return false;
             if (!force && !singleplayerDirty) return true;
-            const data={format:'MellorCraftWorld',formatVersion:12,version:'1.8.2',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),bannedPlayers:[...singleplayerBannedPlayers].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),updatedAt:Date.now()};
+            const data={format:'MellorCraftWorld',formatVersion:12,version:'1.8.3',name:singleplayerWorldName,seed:WORLD_SEED,worldTime,weatherSeed,weatherPhase,bossDefeated:Boolean(bossDefeated),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),blocks:serializeBlocksDict(),operators:[...singleplayerOperators].sort(),bannedPlayers:[...singleplayerBannedPlayers].sort(),playerProfiles:canonicalPlayerProfilesForSave(),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:Array.from(droppedItems.values()).map(item=>({...item})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),portalLinks:savedPortalLinks(),updatedAt:Date.now()};
             try {localStorage.setItem(singleplayerStorageKey(singleplayerWorldName),JSON.stringify(data));singleplayerDirty=false;listSingleplayerWorlds();return true;}catch(error){addChatMessage(`Autosave failed: ${error.message}`,'chatError');return false;}
         }
         function launchSingleplayerWorld(rawData) {
@@ -2886,9 +2966,9 @@
             // Older browser-only worlds stored the local player under the literal "player" key.
             // Keep that profile available instead of silently assigning it to a differently named host.
             singleplayerLanProfiles={};for(const [key,value] of Object.entries(profiles)){const profileKey=String(key).toLowerCase();if(profileKey!==hostKey&&value&&typeof value==='object')singleplayerLanProfiles[profileKey]={...value};}
-            pendingBlockSnapshot=snapshotFromBlocksDict(data.blocks);pendingMobSnapshot=(Array.isArray(data.mobs)?data.mobs:[]).filter(m=>!(bossDefeated&&m&&m.typeKey==='MELLOR_BOSS'));pendingItemSnapshot=Array.isArray(data.items)?data.items:[];furnaceStates.clear();for(const [k,v] of Object.entries(data.furnaces||{}))furnaceStates.set(k,normalizeFurnaceState(v));
+            restorePortalLinks(data.portalLinks);pendingBlockSnapshot=snapshotFromBlocksDict(data.blocks);pendingMobSnapshot=(Array.isArray(data.mobs)?data.mobs:[]).filter(m=>!(bossDefeated&&m&&m.typeKey==='MELLOR_BOSS'));pendingItemSnapshot=Array.isArray(data.items)?data.items:[];furnaceStates.clear();for(const [k,v] of Object.entries(data.furnaces||{}))furnaceStates.set(k,normalizeFurnaceState(v));
             playerOriginalSpawn=pendingPlayerState?.originalSpawn?{...pendingPlayerState.originalSpawn}:null;playerRespawnPoint=normalizePlayerSpawnPoint(pendingPlayerState?.respawnPoint);
-            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.8.2 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
+            activeJoinProtocol=MULTIPLAYER_PROTOCOL;multiplayerConnected=true;mobHosts={0:localClientId,1:localClientId,2:localClientId};localIsOperator=true;singleplayerNetworkMode='local';setConnectionBadge(true);document.title=`MellorCraft v1.8.3 - ${singleplayerWorldName}`;singleplayerDirty=false;startGame();integratedInitializeHost();
         }
         let gameConfirmResolver = null;
         function showGameConfirm(message, options={}) {
@@ -2997,7 +3077,8 @@
                 keepInventory:document.getElementById('ruleKeepInventory').checked,
                 doMobSpawning:document.getElementById('ruleMobSpawning').checked,
                 pvp:document.getElementById('rulePvp').checked,difficulty:document.getElementById('ruleDifficulty').value,
-                mobCap:document.getElementById('ruleMobCap').value,
+                docileCap:document.getElementById('ruleDocileCap').value,
+                hostileCap:document.getElementById('ruleHostileCap').value,
                 dayLength:document.getElementById('ruleDayLength').value
             });
         }
@@ -3009,7 +3090,8 @@
             document.getElementById('ruleMobSpawning').checked=value.doMobSpawning;
             document.getElementById('rulePvp').checked=value.pvp;
             document.getElementById('ruleDifficulty').value=value.difficulty||'normal';
-            document.getElementById('ruleMobCap').value=String(value.mobCap);
+            document.getElementById('ruleDocileCap').value=String(value.docileCap);
+            document.getElementById('ruleHostileCap').value=String(value.hostileCap);
             document.getElementById('ruleDayLength').value=String(value.dayLength);
         }
         function openCreateWorldSettings() {
@@ -3136,6 +3218,9 @@
         document.getElementById('importWorldFile').addEventListener('change',e=>{if(e.target.files[0])importSingleplayerWorld(e.target.files[0]);e.target.value='';});
         const savedRelayAddress=safeStorageGet('mellorcraftRelayAddress')||'192.168.0.1:8000';
         const savedRelayEndpoint=parseRelayAddress(savedRelayAddress,safeStorageGet('mellorcraftRelayPort')||'');
+        const defaultScheme=window.location.protocol==='https:'?'wss':'ws';
+        for(const id of ['relayJoinScheme','relayHostScheme'])document.getElementById(id).value=safeStorageGet('mellorcraftRelayScheme')||defaultScheme;
+        document.getElementById('serverSchemeInput').value=DIRECT_SERVER_MODE?defaultScheme:(safeStorageGet('mellorcraftServerScheme')||defaultScheme);
         document.getElementById('relayJoinAddress').value=savedRelayEndpoint.host;
         document.getElementById('relayJoinPort').value=String(savedRelayEndpoint.port);
         document.getElementById('relayHostAddress').value=savedRelayEndpoint.host;
@@ -3144,6 +3229,14 @@
         document.getElementById('serverHostInput').value=DIRECT_SERVER_MODE?location.hostname:savedServerEndpoint.host;
         document.getElementById('serverPortInput').value=String(DIRECT_SERVER_MODE?DIRECT_SERVER_PORT:savedServerEndpoint.port);
         document.getElementById('refreshRelayWorldsBtn').addEventListener('click',()=>connectRelayForWorldList(false));
+        document.getElementById('relayJoinAddress').addEventListener('input', e=>{
+            const match=String(e.target.value).trim().match(/^(wss?):\/\//i);
+            if(match)document.getElementById('relayJoinScheme').value=match[1].toLowerCase();
+        });
+        document.getElementById('relayJoinScheme').addEventListener('change',()=>{
+            const el=document.getElementById('relayJoinAddress');
+            el.value=el.value.trim().replace(/^wss?:\/\//i,'');
+        });
         document.getElementById('relayJoinAddress').addEventListener('keypress',e=>{if(e.key==='Enter')connectRelayForWorldList(false);});
         document.getElementById('relayJoinPort').addEventListener('keypress',e=>{if(e.key==='Enter')connectRelayForWorldList(false);});
         document.getElementById('joinRelayWorldBtn').addEventListener('click',joinSelectedRelayWorld);
@@ -3242,9 +3335,9 @@
                 const px = Math.floor(player.x);
                 const pz = Math.floor(player.z);
                 const altBiome = getAltBiome(px, pz);
-                if (altBiome === 1) return [0.05, 0.05, 0.15]; // Blue
-                if (altBiome === 2) return [0.05, 0.15, 0.05]; // Green
-                return [0.1, 0.0, 0.05]; // Dark red Alt sky
+                if (altBiome === 1) return [0.075, 0.085, 0.19]; // Blue
+                if (altBiome === 2) return [0.075, 0.19, 0.075]; // Green
+                return [0.14, 0.035, 0.075]; // Dark red Alt sky
             }
             const day=daylightStrengthAt(worldTime),twilight=twilightGlowAt(worldTime)*(1-day);
             const night=[.05,.05,.15],daySky=[.5,.7,1.0];
@@ -3253,7 +3346,7 @@
 
         function getLightLevel() {
             if (currentDimension === 2) return 0.6;
-            if (currentDimension === 1) return 0.2;
+            if (currentDimension === 1) return 0.34;
             return .3+.7*daylightStrengthAt(worldTime);
         }
 
@@ -3457,7 +3550,7 @@
             [BLOCKS.WOOD]: 'Oak Wood', [BLOCKS.LEAVES]: 'Oak Leaves', [BLOCKS.SAND]: 'Sand',
             [BLOCKS.SNOW]: 'Snow', [BLOCKS.CACTUS]: 'Cactus',
             [BLOCKS.PLANKS]: 'Oak Planks', [BLOCKS.COBBLESTONE]: 'Cobble',
-            [BLOCKS.TORCH]: 'Torch', [BLOCKS.CRAFTING_TABLE]: 'Crafting Table', [BLOCKS.FURNACE]:'Furnace',
+            [BLOCKS.TORCH]: 'Torch', [BLOCKS.CHEST]: 'Chest', [BLOCKS.CRAFTING_TABLE]: 'Crafting Table', [BLOCKS.FURNACE]:'Furnace',
             [BLOCKS.COAL_ORE]: 'Coal Ore', [BLOCKS.IRON_ORE]: 'Iron Ore',
             [BLOCKS.GOLD_ORE]: 'Gold Ore', [BLOCKS.DIAMOND_ORE]: 'Diamond Ore',
             [BLOCKS.COAL_BLOCK]: 'Coal Block', [BLOCKS.IRON_BLOCK]: 'Iron Block',
@@ -3625,16 +3718,16 @@
         const BIOMES = {
             PLAINS: 0, DESERT_BARREN: 1, DESERT_CACTUS: 2, FOREST: 3,
             MOUNTAINS_LOW: 4, MOUNTAINS_MID: 5, MOUNTAINS_HIGH: 6,
-            TAIGA: 7, STONY_PEAKS: 8, BADLANDS: 9,
+            TAIGA: 7, SNOWY_PLAINS: 8, BADLANDS: 9,
             OCEAN: 10, SWAMP: 11, JUNGLE: 12, SAVANNA: 13, BEACH: 14, FLOWER_FOREST: 15
         };
         const ALT_BIOMES = { RED: 0, BLUE: 1, GREEN: 2 };
-        const BIOME_NAMES = ['Plains', 'Barren Desert', 'Cactus Desert', 'Forest', 'Low Mountains', 'Medium Mountains', 'High Mountains', 'Taiga', 'Stony Peaks', 'Badlands', 'Ocean', 'Swamp', 'Jungle', 'Savanna', 'Beach', 'Flower Forest'];
+        const BIOME_NAMES = ['Plains', 'Barren Desert', 'Cactus Desert', 'Forest', 'Low Mountains', 'Medium Mountains', 'High Mountains', 'Taiga', 'Snowy Plains', 'Badlands', 'Ocean', 'Swamp', 'Jungle', 'Savanna', 'Beach', 'Flower Forest'];
 
         const CUSTOM_BIOME_DEFS = [
             {key:'PLAINS',name:'Plains',id:BIOMES.PLAINS},{key:'FOREST',name:'Forest',id:BIOMES.FOREST},{key:'FLOWER_FOREST',name:'Flower Forest',id:BIOMES.FLOWER_FOREST},{key:'SAVANNA',name:'Savanna',id:BIOMES.SAVANNA},
             {key:'JUNGLE',name:'Jungle',id:BIOMES.JUNGLE},{key:'TAIGA',name:'Taiga',id:BIOMES.TAIGA},{key:'DESERT_BARREN',name:'Barren Desert',id:BIOMES.DESERT_BARREN},
-            {key:'DESERT_CACTUS',name:'Cactus Desert',id:BIOMES.DESERT_CACTUS},{key:'BADLANDS',name:'Badlands',id:BIOMES.BADLANDS},{key:'STONY_PEAKS',name:'Stony Peaks',id:BIOMES.STONY_PEAKS},
+            {key:'DESERT_CACTUS',name:'Cactus Desert',id:BIOMES.DESERT_CACTUS},{key:'BADLANDS',name:'Badlands',id:BIOMES.BADLANDS},{key:'SNOWY_PLAINS',name:'Snowy Plains',id:BIOMES.SNOWY_PLAINS},
             {key:'MOUNTAINS_LOW',name:'Low Mountains',id:BIOMES.MOUNTAINS_LOW},{key:'MOUNTAINS_MID',name:'Medium Mountains',id:BIOMES.MOUNTAINS_MID},{key:'MOUNTAINS_HIGH',name:'High Mountains',id:BIOMES.MOUNTAINS_HIGH}
         ];
         const WORLD_STRUCTURE_DEFS = [
@@ -3655,10 +3748,11 @@
                 out.features.caves=raw.features.caves!==false; out.features.ravines=raw.features.ravines!==false;
                 out.features.mineshafts=clampInt(raw.features.mineshafts,50,0,100);
             }
-            if(raw.biomes&&typeof raw.biomes==='object')for(const b of CUSTOM_BIOME_DEFS){const v=raw.biomes[b.key];if(v&&typeof v==='object'){out.biomes[b.key].enabled=v.enabled!==false;out.biomes[b.key].concentration=clampInt(v.concentration,100,0,500);}}
+            if(raw.biomes&&typeof raw.biomes==='object')for(const b of CUSTOM_BIOME_DEFS){const v=raw.biomes[b.key] || (b.key==='SNOWY_PLAINS'?raw.biomes.STONY_PEAKS:null);if(v&&typeof v==='object'){out.biomes[b.key].enabled=v.enabled!==false;out.biomes[b.key].concentration=clampInt(v.concentration,100,0,500);}}
             if(!CUSTOM_BIOME_DEFS.some(b=>out.biomes[b.key].enabled&&out.biomes[b.key].concentration>0)){out.biomes.PLAINS.enabled=true;out.biomes.PLAINS.concentration=100;}
             if(raw.structures&&typeof raw.structures==='object')for(const st of WORLD_STRUCTURE_DEFS)out.structures[st.key]=clampInt(raw.structures[st.key],st.chance,0,100);
             if(CUSTOM_BIOME_DEFS.some(b=>b.key===raw.flatBiome))out.flatBiome=raw.flatBiome;
+            else if(raw.flatBiome==='STONY_PEAKS')out.flatBiome='SNOWY_PLAINS';
             if(Array.isArray(raw.flatLayers)){
                 const layers=[]; let total=0;
                 for(const layer of raw.flatLayers.slice(0,24)){const blockId=clampInt(layer&&layer.blockId,0,1,255),count=clampInt(layer&&layer.count,1,1,199);if(!BLOCK_NAMES[blockId])continue;if(total+count>199){const remaining=199-total;if(remaining>0)layers.push({blockId,count:remaining});break;}layers.push({blockId,count});total+=count;}
@@ -3848,7 +3942,7 @@
         };
         const MOB_TYPE_KEY_BY_OBJECT = new Map(Object.entries(MOB_TYPES).map(([key, value]) => [value, key]));
 
-        // v1.8.2 shared procedural texture atlas. Every block face is authored as a
+        // v1.8.3 shared procedural texture atlas. Every block face is authored as a
         // logical 16x16 texture. Each logical texel is stored as a 2x2 physical texel
         // in the atlas for crisp nearest-neighbor sampling, while all blocks/mobs still
         // share one texture object and the existing batched geometry/draw calls.
@@ -4264,8 +4358,8 @@
             }
 
             vec3 torchLighting(vec3 worldPos, vec3 normal) {
-                float radius = mix(4.4, 8.4, uShaderEnabled) * uTorchRange;
-                float power = mix(0.48, 1.02, uShaderEnabled) * uTorchBrightness;
+                float radius = mix(2.9, 5.0, uShaderEnabled) * uTorchRange;
+                float power = mix(0.22, 0.43, uShaderEnabled) * uTorchBrightness;
                 vec3 total = vec3(0.0);
                 if (uTorchCount > 0.5) total += oneTorch(uTorchPos0, worldPos, normal, radius, power);
                 if (uTorchCount > 1.5) total += oneTorch(uTorchPos1, worldPos, normal, radius, power);
@@ -4519,7 +4613,7 @@
                 return cachedNearestTorches.slice(0, maxCount);
             }
             const best = [];
-            const maxTorchRadius = liteShaderEnabled ? 8.4 * shaderTorchRange : 6.0;
+            const maxTorchRadius = (liteShaderEnabled ? 5.0 : 2.9) * shaderTorchRange;
             const maxD2 = maxTorchRadius * maxTorchRadius;
             const keep = Math.max(4, maxCount);
             const considerLight=p=>{
@@ -4557,14 +4651,24 @@
         }
         function chunkPointLights(mesh,points){
             const nearest=[];
+            const eyeY=playerEyeY();
+            const maxTorchRadius=(liteShaderEnabled?5.0:2.9)*shaderTorchRange;
             for(const p of points){
-                const dx=Math.max(0,Math.abs(p[0]-mesh.centerX)-8),dz=Math.max(0,Math.abs(p[2]-mesh.centerZ)-8),d2=dx*dx+dz*dz;
-                if(d2>100)continue;
-                // Keep at most four nearby sources (the GLSL budget). Select by
-                // horizontal separation, rather than camera distance/height.
+                const dx=Math.max(0,Math.abs(p[0]-mesh.centerX)-8);
+                const dz=Math.max(0,Math.abs(p[2]-mesh.centerZ)-8);
+                const horizontal=dx*dx+dz*dz;
+                if(horizontal>(maxTorchRadius+1)*(maxTorchRadius+1))continue;
+                // Previous code compared only X/Z. In a multi-level maze it
+                // could choose four basement torches for the upper floor, so
+                // torches on those floors visibly emitted no light at all.
+                // Follow the viewed floor and favor nearby lamps on that floor.
+                const dy=p[1]-eyeY;
+                const px=p[0]-player.x,pz=p[2]-player.z;
+                const score=horizontal*3+dy*dy*1.6+(px*px+pz*pz)*0.14;
                 let i=nearest.length;
-                while(i>0&&nearest[i-1].d2>d2)i--;
-                nearest.splice(i,0,{p,d2});if(nearest.length>4)nearest.pop();
+                while(i>0&&nearest[i-1].score>score)i--;
+                nearest.splice(i,0,{p,score});
+                if(nearest.length>4)nearest.pop();
             }
             return nearest.map(v=>v.p);
         }
@@ -4877,6 +4981,7 @@
         let fluidTimer = 0;
         const knownDungeonSpawners = new Set();
         let dungeonSpawnTimer = 0;
+        const biomeProvinceCache = new Map();
         const mountainRegionCache = new Map();
         const mountainInfoCache = new Map();
         const megaCaveCache = new Map();
@@ -5063,9 +5168,13 @@
         function mix(a, b, amount) { return a + (b - a) * amount; }
 
         function getClimate(x, z) {
-            const scale = 0.0008;
-            const temp = biomeNoise.octave(x * scale, z * scale, 3, 0.5);
-            const moist = biomeNoise.octave(x * scale + 5000, z * scale + 5000, 3, 0.5);
+            // Independent low-frequency 2D warps bend climate contours so narrow,
+            // unnaturally straight strips don't follow a single noise isoline.
+            const warpX = biomeNoise.octave(x * .0017 + 1407, z * .0017 - 2379, 2, .55) * 135;
+            const warpZ = biomeNoise.octave(x * .0017 - 3151, z * .0017 + 4783, 2, .55) * 135;
+            const sx = x + warpX, sz = z + warpZ, scale = .0008;
+            const temp = biomeNoise.octave(sx * scale, sz * scale, 3, .5);
+            const moist = biomeNoise.octave(sx * scale + 5000, sz * scale + 5000, 3, .5);
             return { temp, moist };
         }
 
@@ -5079,30 +5188,108 @@
         }
 
         // Climate biome before mountain rings and beaches are applied.
-        function getBaseBiome(x, z) {
-            const { temp, moist } = getClimate(x, z);
-            if (temp > 0.32) {
-                if (moist > 0.48) return BIOMES.JUNGLE;
-                if (moist > 0.10) return BIOMES.SAVANNA;
-                if (moist < -0.18) return BIOMES.BADLANDS;
-                if (moist < -0.02) return BIOMES.DESERT_BARREN;
-                return BIOMES.DESERT_CACTUS;
+        function getBiomeProvince(cellX, cellZ) {
+    // Cache climate at province centers. The warp changes borders, not biome
+    // assignment within a province; this prevents thin isotherm/isohyet bands.
+    const key = `${cellX},${cellZ}`;
+    const existing = biomeProvinceCache.get(key);
+    if (existing) return existing;
+    if (biomeProvinceCache.size > 20000) biomeProvinceCache.clear();
+    const size = 88;
+    const px = (cellX + .5 + (coordHash(cellX,cellZ,9101,WORLD_SEED)-.5)*.54)*size;
+    const pz = (cellZ + .5 + (coordHash(cellX,cellZ,9102,WORLD_SEED)-.5)*.54)*size;
+    // Independent continent-scale temperature and rainfall fields make nearby
+    // provinces climatically similar, rather than drawing unrelated biome IDs.
+    // Frequency is deliberately far below the province-grid frequency.
+    const temp = biomeNoise.octave(px*.00135+1351,pz*.00135-2791,2,.55)*1.4;
+    const moist = biomeNoise.octave(px*.00150-3701,pz*.00150+6143,2,.55)*1.25;
+    let biome;
+    if (temp >= .20) {
+        if (moist > .25) biome = BIOMES.JUNGLE;
+        else if (moist > .045) biome = BIOMES.SAVANNA;
+        else if (moist < -.33) biome = BIOMES.BADLANDS;
+        else if (moist < -.125) biome = BIOMES.DESERT_BARREN;
+        else biome = BIOMES.DESERT_CACTUS;
+    } else if (temp >= .10) {
+        if (moist > .29) biome = BIOMES.JUNGLE;
+        else if (moist < .12) biome = BIOMES.SAVANNA;
+        else biome = BIOMES.FOREST;
+    } else if (temp < -.34) {
+        if (moist > -.02 && coordHash(cellX,cellZ,9372,WORLD_SEED)<.32) biome = BIOMES.TAIGA;
+        else if (temp > -.70 && moist > -.20) biome = BIOMES.FOREST;
+        else biome = BIOMES.PLAINS;
+    } else if (temp < -.20) {
+        if (moist > .29 && coordHash(cellX,cellZ,9372,WORLD_SEED)<.24) biome = BIOMES.TAIGA;
+        else if (moist > .07) biome = BIOMES.FOREST;
+        else biome = BIOMES.PLAINS;
+    } else if (moist > .16) {
+        // A flower forest is a whole temperate province, not a small grid tile.
+        biome = temp > -.14 && temp < .12 && coordHash(cellX,cellZ,8151,WORLD_SEED) < .055
+            ? BIOMES.FLOWER_FOREST : BIOMES.FOREST;
+    } else {
+        biome = BIOMES.PLAINS;
+    }
+    // A second, climate-compatible draw gives forests about twice their former
+    // selection weight. Provinces stay at 88 blocks: no bigger forest patches.
+    // Only promote temperate plains; deserts, mountains and icy areas remain intact.
+    if (biome === BIOMES.PLAINS && temp >= -.34 && temp < .20 && moist > -.14 &&
+        coordHash(cellX, cellZ, 9403, WORLD_SEED) < .17) {
+        biome = (temp > -.14 && temp < .12 && coordHash(cellX,cellZ,8151,WORLD_SEED)<.055)
+            ? BIOMES.FLOWER_FOREST : BIOMES.FOREST;
+    }
+    // Preserve plausible climate neighbors at the scale of full provinces.
+    // Dry hot deserts should border savanna/badlands rather than jungle;
+    // cold taiga/peaks should reach them only through temperate plains.
+    // Changing the intervening province prevents a thin ecotone strip.
+    if ([BIOMES.TAIGA,BIOMES.JUNGLE,BIOMES.FOREST,BIOMES.FLOWER_FOREST].includes(biome)) {
+        outer: for (let dx=-2; dx<=2; dx++) for (let dz=-2; dz<=2; dz++) {
+            if (!dx && !dz) continue;
+            const nx=cellX+dx, nz=cellZ+dz;
+            const qx=(nx+.5+(coordHash(nx,nz,9101,WORLD_SEED)-.5)*.54)*size;
+            const qz=(nz+.5+(coordHash(nx,nz,9102,WORLD_SEED)-.5)*.54)*size;
+            const neighborTemp=biomeNoise.octave(qx*.00135+1351,qz*.00135-2791,2,.55)*1.4;
+            const neighborMoist=biomeNoise.octave(qx*.00150-3701,qz*.00150+6143,2,.55)*1.25;
+            const desertNeighbor=neighborTemp>=.20 && neighborMoist<=.045;
+            if (desertNeighbor) {
+                biome=(biome===BIOMES.JUNGLE||biome===BIOMES.FOREST||biome===BIOMES.FLOWER_FOREST) && temp>=.10
+                    ? BIOMES.SAVANNA : BIOMES.PLAINS;
+                break outer;
             }
-            if (temp < -0.28) {
-                if (moist < -0.70) return BIOMES.STONY_PEAKS;
-                return BIOMES.TAIGA;
+            if ((biome===BIOMES.TAIGA) && Math.max(Math.abs(dx),Math.abs(dz))<=1 && neighborTemp>=.10 && neighborMoist<.28) {
+                biome=BIOMES.PLAINS;
+                break outer;
             }
-            // Rare Flower Forest pockets occur only in temperate, reasonably moist land.
-            // A broad seeded cell test keeps them uncommon while making each pocket large enough to explore.
-            if (moist > -0.05 && temp > -0.18 && temp < 0.28 && coordHash(Math.floor(x/190),Math.floor(z/190),8151) < 0.075) return BIOMES.FLOWER_FOREST;
-            if (moist > 0.02) return BIOMES.FOREST;
-            return BIOMES.PLAINS;
         }
+    }
+    // Deterministic province-level 50/50 split preserves biome patch sizes.
+    if (biome === BIOMES.TAIGA && coordHash(cellX,cellZ,9373,WORLD_SEED)<0.5)
+        biome = BIOMES.SNOWY_PLAINS;
+    const result = { x:px, z:pz, biome, temp, moist };
+    biomeProvinceCache.set(key,result);
+    return result;
+}
+
+        function getBaseBiome(x, z) {
+    // Seeded, jittered two-dimensional climate provinces. The closest center
+    // gives each biome a substantial rounded footprint instead of a thin strip
+    // formed where several climate thresholds almost coincide.
+    const warpX = biomeNoise.octave(x*.0046+1741,z*.0046-1927,2,.55)*18;
+    const warpZ = biomeNoise.octave(x*.0046-2881,z*.0046+3653,2,.55)*18;
+    const px=x+warpX,pz=z+warpZ,grid=88;
+    const cx=Math.floor(px/grid),cz=Math.floor(pz/grid);
+    let nearest=null,best=Infinity;
+    for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+        const province=getBiomeProvince(cx+dx,cz+dz);
+        const distance=(px-province.x)**2+(pz-province.z)**2;
+        if(distance<best){best=distance;nearest=province;}
+    }
+    return nearest.biome;
+}
 
         function getMountainRegion(cellX, cellZ) {
             const key = `${cellX},${cellZ}`;
             if (mountainRegionCache.has(key)) return mountainRegionCache.get(key);
-            const grid = 680;
+            const grid = 420;
             const mh = (salt) => coordHash(cellX, cellZ, salt, WORLD_SEED + salt * 131);
             // Mountain-region frequency is half of the previous build. Each active
             // region still receives different locations, chains, heights, and outlines.
@@ -5114,7 +5301,7 @@
             const cx = cellX * grid + 70 + mh(901) * (grid - 140);
             const cz = cellZ * grid + 70 + mh(902) * (grid - 140);
             const chainAngle = mh(903) * Math.PI * 2;
-            const chainLength = 250 + mh(904) * 210;
+            const chainLength = 155 + mh(904) * 130;
             const peakCount = 2 + Math.floor(mh(905) * 3);
             const maxTierRoll = mh(906);
             const maxTier = maxTierRoll < 0.35 ? 0 : (maxTierRoll < 0.74 ? 1 : 2);
@@ -5122,7 +5309,7 @@
 
             for (let i = 0; i < peakCount; i++) {
                 const t = peakCount === 1 ? 0 : (i / (peakCount - 1) - 0.5);
-                const bend = (mh(920 + i) - 0.5) * 145;
+                const bend = (mh(920 + i) - 0.5) * 95;
                 const along = t * chainLength + (mh(930 + i) - 0.5) * 55;
                 const px = cx + Math.cos(chainAngle) * along - Math.sin(chainAngle) * bend;
                 const pz = cz + Math.sin(chainAngle) * along + Math.cos(chainAngle) * bend;
@@ -5141,8 +5328,8 @@
                     z: pz,
                     height: peakHeight,
                     tier,
-                    spreadLong: (105 + mh(960 + i) * 100) * broadness,
-                    spreadCross: (72 + mh(970 + i) * 78) * broadness,
+                    spreadLong: (70 + mh(960 + i) * 65) * broadness,
+                    spreadCross: (48 + mh(970 + i) * 48) * broadness,
                     angle: chainAngle + (mh(980 + i) - 0.5) * 0.95,
                     phaseX: mh(990 + i) * 4000,
                     phaseZ: mh(1000 + i) * 4000
@@ -5160,7 +5347,7 @@
             if (mountainInfoCache.has(cacheKey)) return mountainInfoCache.get(cacheKey);
             if (mountainInfoCache.size > 220000) mountainInfoCache.clear();
 
-            const grid = 680;
+            const grid = 420;
             const baseCellX = Math.floor(x / grid), baseCellZ = Math.floor(z / grid);
             let bestTarget = -Infinity;
             let best = null;
@@ -5260,7 +5447,7 @@
                 case BIOMES.DESERT_BARREN:return 61+broad*8+detail*2;
                 case BIOMES.DESERT_CACTUS:return 63+broad*9+detail*2.5;
                 case BIOMES.BADLANDS:return 72+broad*13+detail*5;
-                case BIOMES.STONY_PEAKS:return 122+broad*17+rough*2.1;
+                case BIOMES.SNOWY_PLAINS:return 78+broad*10+detail*3+(ridge-.5)*6;
                 case BIOMES.MOUNTAINS_LOW:return 112+broad*14+rough*1.7;
                 case BIOMES.MOUNTAINS_MID:return 143+broad*13+rough*1.9;
                 case BIOMES.MOUNTAINS_HIGH:return 173+broad*11+rough*2.2;
@@ -5306,6 +5493,8 @@
             }
             return getBaseBiome(x, z);
         }
+
+        
 
         function getAltBiome(x, z) {
             const val = biomeNoise.octave(x * 0.005 + 10000, z * 0.005 + 10000, 3, 0.5);
@@ -5653,10 +5842,12 @@
                 for (let oz = -1; oz <= 1; oz++) {
                     const cellX = baseCellX + ox, cellZ = baseCellZ + oz;
                     if (posRand(cellX * 15, cellZ * 15) <= 0.70) continue;
-                    const cx = cellX * grid + Math.floor(posRand(cellX, cellZ, 6) * 32) + 16;
-                    const cz = cellZ * grid + Math.floor(posRand(cellX, cellZ, 7) * 32) + 16;
+                    // At least 50 blocks between neighboring centers. A 41x41
+                    // maze plus its 4-block entrance apron cannot overlap the next.
+                    const cx = cellX * grid + 25 + Math.floor(posRand(cellX, cellZ, 6) * 15);
+                    const cz = cellZ * grid + 25 + Math.floor(posRand(cellX, cellZ, 7) * 15);
                     const dx = wx - cx, dz = wz - cz;
-                    if (Math.abs(dx) <= 20 && Math.abs(dz) <= 20) {
+                    if ((Math.abs(dx) <= 20 && Math.abs(dz) <= 20) || (Math.abs(dx) <= 1 && dz >= -24 && dz < -20)) {
                         // Maze occupies baseY..baseY+15, safely between the Y=0 and
                         // Y=49 bedrock layers in the 50-block Alt Dimension.
                         const baseY = 4 + Math.floor(clamp(posRand(cx, cz, 556), 0, 0.999999) * 20);
@@ -5665,6 +5856,286 @@
                 }
             }
             return null;
+        }
+
+        // Connected floor plans: each room has a seeded parent one step closer to
+        // the atrium. Optional loop doors provide varied routes without isolating loot.
+        function layoutParent(cx,cz,x,z,center,salt) {
+            if(x===center&&z===center)return null;
+            const dx=center-x,dz=center-z;
+            if(dx&&dz){
+                const alongX=coordHash(cx+x,cz+z,salt)<0.5;
+                return alongX?[x+Math.sign(dx),z]:[x,z+Math.sign(dz)];
+            }
+            return dx?[x+Math.sign(dx),z]:[x,z+Math.sign(dz)];
+        }
+        // Exactly three fixed CENTRAL hallway patterns. All surrounding side
+        // passages are seeded randomized spanning trees (different per floor).
+        // Carve their paths away from the central ore-display position of rooms.
+        const structureHallCache = new Map();
+        function structureHallMask(cx,cz,floor,roomCount,cellSize,center,salt,excluded=-1) {
+            const key = `${cx},${cz},${floor},${roomCount},${salt},${excluded}`;
+            if(structureHallCache.has(key))return structureHallCache.get(key);
+            if(structureHallCache.size>512)structureHallCache.clear();
+            const n=roomCount, visited=new Set([center*n+center]), edges=[];
+            const mask=new Uint8Array((n*cellSize+1)*(n*cellSize+1));
+            const neighbors=id=>{
+                const x=id%n,z=Math.floor(id/n),next=[];
+                if(x>0)next.push(id-1);if(x<n-1)next.push(id+1);
+                if(z>0)next.push(id-n);if(z<n-1)next.push(id+n);
+                return next.filter(v=>v!==excluded);
+            };
+            // Weighted Prim tree: guaranteed connected and independently random,
+            // even when a sealed chamber is removed from the walkable graph.
+            while(visited.size<n*n-(excluded>=0?1:0)){
+                let best=null,bestWeight=Infinity;
+                for(const id of visited){
+                    for(const v of neighbors(id)){
+                        if(visited.has(v))continue;
+                        const lo=Math.min(id,v),hi=Math.max(id,v);
+                        const weight=coordHash(cx+lo*37,cz+hi*61,salt+floor*617);
+                        if(weight<bestWeight){bestWeight=weight;best=[id,v];}
+                    }
+                }
+                if(!best)break;
+                edges.push(best);visited.add(best[1]);
+            }
+            // Occasional extra doorways/loops vary how the routes join rooms.
+            for(let id=0;id<n*n;id++){
+                if(id===excluded)continue;
+                for(const v of neighbors(id)){
+                    if(v<=id||edges.some(([a,b])=>(a===id&&b===v)||(a===v&&b===id)))continue;
+                    if(coordHash(cx+id*31,cz+v*41,salt+floor*673+51)<0.11)edges.push([id,v]);
+                }
+            }
+            const w=n*cellSize+1;
+            for(const [a,b] of edges){
+                const ax=(a%n)*cellSize+1,az=Math.floor(a/n)*cellSize+1;
+                const bx=(b%n)*cellSize+1,bz=Math.floor(b/n)*cellSize+1;
+                if(az===bz){for(let x=Math.min(ax,bx);x<=Math.max(ax,bx);x++)mask[x+az*w]=1;}
+                else {for(let z=Math.min(az,bz);z<=Math.max(az,bz);z++)mask[ax+z*w]=1;}
+            }
+            structureHallCache.set(key,mask);return mask;
+        }
+        function mansionLayout(cx,cz) { return Math.floor(coordHash(cx,cz,7339)*3); }
+        function mansionCentralHallAt(cx,cz,mx,mz) {
+            if(mx>=14&&mx<=16&&mz>=0&&mz<=11)return true;
+            if((mx>=11&&mx<=13||mx>=17&&mx<=19)&&mz>=10&&mz<=29)return true;
+            const layout=mansionLayout(cx,cz);
+            if(layout===0)return mz>=11&&mz<=13&&mx>=5&&mx<=25;
+            if(layout===1)return mz>=17&&mz<=19&&mx>=5&&mx<=25;
+            return (mz>=11&&mz<=13||mz>=23&&mz<=25)&&mx>=6&&mx<=24;
+        }
+        function mansionHallAt(cx,cz,mx,mz,floor=0) {
+            return mansionCentralHallAt(cx,cz,mx,mz) ||
+                Boolean(structureHallMask(cx,cz,floor,5,6,2,7341)[mx+mz*31]);
+        }
+        const mansionOreCache=new Map();
+        function mansionOrePositions(cx,cz,floor) {
+            // Exactly fifteen separate display ores on each floor. Select only
+            // interior room centers, never the atrium, stair flight or hallways.
+            const key=`${cx},${cz},${floor}`;
+            if(mansionOreCache.has(key))return mansionOreCache.get(key);
+            if(mansionOreCache.size>512)mansionOreCache.clear();
+            const choices=[];
+            for(let mx=3;mx<=27;mx+=6)for(let mz=3;mz<=27;mz+=6){
+                if(mx>=11&&mx<=19&&mz>=10&&mz<=20)continue;
+                if(mansionHallAt(cx,cz,mx,mz,floor))continue;
+                if(mx>=15&&mx<=16&&mz>=12&&mz<=17)continue;
+                choices.push({mx,mz,rank:coordHash(cx+mx*13,cz+mz*17,7763+floor*97)});
+            }
+            choices.sort((a,b)=>a.rank-b.rank||a.mx-b.mx||a.mz-b.mz);
+            if(choices.length<15)throw Error('Insufficient mansion ore positions');
+            const picked=new Set(choices.slice(0,15).map(o=>`${o.mx},${o.mz}`));
+            mansionOreCache.set(key,picked);return picked;
+        }
+        function altMazeLayout(cx,cz){return Math.floor(coordHash(cx,cz,9266)*3);}
+        function altMazeCentralHallAt(cx,cz,mx,mz){
+            if(mx>=19&&mx<=21&&mz>=0&&mz<=38)return true;
+            const branchZ=[20,10,30][altMazeLayout(cx,cz)];
+            return mx>=5&&mx<=35&&Math.abs(mz-branchZ)<=1;
+        }
+        const altMazeRoomCache=new Map();
+        function altMazeSpecialRoom(cx,cz){
+            const key=`${cx},${cz}`;
+            if(altMazeRoomCache.has(key))return altMazeRoomCache.get(key);
+            if(altMazeRoomCache.size>1024)altMazeRoomCache.clear();
+            // The chamber can appear throughout the maze, not just the four
+            // corners. Reserve it BEFORE routing side halls to prevent erasure.
+            const candidates=[];
+            for(let rz=1;rz<=7;rz++)for(let rx=1;rx<=7;rx++){
+                let safe=true;
+                for(let u=0;u<=5&&safe;u++)for(let v=0;v<=5;v++){
+                    const mx=rx*5+u,mz=rz*5+v;
+                    if((mx>=15&&mx<=25&&mz>=15&&mz<=25)||
+                       (mx>=16&&mx<=24&&mz>=13&&mz<=23)||
+                       altMazeCentralHallAt(cx,cz,mx,mz)){safe=false;break;}
+                }
+                if(safe)candidates.push([rx,rz]);
+            }
+            // There are always peripheral rooms available in each of the three
+            // core variations; deterministic fallback protects old/custom seeds.
+            if(!candidates.length)candidates.push([1,1]);
+            const i=Math.floor(coordHash(cx,cz,99)*candidates.length);
+            const [x,z]=candidates[i];
+            const result=[x,z,Math.floor(coordHash(cx,cz,101)*3)];
+            altMazeRoomCache.set(key,result);return result;
+        }
+        function altMazeHallAt(cx,cz,mx,mz,floor=0){
+            if(altMazeCentralHallAt(cx,cz,mx,mz))return true;
+            const [sx,sz,sf]=altMazeSpecialRoom(cx,cz);
+            const reserved=floor===sf?sz*8+sx:-1;
+            return Boolean(structureHallMask(cx,cz,floor,8,5,4,9271,reserved)[mx+mz*41]);
+        }
+        function connectedRoomDoor(cx,cz,ax,az,bx,bz,center,salt) {
+            if(Math.abs(ax-bx)+Math.abs(az-bz)!==1)return false;
+            if(salt===9247){
+                const [sx,sz]=altMazeSpecialRoom(cx,cz);
+                // A hidden, fully sealed ore chamber: no hallway/room doors.
+                if((ax===sx&&az===sz)||(bx===sx&&bz===sz))return false;
+            }
+            const ap=layoutParent(cx,cz,ax,az,center,salt),bp=layoutParent(cx,cz,bx,bz,center,salt);
+            if((ap&&ap[0]===bx&&ap[1]===bz)||(bp&&bp[0]===ax&&bp[1]===az))return true;
+            return coordHash(cx+Math.min(ax,bx),cz+Math.min(az,bz),salt+17+(ax!==bx?300:0))<0.16;
+        }
+        function mansionBlockAt(cx,cz,mx,mz,ly,planks,wood) {
+            if(ly<0||ly>11)return null;
+            // Original 12-block exterior height, but now with two actual floors.
+            if(mx>=14&&mx<=16&&mz>=-4&&mz<0)
+                return ly===0?BLOCKS.BRICK:BLOCKS.AIR;
+            if(mx<0||mx>30||mz<0||mz>30)return null;
+            const floor=ly<6?0:1,localY=ly%6;
+            const atrium=mx>=11&&mx<=19&&mz>=10&&mz<=20;
+            const hall=mansionHallAt(cx,cz,mx,mz,floor);
+            const outer=mx===0||mx===30||mz===0||mz===30;
+            const stair=mx>=15&&mx<=16&&mz>=12&&mz<=17;
+            // Six consecutive 1-block elevation changes. Each block is a real
+            // wooden stair, not a full-block staircase requiring jump inputs.
+            if(stair){
+                const step=mz-12,stepY=1+step;
+                if(ly<stepY)return planks;
+                if(ly===stepY)return BLOCKS.OAK_STAIRS_S;
+                return BLOCKS.AIR; // keep the upper-floor stairwell open
+            }
+            if(ly===0)return atrium||hall||mx%6===3||mz%6===3?BLOCKS.BRICK:planks;
+            if(ly===6)return atrium||hall?planks:BLOCKS.BRICK;
+            if(ly===11)return atrium&&mx>=13&&mx<=17&&mz>=12&&mz<=18?BLOCKS.GLASS:planks;
+            if(outer){
+                if(mz===0&&mx>=14&&mx<=16&&ly<=3)return BLOCKS.AIR;
+                if((localY===2||localY===3)&&((mz===0||mz===30)?(mx>2&&mx<28&&mx%5===2):(mz>2&&mz<28&&mz%5===2)))return BLOCKS.GLASS;
+                return ((mx===0||mx===30)&&(mz===0||mz===30))?wood:planks;
+            }
+            if(atrium||hall){
+                if(atrium&&((mx===11||mx===19)&&(mz===11||mz===19)))return wood;
+                if(ly===9&&atrium&&mx===15&&mz===19)return BLOCKS.TORCH;
+                if(localY===1&&atrium&&((mx===12||mx===18)&&(mz===12||mz===18)))return BLOCKS.CRAFTING_TABLE;
+                return BLOCKS.AIR;
+            }
+            const wallX=mx%6===0,wallZ=mz%6===0;
+            if(wallX||wallZ){
+                let door=false;
+                const salt=7318+mansionLayout(cx,cz)+floor*109;
+                if(wallX&&!wallZ&&mx>0&&mx<30&&mz%6>=2&&mz%6<=4){
+                    const rx=mx/6,rz=Math.floor(mz/6);
+                    door=connectedRoomDoor(cx,cz,rx-1,rz,rx,rz,2,salt);
+                }
+                if(wallZ&&!wallX&&mz>0&&mz<30&&mx%6>=2&&mx%6<=4){
+                    const rx=Math.floor(mx/6),rz=mz/6;
+                    door=connectedRoomDoor(cx,cz,rx,rz-1,rx,rz,2,salt);
+                }
+                return door&&localY<=3?BLOCKS.AIR:planks;
+            }
+            if(localY===1){
+                if(mansionOrePositions(cx,cz,floor).has(`${mx},${mz}`))
+                    return oreLootBlock(coordHash(cx+mx,cz+mz,7741+floor*109));
+                if(mx%6===1&&mz%6===1&&coordHash(cx+Math.floor(mx/6),cz+Math.floor(mz/6),7742+floor*89)<0.52)return BLOCKS.CHEST;
+                if(mx%6===5&&mz%6===5&&coordHash(cx+Math.floor(mx/6),cz+Math.floor(mz/6),7743+floor*89)<0.35)return BLOCKS.CRAFTING_TABLE;
+            }
+            if(localY===1&&mx%6===2&&mz%6===1)return BLOCKS.BRICK;
+            if(localY===2&&mx%6===2&&mz%6===1)return BLOCKS.TORCH;
+            return BLOCKS.AIR;
+        }
+        function altMazeBlockAt(cx,cz,mx,mz,ly){
+            if(ly<0||ly>15)return null;
+            // Outside the building: create a clear approach through the solid
+            // Timeless Void rock, with a solid floor the player can stand on.
+            if(mx>=19&&mx<=21&&mz>=-4&&mz<0)
+                return ly===0?BLOCKS.BRICK:BLOCKS.AIR;
+            if(mx<0||mx>40||mz<0||mz>40)return null;
+            const floor=Math.min(2,Math.floor(ly/5)),yInFloor=ly%5;
+            const atrium=mx>=15&&mx<=25&&mz>=15&&mz<=25;
+            const hall=altMazeHallAt(cx,cz,mx,mz,floor);
+            const outer=mx===0||mx===40||mz===0||mz===40;
+            const stairA=mx>=17&&mx<=18&&mz>=16&&mz<=20;
+            const stairB=mx>=22&&mx<=23&&mz>=16&&mz<=20;
+            const u=mx%5,v=mz%5,roomX=Math.floor(mx/5),roomZ=Math.floor(mz/5);
+            if(outer){
+                if(mz===0&&mx>=19&&mx<=21&&ly>=1&&ly<=3)return BLOCKS.AIR;
+                return BLOCKS.TERRACOTTA;
+            }
+            const [hiddenX,hiddenZ,hiddenFloor]=altMazeSpecialRoom(cx,cz);
+            if(floor===hiddenFloor&&mx>=hiddenX*5&&mx<=hiddenX*5+5&&mz>=hiddenZ*5&&mz<=hiddenZ*5+5){
+                // Absolute chamber priority over corridors, room doors, stairs
+                // and decorations. Its nine interior ores are never overwritten.
+                if(yInFloor===0)return BLOCKS.TERRACOTTA;
+                const interior=u>=1&&u<=3&&v>=1&&v<=3;
+                if(interior)return yInFloor===1?BLOCKS.MELLORITE_ORE:BLOCKS.AIR;
+                if(u>=1&&u<=4&&v>=1&&v<=4)return BLOCKS.AIR;
+                return BLOCKS.TERRACOTTA; // no doorway or torches
+            }
+            if(ly===15)return BLOCKS.TERRACOTTA;
+            // A wooden stair block occupies each ascending tread, with a
+            // deterministic filled supporting column below, clear space above,
+            // and a matching landing at the final elevation.
+            if(stairA){
+                const step=mz-16,stairY=1+step;
+                if(ly<stairY)return BLOCKS.BRICK;
+                if(ly===stairY)return BLOCKS.OAK_STAIRS_S; // reaches Y=5 landing
+                if(ly>=10)return BLOCKS.TERRACOTTA; // third-floor gallery
+                return BLOCKS.AIR;
+            }
+            if(stairB){
+                const step=20-mz,stairY=6+step;
+                if(ly>=5&&ly<stairY)return ly===5?BLOCKS.TERRACOTTA:BLOCKS.BRICK;
+                if(ly===stairY)return BLOCKS.OAK_STAIRS_N; // high half faces -Z
+                if(ly>stairY)return BLOCKS.AIR;
+                // Lower atrium remains open beneath the upper stair flight.
+                return ly===0?BLOCKS.TERRACOTTA:BLOCKS.AIR;
+            }
+            if(atrium){
+                if(ly===0)return BLOCKS.TERRACOTTA;
+                if(ly===5||ly===10){
+                    // The whole second-floor atrium is a proper deck instead of
+                    // an unsafe open void. Only stairwell headroom stays open;
+                    // stair blocks themselves are handled above this branch.
+                    const lowerStairOpening=ly===5&&mx>=17&&mx<=18&&mz>=16&&mz<=20;
+                    const upperStairOpening=ly===10&&mx>=22&&mx<=23&&mz>=16&&mz<=20;
+                    if(!lowerStairOpening&&!upperStairOpening)return BLOCKS.TERRACOTTA;
+                }
+                if((mx===15||mx===25)&&(mz===15||mz===25))return BLOCKS.BRICK;
+                return BLOCKS.AIR;
+            }
+            if(hall){
+                // Do not cut ore displays or leave room walls across corridors.
+                return yInFloor===0?BLOCKS.BRICK:BLOCKS.AIR;
+            }
+            if(yInFloor===0)return u===2||v===2?BLOCKS.BRICK:BLOCKS.TERRACOTTA;
+            const wallX=u===0,wallZ=v===0;
+            if(wallX||wallZ){
+                let open=false;
+                if(wallX&&!wallZ&&mx>0&&mx<40&&v>=1&&v<=3){
+                    open=connectedRoomDoor(cx,cz,roomX-1,roomZ,roomX,roomZ,4,9247);
+                }
+                if(wallZ&&!wallX&&mz>0&&mz<40&&u>=1&&u<=3){
+                    open=connectedRoomDoor(cx,cz,roomX,roomZ-1,roomX,roomZ,4,9247);
+                }
+                return open&&yInFloor<=3?BLOCKS.AIR:BLOCKS.TERRACOTTA;
+            }
+            if(yInFloor===1&&u===2&&v===2)return oreLootBlock(coordHash(cx+mx,ly,cz+mz));
+            if(yInFloor===1&&u===1&&v===1&&coordHash(cx+roomX,cz+roomZ,7050+floor)<0.24)return BLOCKS.CHEST;
+            if(yInFloor===1&&u===3&&v===1)return BLOCKS.BRICK;
+            if(yInFloor===2&&u===3&&v===1)return BLOCKS.TORCH;
+            return BLOCKS.AIR;
         }
 
         function stairStepAt(u, v, yInFloor) {
@@ -5743,7 +6214,7 @@
                         const biome = getBiome(cx, cz);
                         if (!allowedBiomes.includes(biome)) continue;
                         const dx = wx - cx, dz = wz - cz;
-                        if (Math.abs(dx) <= radius && Math.abs(dz) <= radius) candidates.push({ type, cx, cz, dx, dz, biome });
+                        if ((Math.abs(dx) <= radius && Math.abs(dz) <= radius) || (type === 'MANSION' && Math.abs(dx) <= 1 && dz >= -radius-4 && dz < -radius)) candidates.push({ type, cx, cz, dx, dz, biome });
                     }
                 }
             }
@@ -5780,12 +6251,87 @@
             return null;
         }
 
+
+        // Structure commands intentionally use the same per-cell seeds, placement
+        // priorities and biome rules as procedural generation and the seed map.
+        const STRUCTURE_TYPES = ['mansion','outpost','cabin','dungeon','alt_maze','boss_shrine','boss_arena'];
+        function normalizeStructureName(value) {
+            const name=String(value||'').trim().toLowerCase().replace(/[\s-]+/g,'_');
+            const names={mansion:'MANSION',mansions:'MANSION',outpost:'OUTPOST',outposts:'OUTPOST',cabin:'CABIN',cabins:'CABIN',dungeon:'DUNGEON',dungeons:'DUNGEON',maze:'ALT_MAZE',mazes:'ALT_MAZE',altmaze:'ALT_MAZE',alt_maze:'ALT_MAZE',alt_mazes:'ALT_MAZE',shrine:'BOSS_SHRINE',boss_shrine:'BOSS_SHRINE',boss_shrines:'BOSS_SHRINE',arena:'BOSS_ARENA',bossarena:'BOSS_ARENA',boss_arena:'BOSS_ARENA'};
+            return names[name]||null;
+        }
+        function structureDimension(type){return type==='BOSS_ARENA'?2:(type==='ALT_MAZE'||type==='BOSS_SHRINE'?1:0);}
+        function structureCandidate(type, cellX, cellZ) {
+            if(type==='BOSS_ARENA')return {type,cx:0,cz:0,baseY:48,dimension:2};
+            let cx,cz,baseY=null;
+            if(type==='MANSION'||type==='OUTPOST'||type==='CABIN'){
+                const grid=type==='CABIN'?64:128;
+                const salt={MANSION:610,OUTPOST:620,CABIN:630}[type];
+                const chance=generatorStructureChance(type.toLowerCase(),type==='CABIN'?.075:.05);
+                if(coordHash(cellX,cellZ,salt)>=chance)return null;
+                const radius=type==='MANSION'?15:(type==='OUTPOST'?4:3),margin=radius+4;
+                cx=cellX*grid+margin+Math.floor(coordHash(cellX,cellZ,salt+1)*Math.max(1,grid-margin*2));
+                cz=cellZ*grid+margin+Math.floor(coordHash(cellX,cellZ,salt+2)*Math.max(1,grid-margin*2));
+                const actual=getSurfaceStructure(cx,cz);
+                if(!actual||actual.type!==type||actual.cx!==cx||actual.cz!==cz)return null;
+                baseY=getHeight(cx,cz,getBiome(cx,cz));
+            } else if(type==='DUNGEON'){
+                if(coordHash(cellX,cellZ,760)>=generatorStructureChance('dungeon',.20))return null;
+                cx=cellX*56+10+Math.floor(coordHash(cellX,cellZ,761)*36);
+                cz=cellZ*56+10+Math.floor(coordHash(cellX,cellZ,762)*36);
+                const s=getDungeonStructure(cx,cz);
+                if(!s||s.cx!==cx||s.cz!==cz)return null;
+                baseY=s.baseY;
+            } else if(type==='ALT_MAZE'){
+                if(posRand(cellX*15,cellZ*15)<=.70)return null;
+                cx=cellX*64+25+Math.floor(posRand(cellX,cellZ,6)*15);
+                cz=cellZ*64+25+Math.floor(posRand(cellX,cellZ,7)*15);
+                const s=getAltMazeAt(cx,cz);
+                if(!s||s.cx!==cx||s.cz!==cz)return null;
+                baseY=s.baseY;
+            } else if(type==='BOSS_SHRINE'){
+                if(posRand(cellX*25,cellZ*25)<=.70)return null;
+                cx=cellX*32+16;cz=cellZ*32+16;
+                const s=getAltStructure(cx,cz);
+                if(!s||s.type!==type||s.cx!==cx||s.cz!==cz)return null;
+                baseY=s.baseY;
+            }
+            return {type,cx,cz,baseY,dimension:structureDimension(type)};
+        }
+        async function locateStructure(type, x, z) {
+            if(type==='BOSS_ARENA')return {...structureCandidate(type,0,0),distance:Math.round(Math.hypot(x,z))};
+            const grid=type==='DUNGEON'?56:type==='ALT_MAZE'?64:type==='BOSS_SHRINE'?32:type==='CABIN'?64:128;
+            const baseX=Math.floor(x/grid),baseZ=Math.floor(z/grid);
+            let winner=null,best=Infinity;
+            // Search outward; stop only once the unsearched cells cannot beat
+            // the nearest location already found. Yield to avoid a frozen UI.
+            for(let ring=0;ring<=128;ring++){
+                for(let dx=-ring;dx<=ring;dx++)for(let dz=-ring;dz<=ring;dz++){
+                    if(ring&&Math.max(Math.abs(dx),Math.abs(dz))!==ring)continue;
+                    const s=structureCandidate(type,baseX+dx,baseZ+dz);
+                    if(!s)continue;
+                    const distance=Math.hypot(s.cx-x,s.cz-z);
+                    if(distance<best){best=distance;winner=s;}
+                }
+                if(winner&&best<Math.max(0,ring-2)*grid)break;
+                if(ring%3===2)await new Promise(resolve=>setTimeout(resolve,0));
+            }
+            return winner?{...winner,distance:Math.round(best)}:null;
+        }
+
         function placeStructure(type, cx, cy, cz) {
             const affectedChunks = new Set();
+            // Large structures may contain tens of thousands of edits. Send
+            // bounded network batches rather than one WebSocket packet per block.
+            const sharedEdits=[];
+            const batchNetwork=multiplayerConnected&&singleplayerNetworkMode!=='local';
             const structureFamily=woodFamilyForBiome(getBiome(cx,cz)),structureWood=structureFamily.wood,structurePlanks=structureFamily.planks;
             function setBlockRaw(x, y, z, blockType, dim = currentDimension) {
-                if (y < 0 || y >= WORLD_HEIGHT) return;
-                setBlock(x, y, z, blockType, dim);
+                if (y < 0 || y >= getDimensionHeight(dim)) return;
+                const wasApplying=networkApplyingBlock;
+                if(batchNetwork)networkApplyingBlock=true;
+                try{setBlock(x, y, z, blockType, dim);}finally{networkApplyingBlock=wasApplying;}
+                if(batchNetwork)sharedEdits.push({dimension:dim,x,y,z,blockType});
                 const chX = Math.floor(x / CHUNK_SIZE), chZ = Math.floor(z / CHUNK_SIZE);
                 const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
                 const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
@@ -5797,41 +6343,14 @@
             }
 
             if (type === 'MANSION') {
-                for (let dx = -15; dx <= 15; dx++) {
-                    for (let dz = -15; dz <= 15; dz++) {
-                        const mx = dx + 15, mz = dz + 15, wx = cx + dx, wz = cz + dz;
-                        const isOuterWall = mx === 0 || mx === 30 || mz === 0 || mz === 30;
-                        const isInnerWall = (mx % 6 === 0 || mz % 6 === 0) && !isOuterWall;
-                        const isRoomCenter = (mx % 6 === 3) && (mz % 6 === 3);
-                        const isDoorway = isInnerWall && ((mx % 6 === 3) || (mz % 6 === 3));
-                        for (let dy = -5; dy < 12; dy++) {
-                            const y = cy + dy;
-                            if (dy >= 0 && dy < 12) {
-                                if (dy === 0) setBlockRaw(wx, y, wz, structurePlanks);
-                                else if (dy === 11) setBlockRaw(wx, y, wz, structurePlanks);
-                                else if (isOuterWall) {
-                                    if (dy > 2 && dy < 6 && (mx % 3 === 0 || mz % 3 === 0)) setBlockRaw(wx, y, wz, BLOCKS.GLASS);
-                                    else setBlockRaw(wx, y, wz, ((mx===0||mx===30)&&(mz===0||mz===30))?structureWood:structurePlanks);
-                                }
-                                else if (isInnerWall && (!isDoorway || dy >= 3)) setBlockRaw(wx, y, wz, structurePlanks);
-                                else {
-                                    setBlockRaw(wx, y, wz, BLOCKS.AIR);
-                                    if (dy === 1 && isRoomCenter) {
-                                        const mRand = Math.random();
-                                        if (mRand < 0.02) setBlockRaw(wx, y, wz, BLOCKS.MELLORITE_ORE);
-                                        else if (mRand < 0.10) setBlockRaw(wx, y, wz, BLOCKS.DIAMOND_ORE);
-                                        else if (mRand < 0.20) setBlockRaw(wx, y, wz, BLOCKS.GOLD_ORE);
-                                        else if (mRand < 0.50) setBlockRaw(wx, y, wz, BLOCKS.IRON_ORE);
-                                        else setBlockRaw(wx, y, wz, BLOCKS.COAL_ORE);
-                                    }
-                                }
-                            } else if (dy < 0) {
-                                const existing = getBlock(wx, y, wz);
-                                if (existing === BLOCKS.AIR || existing === BLOCKS.GRASS || existing === BLOCKS.DIRT || existing === BLOCKS.SNOW || existing === BLOCKS.SAND) {
-                                    setBlockRaw(wx, y, wz, BLOCKS.COBBLESTONE);
-                                }
-                            }
-                        }
+                for(let dx=-15;dx<=15;dx++)for(let dz=-19;dz<=15;dz++){
+                    const wx=cx+dx,wz=cz+dz;
+                    for(let dy=-5;dy<12;dy++){
+                        const y=cy+dy;
+                        if(y<0||y>=WORLD_HEIGHT)continue;
+                        const block=mansionBlockAt(cx,cz,dx+15,dz+15,dy,structurePlanks,structureWood);
+                        if(block!==null)setBlockRaw(wx,y,wz,block);
+                        else if(dy<0){const old=getBlock(wx,y,wz);if([BLOCKS.AIR,BLOCKS.GRASS,BLOCKS.DIRT,BLOCKS.SNOW,BLOCKS.SAND].includes(old))setBlockRaw(wx,y,wz,BLOCKS.COBBLESTONE);}
                     }
                 }
             } else if (type === 'CABIN') {
@@ -5842,7 +6361,7 @@
                         let b=null;
                         if(dy>=0&&dy<=8){
                             if(dy===0)b=structurePlanks;
-                            else if(dy>=5){const roofY=5+Math.max(0,3-az);b=dy===roofY?(dy===8?structureWood:(dz<0?BLOCKS.OAK_STAIRS_S:BLOCKS.OAK_STAIRS_N)):BLOCKS.AIR;}
+                            else if(dy>=5){const roofY=5+Math.max(0,3-az);b=dy===roofY?(dy===8?structureWood:(dz<0?BLOCKS.OAK_STAIRS_S:BLOCKS.OAK_STAIRS_N)):(ax===3&&dy<roofY?structurePlanks:BLOCKS.AIR);}
                             else if(ax===3||az===3){const door=dz===-3&&dx===0&&dy<=2,window=dy===2&&((az===3&&ax===1)||(ax===3&&az===1));b=door?BLOCKS.AIR:(ax===3&&az===3?BLOCKS.COBBLESTONE:window?BLOCKS.GLASS:structurePlanks);}
                             else {b=dy===1&&dx===2&&dz===2?randomCabinBed(cx,cz):(dy===1&&dx===-2&&dz===2?BLOCKS.CRAFTING_TABLE:BLOCKS.AIR);}
                         }else if(dy<0){const existing=getBlock(wx,y,wz);if([BLOCKS.AIR,BLOCKS.GRASS,BLOCKS.DIRT,BLOCKS.SNOW,BLOCKS.SAND].includes(existing))b=BLOCKS.COBBLESTONE;}
@@ -5850,7 +6369,55 @@
                     }
                 }
             }
+            // Other procedurally generated structures use their native materials
+            // and layouts, including the seeded maze's protected nine-ore room.
+            if(type==='OUTPOST'){
+                for(let dx=-4;dx<=4;dx++)for(let dz=-4;dz<=4;dz++)for(let dy=0;dy<10;dy++){
+                    const edge=Math.abs(dx)===4||Math.abs(dz)===4;
+                    let block;
+                    if(dy===0)block=BLOCKS.COBBLESTONE;
+                    else if(dy===9)block=structurePlanks;
+                    else if(edge&&!(dz===-4&&dx===0&&dy<3))block=(dy===4||dy===8)?structurePlanks:structureWood;
+                    else {block=BLOCKS.AIR;for(let i=0;i<4;i++)if(dy===1&&dx===([-2,2,-2,2][i])&&dz===([-2,-2,2,2][i]))block=oreLootBlock(coordHash(cx,cz,650+i));}
+                    setBlockRaw(cx+dx,cy+dy,cz+dz,block,0);
+                }
+            } else if(type==='DUNGEON'){
+                for(let dx=-4;dx<=4;dx++)for(let dz=-4;dz<=4;dz++)for(let dy=0;dy<=5;dy++){
+                    const wall=Math.abs(dx)===4||Math.abs(dz)===4;
+                    const block=dy===0||dy===5||wall?BLOCKS.COBBLESTONE:
+                        (dy===1&&dx===0&&dz===0)?BLOCKS.ZOMBIE_SPAWNER:
+                        (dy===1&&dx===2&&dz===2)?storageLootBlock(coordHash(cx,cz,764)):BLOCKS.AIR;
+                    setBlockRaw(cx+dx,cy+dy,cz+dz,block,0);
+                }
+            } else if(type==='ALT_MAZE'){
+                // Include the four-block front entrance apron and clear the full
+                // height so original Void terrain does not block the doorway.
+                for(let dx=-20;dx<=20;dx++)for(let dz=-24;dz<=20;dz++){
+                    if(dz< -20&&Math.abs(dx)>1)continue;
+                    for(let dy=0;dy<=15;dy++){
+                        const block=altMazeBlockAt(cx,cz,dx+20,dz+20,dy);
+                        if(block!==null)setBlockRaw(cx+dx,cy+dy,cz+dz,block,1);
+                    }
+                }
+            } else if(type==='BOSS_ARENA'){
+                for(let dx=-35;dx<=35;dx++)for(let dz=-35;dz<=35;dz++){
+                    const dist=Math.hypot(dx,dz);if(dist>35)continue;
+                    const depth=25-dist*.7;
+                    const surfaceY=Math.floor(noise.noise2D((cx+dx)*.1,(cz+dz)*.1)*2);
+                    for(let dy=-Math.max(1,Math.floor(depth));dy<=surfaceY;dy++)
+                        setBlockRaw(cx+dx,cy+dy,cz+dz,dy===surfaceY?BLOCKS.RED_STONE:BLOCKS.STONE,2);
+                }
+            } else if(type==='BOSS_SHRINE'){
+                for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++)for(let dy=-5;dy<=4;dy++){
+                    const block=dy<0?BLOCKS.COBBLESTONE:dy===0?BLOCKS.BRICK:
+                        dy===1&&Math.abs(dx)===1&&Math.abs(dz)===1?BLOCKS.BOSS_PORTAL_FRAME:
+                        dy===1&&Math.abs(dx)===2&&Math.abs(dz)===2?BLOCKS.TORCH:BLOCKS.AIR;
+                    setBlockRaw(cx+dx,cy+dy,cz+dz,block,1);
+                }
+            }
             for (const key of affectedChunks) scheduleChunkRemesh(key);
+            for(let i=0;i<sharedEdits.length;i+=256)
+                sendNetwork({type:'block_batch',changes:sharedEdits.slice(i,i+256)});
         }
 
 
@@ -5937,43 +6504,8 @@
                                     else chunk[idx] = BLOCKS.AIR;
                                     continue;
                                 }
-                                if (struct.type === 'ALT_MAZE' && localY >= 0 && localY <= 15) {
-                                    const mx = struct.dx + 20, mz = struct.dz + 20;
-                                    const floorNum = Math.floor(localY / 5), yInFloor = localY % 5;
-                                    const u = ((mx % 5) + 5) % 5, v = ((mz % 5) + 5) % 5;
-                                    const roomX = Math.floor(mx / 5), roomZ = Math.floor(mz / 5);
-                                    const outer = mx === 0 || mx === 40 || mz === 0 || mz === 40;
-                                    const edgeX = u === 0, edgeZ = v === 0;
-                                    const inner = (edgeX || edgeZ) && !outer;
-                                    const stairRoom = floorNum < 2 && coordHash(struct.cx + roomX, struct.cz + roomZ, floorNum) < 0.30;
-                                    const stairBelow = floorNum > 0 && coordHash(struct.cx + roomX, struct.cz + roomZ, floorNum - 1) < 0.30;
-                                    const doorway = yInFloor < 3 && (edgeX ? v === 2 : u === 2);
-                                    const stairInterior = !outer && !inner && (stairRoom || stairBelow);
-                                    const specialX = Math.floor(coordHash(struct.cx, struct.cz, 99) * 8);
-                                    const specialZ = Math.floor(coordHash(struct.cx, struct.cz, 100) * 8);
-                                    const specialFloor = Math.floor(coordHash(struct.cx, struct.cz, 101) * 3);
-
-                                    // A stair room and the room immediately above it form one
-                                    // open two-floor stairwell. No terracotta floor/ceiling slab
-                                    // is allowed inside that 3x3 room interior. The only solid
-                                    // interior blocks are the stair path/landing and ore loot.
-                                    if (stairInterior) {
-                                        chunk[idx] = BLOCKS.AIR;
-                                        if (stairRoom && yInFloor > 0 && stairStepAt(u, v, yInFloor)) chunk[idx] = BLOCKS.PLANKS;
-                                        if (stairBelow && yInFloor === 0 && stairStepAt(u, v, 4)) chunk[idx] = BLOCKS.PLANKS;
-                                        if (chunk[idx] === BLOCKS.AIR && yInFloor === 1 && floorNum === specialFloor && roomX === specialX && roomZ === specialZ && u >= 1 && u <= 3 && v >= 1 && v <= 3) chunk[idx] = BLOCKS.MELLORITE_ORE;
-                                        else if (chunk[idx] === BLOCKS.AIR && yInFloor === 1 && u === 2 && v === 2) chunk[idx] = oreLootBlock(coordHash(wx, localY, wz));
-                                    } else if (localY === 15) chunk[idx] = BLOCKS.TERRACOTTA;
-                                    else if (yInFloor === 0) chunk[idx] = BLOCKS.TERRACOTTA;
-                                    else if (outer) {
-                                        const entrance = floorNum === 0 && yInFloor < 3 && ((mx === 20 && (mz === 0 || mz === 40)) || (mz === 20 && (mx === 0 || mx === 40)));
-                                        chunk[idx] = entrance ? BLOCKS.AIR : BLOCKS.TERRACOTTA;
-                                    } else if (inner) chunk[idx] = doorway ? BLOCKS.AIR : BLOCKS.TERRACOTTA;
-                                    else {
-                                        chunk[idx] = BLOCKS.AIR;
-                                        if (chunk[idx] === BLOCKS.AIR && yInFloor === 1 && floorNum === specialFloor && roomX === specialX && roomZ === specialZ && u >= 1 && u <= 3 && v >= 1 && v <= 3) chunk[idx] = BLOCKS.MELLORITE_ORE;
-                                        else if (chunk[idx] === BLOCKS.AIR && yInFloor === 1 && u === 2 && v === 2) chunk[idx] = oreLootBlock(coordHash(wx, localY, wz));
-                                    }
+                                if(struct.type==='ALT_MAZE'&&localY>=0&&localY<=15){
+                                    chunk[idx]=altMazeBlockAt(struct.cx,struct.cz,struct.dx+20,struct.dz+20,localY);
                                     continue;
                                 }
                             }
@@ -6132,20 +6664,11 @@
                         if (struct) {
                             const ly = y - structBaseY;
                             if (struct.type === 'MANSION') {
-                                const mx = struct.dx + 15, mz = struct.dz + 15;
-                                const outer = mx === 0 || mx === 30 || mz === 0 || mz === 30;
-                                const inner = (mx % 6 === 0 || mz % 6 === 0) && !outer;
-                                const roomCenter = mx % 6 === 3 && mz % 6 === 3;
-                                const doorway = inner && ly < 3 && (mx % 6 === 3 || mz % 6 === 3);
-                                if (ly >= 0 && ly < 12) {
-                                    if (ly === 0) chunk[idx] = structPlanks;
-                                    else if (ly === 11) chunk[idx] = structPlanks;
-                                    else if (outer) chunk[idx] = ly > 2 && ly < 6 && (mx % 3 === 0 || mz % 3 === 0) ? BLOCKS.GLASS : ((mx===0||mx===30)&&(mz===0||mz===30)?structWood:structPlanks);
-                                    else if (inner && !doorway) chunk[idx] = structPlanks;
-                                    else { chunk[idx] = BLOCKS.AIR; if (ly === 1 && roomCenter) chunk[idx] = oreLootBlock(coordHash(wx, 0, wz)); }
+                                if(ly>=0&&ly<12){
+                                    chunk[idx]=mansionBlockAt(struct.cx,struct.cz,struct.dx+15,struct.dz+15,ly,structPlanks,structWood);
                                     continue;
                                 }
-                                if (ly < 0 && y >= structBaseY - 10 && y >= height) { chunk[idx] = BLOCKS.COBBLESTONE; continue; }
+                                if(ly<0&&y>=structBaseY-10&&y>=height){chunk[idx]=BLOCKS.COBBLESTONE;continue;}
                             } else if (struct.type === 'CABIN') {
                                 const ax=Math.abs(struct.dx),az=Math.abs(struct.dz),wall=ax===3||az===3;
                                 if(ly>=0&&ly<=8){
@@ -6154,7 +6677,7 @@
                                         // Stepped gable roof with planked ridge; the roof
                                         // follows the x-axis and pitches across z.
                                         const roofY=5+Math.max(0,3-az);
-                                        chunk[idx]=(ly===roofY)?(ly===8?structWood:(struct.dz<0?BLOCKS.OAK_STAIRS_S:BLOCKS.OAK_STAIRS_N)):BLOCKS.AIR;
+                                        chunk[idx]=(ly===roofY)?(ly===8?structWood:(struct.dz<0?BLOCKS.OAK_STAIRS_S:BLOCKS.OAK_STAIRS_N)):(ax===3&&ly<roofY?structPlanks:BLOCKS.AIR);
                                     }else if(wall){
                                         const doorway=struct.dz===-3&&struct.dx===0&&ly<=2;
                                         const window=ly===2&&((az===3&&ax===1)||(ax===3&&az===1));
@@ -6190,13 +6713,11 @@
                         else if (y < height) {
                             if ([BIOMES.DESERT_CACTUS, BIOMES.DESERT_BARREN].includes(biome)) chunk[idx] = BLOCKS.SAND;
                             else if (biome === BIOMES.BADLANDS) chunk[idx] = y % 5 === 0 ? BLOCKS.TERRACOTTA : BLOCKS.RED_SAND;
-                            else if (biome === BIOMES.STONY_PEAKS) chunk[idx] = BLOCKS.STONE;
                             else chunk[idx] = BLOCKS.DIRT;
                         } else if (y === height) {
                             if ([BIOMES.DESERT_CACTUS, BIOMES.DESERT_BARREN].includes(biome)) chunk[idx] = BLOCKS.SAND;
                             else if (biome === BIOMES.BADLANDS) chunk[idx] = BLOCKS.RED_SAND;
-                            else if ([BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID, BIOMES.MOUNTAINS_HIGH, BIOMES.TAIGA].includes(biome)) chunk[idx] = BLOCKS.SNOW;
-                            else if (biome === BIOMES.STONY_PEAKS) chunk[idx] = BLOCKS.STONE;
+                            else if ([BIOMES.MOUNTAINS_LOW, BIOMES.MOUNTAINS_MID, BIOMES.MOUNTAINS_HIGH, BIOMES.TAIGA, BIOMES.SNOWY_PLAINS].includes(biome)) chunk[idx] = BLOCKS.SNOW;
                             else chunk[idx] = BLOCKS.GRASS;
                         }
                     }
@@ -6206,9 +6727,16 @@
                     const hasVegetationGround = vegetationGround !== BLOCKS.AIR && !isLiquidBlock(vegetationGround);
                     if (!struct && hasVegetationGround && height + 16 < WORLD_HEIGHT && x >= 2 && x < CHUNK_SIZE - 2 && z >= 2 && z < CHUNK_SIZE - 2) {
                         let treeChance = 0, style = null, footprint = 2;
-                        if (biome === BIOMES.FOREST) { treeChance = 0.080; style = 'forest'; }
-                        else if (biome === BIOMES.FLOWER_FOREST) { treeChance = 0.055; style = 'forest'; }
+                        if (biome === BIOMES.FOREST) { treeChance = 0.092; style = 'forest'; }
+                        else if (biome === BIOMES.FLOWER_FOREST) { treeChance = 0.062; style = 'forest'; }
                         else if (biome === BIOMES.TAIGA) { treeChance = 0.080; style = 'taiga'; }
+                        else if (biome === BIOMES.MOUNTAINS_LOW) {
+                            // Sparse spruce treeline: trees thin out above Y=103 and
+                            // disappear near Y=122. No trees on taller peaks.
+                            const elevation = height - WORLD_Y_ORIGIN;
+                            treeChance = 0.035 * (1 - smoothstep(103, 122, elevation));
+                            style = 'taiga';
+                        }
                         else if (biome === BIOMES.JUNGLE) { treeChance = 0.095; style = 'jungle'; footprint = 3; }
                         else if (biome === BIOMES.PLAINS) { treeChance = 1.0; style = 'forest'; }
                         else if (biome === BIOMES.SAVANNA) { treeChance = 0.004; style = 'savanna'; footprint = 3; }
@@ -6217,7 +6745,7 @@
                         // window in every chunk, leaving aligned empty lanes that looked
                         // like a grid. Keep exactly 64 candidate columns per chunk, but
                         // shift that window independently on X/Z using seeded chunk noise.
-                        const denseTreeBiome = biome === BIOMES.FOREST || biome === BIOMES.FLOWER_FOREST || biome === BIOMES.TAIGA || biome === BIOMES.JUNGLE;
+                        const denseTreeBiome = biome === BIOMES.FOREST || biome === BIOMES.FLOWER_FOREST || biome === BIOMES.TAIGA || biome === BIOMES.MOUNTAINS_LOW || biome === BIOMES.JUNGLE;
                         let insidePlantingWindow = x >= 4 && x < CHUNK_SIZE - 4 && z >= 4 && z < CHUNK_SIZE - 4;
                         if (denseTreeBiome) {
                             const windowSize = 8, minStart = footprint;
@@ -6231,7 +6759,7 @@
                         // The entire canopy footprint must belong to the trunk biome.
                         // This prevents leaves from making trees appear in neighboring
                         // deserts, beaches, mountains, or other prohibited biomes.
-                        let footprintMatches = Boolean(style);
+                        let footprintMatches = Boolean(style) && (biome === BIOMES.PLAINS || tr < treeChance);
                         for (let fx = -footprint; footprintMatches && fx <= footprint; fx++) {
                             for (let fz = -footprint; fz <= footprint; fz++) {
                                 if (getBiome(wx + fx, wz + fz) !== biome) { footprintMatches = false; break; }
@@ -6347,11 +6875,11 @@
             chunkGenerationPending.clear();
             if (typeof Worker === 'undefined') return;
             const workerFunctions = [
-                SimplexNoise, clamp, smoothstep, mix, activeWorldGen, getClimate, getContinentValue, getBaseBiome,
+                SimplexNoise, clamp, smoothstep, mix, activeWorldGen, getClimate, getContinentValue, getBiomeProvince, getBaseBiome,
                 coordHash, getMountainRegion, getMountainInfo, customBiomeForCell, getCustomBiomeInfo, biomeTerrainHeight, customTerrainHeight, flatWorldHeight, flatBlockAtY, getBiome, getAltBiome, getHeight,
                 posRand, posRand3D, isCave, getMegaCaveCell, deepChamberAt, isMegaCave, getRavineRange, isRavine,
                 storageLootBlock, oreLootBlock, generatorStructureChance, woodFamilyForBiome, getDungeonStructure, getSurfaceStructure,
-                getAltMazeAt, getAltStructure, stairStepAt, compactOreVeinAt, getOreType, getStoneVariant, randomCabinBed, getPlainsTreeSpot,
+                getAltMazeAt, getAltStructure, layoutParent, structureHallMask, mansionLayout, mansionCentralHallAt, mansionHallAt, mansionOrePositions, altMazeLayout, altMazeCentralHallAt, altMazeSpecialRoom, altMazeHallAt, connectedRoomDoor, mansionBlockAt, altMazeBlockAt, stairStepAt, compactOreVeinAt, getOreType, getStoneVariant, randomCabinBed, getPlainsTreeSpot,
                 isWaterBlock, isLavaBlock, isLiquidBlock, generateChunk
             ];
             const workerSource = [
@@ -6365,9 +6893,9 @@
                 `const CHUNK_SIZE=${CHUNK_SIZE},WORLD_HEIGHT=${WORLD_HEIGHT},ALT_WORLD_HEIGHT=${ALT_WORLD_HEIGHT},WATER_LEVEL=${WATER_LEVEL};`,
                 `const MOUNTAIN_XZ_SCALE=${MOUNTAIN_XZ_SCALE};`,
                 'let currentDimension=0,WORLD_SEED=0,noise,biomeNoise,treeNoise,caveNoise,oreNoise,ravineNoise,structNoise,continentalNoise,lavaNoise;',
-                'const mountainRegionCache=new Map(),mountainInfoCache=new Map(),megaCaveCache=new Map(),lavaPoolCache=new Map(),plainsTreeSpotCache=new Map(),customBiomeInfoCache=new Map(),knownDungeonSpawners=new Set();',
+                'const biomeProvinceCache=new Map(),structureHallCache=new Map(),mansionOreCache=new Map(),altMazeRoomCache=new Map(),mountainRegionCache=new Map(),mountainInfoCache=new Map(),megaCaveCache=new Map(),lavaPoolCache=new Map(),plainsTreeSpotCache=new Map(),customBiomeInfoCache=new Map(),knownDungeonSpawners=new Set();',
                 ...workerFunctions.map(fn => fn.toString()),
-                `function setWorkerSeed(seed){WORLD_SEED=seed;noise=new SimplexNoise(seed);biomeNoise=new SimplexNoise(seed+1000);treeNoise=new SimplexNoise(seed+2000);caveNoise=new SimplexNoise(seed+3000);oreNoise=new SimplexNoise(seed+4000);ravineNoise=new SimplexNoise(seed+5000);structNoise=new SimplexNoise(seed+6000);continentalNoise=new SimplexNoise(seed+7000);lavaNoise=new SimplexNoise(seed+8000);mountainRegionCache.clear();mountainInfoCache.clear();megaCaveCache.clear();lavaPoolCache.clear();plainsTreeSpotCache.clear();customBiomeInfoCache.clear();knownDungeonSpawners.clear();}`,
+                `function setWorkerSeed(seed){WORLD_SEED=seed;noise=new SimplexNoise(seed);biomeNoise=new SimplexNoise(seed+1000);treeNoise=new SimplexNoise(seed+2000);caveNoise=new SimplexNoise(seed+3000);oreNoise=new SimplexNoise(seed+4000);ravineNoise=new SimplexNoise(seed+5000);structNoise=new SimplexNoise(seed+6000);continentalNoise=new SimplexNoise(seed+7000);lavaNoise=new SimplexNoise(seed+8000);biomeProvinceCache.clear();mountainRegionCache.clear();mountainInfoCache.clear();megaCaveCache.clear();lavaPoolCache.clear();structureHallCache.clear();mansionOreCache.clear();altMazeRoomCache.clear();plainsTreeSpotCache.clear();customBiomeInfoCache.clear();knownDungeonSpawners.clear();}`,
                 `self.onmessage=e=>{const d=e.data||{};if(d.type==='init'){setWorkerSeed(Number(d.seed)||0);self.postMessage({type:'ready'});return;}if(d.type==='generate'){try{const chunk=generateChunk(Number(d.cx),Number(d.cz),Number(d.dim));const maxY=Number(chunk.generatedMaxY)||1;self.postMessage({type:'chunk',key:d.key,dim:Number(d.dim),cx:Number(d.cx),cz:Number(d.cz),maxY,buffer:chunk.buffer},[chunk.buffer]);}catch(error){self.postMessage({type:'error',key:d.key,message:String(error&&error.stack||error)});}}};`
             ].join('\n');
             const url = URL.createObjectURL(new Blob([workerSource], { type: 'application/javascript' }));
@@ -6519,7 +7047,7 @@
                 if(block===null)continue;
                 if(block!==BLOCKS.ZOMBIE_SPAWNER){knownDungeonSpawners.delete(key);continue;}
                 if(!anchors.some(a=>Math.hypot(a.x-x-.5,a.z-z-.5)<27))continue;
-                if(mobs.filter(m=>m.dimension===0).length>=MOB_CAP)break;
+                if(mobCountForCap(0,true)>=HOSTILE_CAP)break;
                 const nearby=mobs.filter(m=>m.dimension===0&&m.typeKey==='ZOMBIE'&&Math.hypot(m.x-x,m.y-y,m.z-z)<12).length;
                 if(nearby>=5)continue;
                 const candidates=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[2,0],[0,2]];
@@ -6595,7 +7123,7 @@
         }
 
 
-        // v1.8.2 random soil ticks. All conversions pass through setBlock so world
+        // v1.8.3 random soil ticks. All conversions pass through setBlock so world
         // autosaves, relay synchronization, dedicated-server packets and remeshing work.
         const soilCandidates=new Map();
         let soilClock=0;
@@ -6614,11 +7142,11 @@
             if(soil!==BLOCKS.GRASS&&soil!==BLOCKS.DIRT)return false;
             const above=peekLoadedBlock(x,y+1,z,dim);
             if(above===null)return false;
-            if(soil===BLOCKS.GRASS&&above!==BLOCKS.AIR){
+            if(soil===BLOCKS.GRASS&&above!==BLOCKS.AIR&&!isPlantBlock(above)){
                 if(Math.random()<probability)setBlock(x,y,z,BLOCKS.DIRT,dim);
                 return true;
             }
-            if(soil===BLOCKS.DIRT&&above===BLOCKS.AIR){
+            if(soil===BLOCKS.DIRT&&(above===BLOCKS.AIR||isPlantBlock(above))){
                 const adjacent=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>peekLoadedBlock(x+dx,y,z+dz,dim)===BLOCKS.GRASS);
                 if(adjacent&&Math.random()<probability)setBlock(x,y,z,BLOCKS.GRASS,dim);
                 return adjacent;
@@ -6674,6 +7202,15 @@
                 // terrain synchronously here would create multiplayer frame spikes.
                 recordSharedBlockEdit(dim, x, y, z, type);
                 if (isSingleplayerEdition) singleplayerDirty = true;
+                // Relay hosts often do not have a guest's dimension loaded.
+                // The authoritative link must still remove its other end.
+                if(type===BLOCKS.AIR && singleplayerNetworkMode==='lan-host'){
+                    const other=removePortalLink({dimension:dim,x,y,z});
+                    if(other){
+                        setBlock(other.x,other.y,other.z,BLOCKS.AIR,other.dimension);
+                        integratedBroadcast({type:'block_update',dimension:other.dimension,x:other.x,y:other.y,z:other.z,blockType:BLOCKS.AIR});
+                    }
+                }
                 return;
             }
             if (!chunk) { chunk = applySharedEditsToChunk(generateChunk(cx, cz, dim), cx, cz, dim); chunks.set(key, chunk); }
@@ -6683,6 +7220,17 @@
             const previousType = chunk[index];
             if (previousType === type) return;
             chunk[index] = type;
+            if(previousType===BLOCKS.PORTAL && type===BLOCKS.AIR &&
+               (singleplayerNetworkMode==='local'||singleplayerNetworkMode==='lan-host')){
+                const other=removePortalLink({dimension:dim,x,y,z});
+                if(other){
+                    // setBlock works across loaded/unloaded dimensions. There is
+                    // deliberately no breakBlock call and thus no second drop.
+                    setBlock(other.x,other.y,other.z,BLOCKS.AIR,other.dimension);
+                    if(networkApplyingBlock&&singleplayerNetworkMode==='lan-host')
+                        integratedBroadcast({type:'block_update',dimension:other.dimension,x:other.x,y:other.y,z:other.z,blockType:BLOCKS.AIR});
+                }
+            }
             if (previousType===BLOCKS.ZOMBIE_SPAWNER || type===BLOCKS.ZOMBIE_SPAWNER){
                 const spKey=`${dim}:${x}:${y}:${z}`;
                 if(type===BLOCKS.ZOMBIE_SPAWNER)knownDungeonSpawners.add(spKey);
@@ -7209,8 +7757,15 @@
             return best ? {...best,distance:Math.sqrt(bestD2),dx:bestDx,dz:bestDz} : null;
         }
 
+        function isHostileMobType(typeKey) { return Boolean(MOB_TYPES[typeKey]?.hostile); }
+        function mobCapForType(typeKey) { return isHostileMobType(typeKey) ? HOSTILE_CAP : DOCILE_CAP; }
+        function mobCountForCap(dimension, hostile) {
+            return mobs.filter(m => m.dimension === dimension && m.health > 0 && !m.type?.isBoss && Boolean(m.type?.hostile) === hostile).length;
+        }
+
         function spawnSharedMob(typeKey, x, y, z, dimension = currentDimension) {
             if (!MOB_TYPES[typeKey] || !isMobHostForDimension(dimension)) return null;
+            if(!MOB_TYPES[typeKey].isBoss && mobCountForCap(dimension,isHostileMobType(typeKey)) >= mobCapForType(typeKey)) return null;
             const id = `m_${localClientId ? localClientId.slice(0, 8) : 'local'}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
             const mob = new Mob(MOB_TYPES[typeKey], x, y, z, { id, typeKey, dimension, networkSpawned: true });
             mob.pendingSpawnUntil = performance.now() + 1500;
@@ -8013,7 +8568,7 @@
 
         const SHEEP_VARIANT_WEIGHTS=[['SHEEP_WHITE',60],['SHEEP_BLACK',15],['SHEEP_GRAY',15],['SHEEP_LIGHT_GRAY',15],['SHEEP_BROWN',13],['SHEEP_PINK',2]];
         function randomSheepKey(){const total=SHEEP_VARIANT_WEIGHTS.reduce((n,e)=>n+e[1],0);let r=Math.random()*total;for(const [key,weight] of SHEEP_VARIANT_WEIGHTS){r-=weight;if(r<0)return key;}return 'SHEEP_WHITE';}
-        function passiveMobForBiome(biome){const r=Math.random(),grassy=[BIOMES.PLAINS,BIOMES.SAVANNA,BIOMES.FOREST,BIOMES.FLOWER_FOREST],desert=[BIOMES.DESERT_CACTUS,BIOMES.DESERT_BARREN,BIOMES.BADLANDS],snowMountains=[BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH];if(desert.includes(biome))return r<.55?'CAMEL':'RABBIT';if(biome===BIOMES.JUNGLE)return r<.58?'FOX':'BEAR';if(biome===BIOMES.TAIGA)return r<.48?'FOX':r<.78?'GOAT':'BEAR';if(biome===BIOMES.STONY_PEAKS||snowMountains.includes(biome))return 'GOAT';if(grassy.includes(biome)){if((biome===BIOMES.FOREST||biome===BIOMES.FLOWER_FOREST)&&r>.94)return 'BEAR';const q=(biome===BIOMES.FOREST||biome===BIOMES.FLOWER_FOREST)?r/.94:r;return q<.34?'PIG':q<.67?'COW':randomSheepKey();}return null;}
+        function passiveMobForBiome(biome){const r=Math.random(),grassy=[BIOMES.PLAINS,BIOMES.SAVANNA,BIOMES.FOREST,BIOMES.FLOWER_FOREST],desert=[BIOMES.DESERT_CACTUS,BIOMES.DESERT_BARREN,BIOMES.BADLANDS],snowMountains=[BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH];if(desert.includes(biome))return r<.55?'CAMEL':'RABBIT';if(biome===BIOMES.JUNGLE)return r<.58?'FOX':'BEAR';if(biome===BIOMES.TAIGA)return r<.48?'FOX':r<.78?'GOAT':'BEAR';if(biome===BIOMES.SNOWY_PLAINS)return 'RABBIT';if(snowMountains.includes(biome))return 'GOAT';if(grassy.includes(biome)){if((biome===BIOMES.FOREST||biome===BIOMES.FLOWER_FOREST)&&r>.94)return 'BEAR';const q=(biome===BIOMES.FOREST||biome===BIOMES.FLOWER_FOREST)?r/.94:r;return q<.34?'PIG':q<.67?'COW':randomSheepKey();}return null;}
         function hostileMobKey(){const r=Math.random();return r<.38?'ZOMBIE':r<.72?'SKELETON':'SPIDER';}
         function findUndergroundSpawnY(x,z,surface){const bx=Math.floor(x),bz=Math.floor(z),top=Math.max(6,Math.floor(surface)-5);for(let tries=0;tries<36;tries++){const y=4+Math.floor(Math.random()*Math.max(2,top-4));if(SOLID_BLOCKS.has(peekLoadedBlock(bx,y-1,bz,0))&&peekLoadedBlock(bx,y,bz,0)===BLOCKS.AIR&&peekLoadedBlock(bx,y+1,bz,0)===BLOCKS.AIR&&!weatherColumnHasSky(x,z,y+1.5))return y;}return null;}
         function chooseNaturalSpawn(x,z){const biome=getBiome(Math.floor(x),Math.floor(z)),surface=getHeight(Math.floor(x),Math.floor(z),biome);if(isRavine(x,surface-1,z))return null;const night=isNight();if(hostileSpawningAllowed()&&(night?Math.random()<.86:Math.random()<.92)){const underground=!night||Math.random()<.67;const y=underground?findUndergroundSpawnY(x,z,surface):surface+1;if(y!==null)return {typeKey:hostileMobKey(),y};}const passive=passiveMobForBiome(biome);return passive?{typeKey:passive,y:surface+1}:null;}
@@ -8038,11 +8593,43 @@
         }
         function chooseDistributedMobSpawnPoint(dimension){const anchors=mobSpawnAnchors(dimension);if(!anchors.length)return null;for(let tries=0;tries<18;tries++){const a=anchors[Math.floor(Math.random()*anchors.length)],angle=Math.random()*Math.PI*2,d=CHUNK_SIZE*(2+Math.sqrt(Math.random())*4),x=a.x+Math.cos(angle)*d,z=a.z+Math.sin(angle)*d,cx=Math.floor(x/CHUNK_SIZE),cz=Math.floor(z/CHUNK_SIZE);let sameChunk=0,near=0;for(const m of mobs){if(m.dimension!==dimension||m.type.isBoss)continue;if(Math.floor(m.x/CHUNK_SIZE)===cx&&Math.floor(m.z/CHUNK_SIZE)===cz)sameChunk++;if(Math.hypot(m.x-x,m.z-z)<8)near++;}if(sameChunk<2&&near===0)return{x,z};}return null;}
 
+        // Night-time spawns draw only from the hostile pool. Docile animals never
+        // consume hostile capacity, including when the player remains stationary.
+        let nighttimeSpawnClock=0;
+        function replenishNighttimeHostiles(dt) {
+            if(currentDimension!==0 || !isMobHostForDimension(0) || !gameRules.doMobSpawning ||
+               !hostileSpawningAllowed() || !isNight() || HOSTILE_CAP<=0) {nighttimeSpawnClock=0;return;}
+            nighttimeSpawnClock+=dt;
+            if(nighttimeSpawnClock<3)return;
+            nighttimeSpawnClock=0;
+            if(mobCountForCap(0,true)>=HOSTILE_CAP)return;
+            const anchors=mobSpawnAnchors(0);
+            if(!anchors.length)return;
+            for(let attempt=0;attempt<42;attempt++){
+                const a=anchors[Math.floor(Math.random()*anchors.length)];
+                const dist=26+Math.random()*36,theta=Math.random()*Math.PI*2;
+                const x=Math.floor(a.x+Math.cos(theta)*dist),z=Math.floor(a.z+Math.sin(theta)*dist);
+                if(anchors.some(other=>Math.hypot(other.x-x,other.z-z)<24))continue;
+                const surface=getHeight(x,z,getBiome(x,z));
+                const y=Math.floor(surface)+1;
+                if(y<2||y>=WORLD_HEIGHT-2)continue;
+                const floor=peekLoadedBlock(x,y-1,z,0),feet=peekLoadedBlock(x,y,z,0),head=peekLoadedBlock(x,y+1,z,0);
+                if(!SOLID_BLOCKS.has(floor)||feet!==BLOCKS.AIR||head!==BLOCKS.AIR)continue;
+                if(mobs.some(m=>m.dimension===0&&Math.hypot(m.x-x,m.y-y,m.z-z)<10))continue;
+                if(spawnSharedMob(hostileMobKey(),x+.5,y,z+.5,0))return;
+            }
+        }
+
         function spawnInitialMobs(dimension=currentDimension){
-            if(!gameRules.doMobSpawning||MOB_CAP<=0||!isMobHostForDimension(dimension))return;
+            if(!gameRules.doMobSpawning||!isMobHostForDimension(dimension))return;
             if(gameRules.difficulty==='peaceful')for(const m of [...mobs])if(m.dimension===dimension&&m.type.hostile&&!m.type.isBoss)requestRemoveSharedMob(m,'despawn');
-            const existing=mobs.filter(m=>m.dimension===dimension).length,target=dimension===2?0:Math.min(MOB_CAP,dimension===0?Math.min(18,MOB_CAP):8);
-            for(let i=existing;i<target;i++){const spot=chooseDistributedMobSpawnPoint(dimension);if(!spot)continue;const {x,z}=spot;if(dimension===0){const pick=chooseNaturalSpawn(x,z);if(pick)spawnSharedMob(pick.typeKey,x,pick.y,z,0);}else if(dimension===1){const floorY=findAltFloorY(x,z,29);if(floorY!==null)spawnSharedMob('RED_ALT_ZOMBIE',x,floorY+1,z,1);}}
+            const target=dimension===2?0:dimension===0?18:8;
+            for(let i=0;i<target;i++){
+                const spot=chooseDistributedMobSpawnPoint(dimension);if(!spot)continue;
+                const {x,z}=spot;
+                if(dimension===0){const pick=chooseNaturalSpawn(x,z);if(pick)spawnSharedMob(pick.typeKey,x,pick.y,z,0);}
+                else if(dimension===1){const floorY=findAltFloorY(x,z,29);if(floorY!==null)spawnSharedMob('RED_ALT_ZOMBIE',x,floorY+1,z,1);}
+            }
         }
 
         function showDamage() {
@@ -8713,13 +9300,13 @@
             }
             addChatMessage(cmdStr);
             const parts = cmdStr.substring(1).split(' '), cmd = parts[0].toLowerCase(), args = parts.slice(1);
-            if (cmd !== 'help' && !localIsOperator) {
+            if (!['help','rd'].includes(cmd) && !localIsOperator) {
                 addChatMessage('You do not have permission to use commands. Ask the server host to use /op for your username.', 'chatError');
                 return;
             }
 
             if (cmd==='mobcap') {
-                sendNetwork({type:'server_command',command:`/gamerule mobCap ${args.join(' ')}`.trim()});
+                addChatMessage('Use /gamerule docileCap <0–200> and /gamerule hostileCap <0–200>.', 'chatSystem');
                 return;
             }
             if (['op','deop','ops','list','mobs','gamerule','ban','kill'].includes(cmd)
@@ -8748,12 +9335,12 @@
                     } else addChatMessage("/tp [x] [y] [z] - Teleport", "chatSystem");
                     addChatMessage("/time [0-24] - Set time of day", "chatSystem");
                     addChatMessage("/rd [value] - Set render distance", "chatSystem");
-                    addChatMessage("/place [mansion|cabin] - Force structure", "chatSystem");
-                    addChatMessage("/esp - Toggle mob X-Ray", "chatSystem");
+                    addChatMessage("/place <mansion|outpost|cabin|dungeon|alt_maze|boss_shrine|boss_arena> - Generate structure", "chatSystem");
+                    addChatMessage("/locate <structure> - Find the nearest generated structure", "chatSystem");
                     addChatMessage("/killall - Kill loaded mobs", "chatSystem");
                     addChatMessage("/gamerule [rule] [value] - View or change world rules", "chatSystem");
-                    addChatMessage("Rules: doDaylightCycle, doWeatherCycle, keepInventory, doMobSpawning, pvp, mobCap, dayLength", "chatSystem");
-                    addChatMessage("/mobcap [value] - Alias for /gamerule mobCap", "chatSystem");
+                    addChatMessage("Rules: doDaylightCycle, doWeatherCycle, keepInventory, doMobSpawning, pvp, docileCap, hostileCap, dayLength", "chatSystem");
+                    addChatMessage("/gamerule docileCap|hostileCap <0–200> - Independent mob caps", "chatSystem");
                     addChatMessage("/ban <username>, /kill <username> - Ban or kill a player", "chatSystem");
                     addChatMessage("/op <username>, /deop <username>, /ops, /list, /mobs - Server commands", "chatSystem");
                     break;
@@ -8821,14 +9408,35 @@
                     if (!isMobHostForDimension(currentDimension)) addChatMessage('Only the current dimension mob host can remove shared mobs.', 'chatError');
                     else { for (const mob of [...mobs]) if (mob.dimension === currentDimension) requestRemoveSharedMob(mob, 'admin'); addChatMessage("Removed all mobs in this dimension.", "chatSuccess"); }
                     break;
-                case 'esp':
-                    espEnabled = !espEnabled; addChatMessage(`Mob ESP ${espEnabled ? 'enabled' : 'disabled'}.`, "chatSuccess"); break;
-                case 'place':
-                    if (args.length < 1) return addChatMessage("Usage: /place [mansion|cabin]", "chatError");
-                    const structType = args[0].toUpperCase();
-                    if (structType === 'MANSION' || structType === 'CABIN') { placeStructure(structType, Math.floor(player.x), Math.floor(player.y), Math.floor(player.z)); addChatMessage(`Placed ${structType} at your position!`, "chatSuccess"); } 
-                    else addChatMessage("Unknown structure type.", "chatError");
+                case 'place': {
+                    const structType=normalizeStructureName(args[0]);
+                    if(!structType){addChatMessage(`Usage: /place <${STRUCTURE_TYPES.join('|')}>`,'chatError');break;}
+                    if(currentDimension!==structureDimension(structType)){
+                        addChatMessage(`${structType} is a ${['Overworld','Timeless Void','Boss Dimension'][structureDimension(structType)]} structure. Enter that dimension first.`,'chatError');break;
+                    }
+                    const cx=Math.floor(player.x),cz=Math.floor(player.z);
+                    let cy=Math.floor(player.y)-1;
+                    if(structType==='MANSION'||structType==='OUTPOST'||structType==='CABIN')cy=getHeight(cx,cz,getBiome(cx,cz));
+                    else if(structType==='DUNGEON')cy=Math.max(4,Math.min(getHeight(cx,cz)-9,cy-2));
+                    else if(structType==='BOSS_ARENA')cy=48;
+                    else cy=Math.min(ALT_WORLD_HEIGHT-17,Math.max(3,cy));
+                    placeStructure(structType,cx,cy,cz);
+                    addChatMessage(`Placed ${structType} at ${cx}, ${worldYFromVoxel(cy)}, ${cz}.`,'chatSuccess');
                     break;
+                }
+                case 'locate': {
+                    const structType=normalizeStructureName(args[0]);
+                    if(!structType){addChatMessage(`Usage: /locate <${STRUCTURE_TYPES.join('|')}>`,'chatError');break;}
+                    const startX=Math.floor(player.x),startZ=Math.floor(player.z),searchSeed=WORLD_SEED;
+                    addChatMessage(`Searching for ${structType}...`,'chatSystem');
+                    locateStructure(structType,startX,startZ).then(found=>{
+                        if(WORLD_SEED!==searchSeed||!gameStarted)return;
+                        if(!found){addChatMessage(`No ${structType} found within search range.`,'chatError');return;}
+                        const dimName=['Overworld','Timeless Void','Boss Dimension'][found.dimension];
+                        addChatMessage(`Nearest ${structType}: ${found.cx}, ${worldYFromVoxel(found.baseY,found.dimension)}, ${found.cz} (${dimName}, ${found.distance} blocks horizontally).`,'chatSuccess');
+                    }).catch(e=>addChatMessage(`Locate failed: ${e.message}`,'chatError'));
+                    break;
+                }
                 default: addChatMessage("Unknown command. Type /help for list.", "chatError");
             }
         }
@@ -9104,6 +9712,10 @@
                         returnX: returnPoint.x, returnY: returnPoint.y, returnZ: returnPoint.z
                     };
                     if (!altDimensionSpawn) altDimensionSpawn = buildAltArrivalPortal(px, pz);
+                    const portalOverworld={dimension:0,x:px,y:py,z:pz};
+                    const portalAlternate={dimension:1,x:Math.floor(altDimensionSpawn.portalX),y:Math.floor(altDimensionSpawn.portalY),z:Math.floor(altDimensionSpawn.portalZ)};
+                    linkPortalBlocks(portalOverworld,portalAlternate);
+                    if(multiplayerConnected&&singleplayerNetworkMode!=='local')sendNetwork({type:'portal_link',overworld:portalOverworld,alternate:portalAlternate});
 
                     // Repair the exact legacy corruption caused by older builds that
                     // mirrored the Alt Y=30 portal into the Overworld.
@@ -9241,14 +9853,16 @@
                 const w=.25,h=1.7,nx=player.x+player.vx*dt,ny=player.y+player.vy*dt,nz=player.z+player.vz*dt;
                 if(requestTravelAreaReady(nx,player.z,w)){
                     if(!collides(nx,player.y,player.z,w,h))player.x=nx;
-                    else if(player.onGround&&isStairBlock(getBlock(Math.floor(nx),Math.floor(player.y),Math.floor(player.z)))){
-                        for(const rise of [.5,1])if(!collides(nx,player.y+rise,player.z,w,h)){player.y+=rise;player.x=nx;player.vy=Math.max(0,player.vy);player.highestY=player.y;break;}
+                    else if((player.onGround||Math.abs(player.vy)<1.5)&&
+                        nearStairForAutoStep(nx, player.y, player.z, w)){
+                        for(const rise of [.5,1])if(!collides(nx,player.y+rise,player.z,w,h)){player.y+=rise;player.x=nx;player.vy=0;player.onGround=true;player.highestY=player.y;break;}
                     }
                 }
                 if(requestTravelAreaReady(player.x,nz,w)){
                     if(!collides(player.x,player.y,nz,w,h))player.z=nz;
-                    else if(player.onGround&&isStairBlock(getBlock(Math.floor(player.x),Math.floor(player.y),Math.floor(nz)))){
-                        for(const rise of [.5,1])if(!collides(player.x,player.y+rise,nz,w,h)){player.y+=rise;player.z=nz;player.vy=Math.max(0,player.vy);player.highestY=player.y;break;}
+                    else if((player.onGround||Math.abs(player.vy)<1.5)&&
+                        nearStairForAutoStep(player.x, player.y, nz, w)){
+                        for(const rise of [.5,1])if(!collides(player.x,player.y+rise,nz,w,h)){player.y+=rise;player.z=nz;player.vy=0;player.onGround=true;player.highestY=player.y;break;}
                     }
                 }
                 if(!collides(player.x,player.y+player.vy*dt,player.z,w,h)){player.y+=player.vy*dt;player.onGround=false;if(!inWater&&!inLava)player.highestY=Math.max(player.highestY,player.y);}
@@ -9519,12 +10133,16 @@
                 const death=document.getElementById('deathScreen');death.style.display='flex';
                 const h=death.querySelector('h1');if(h)h.textContent=hardcore?'Hardcore Death':'You Died!';
                 if(!isMobilePlaying)document.exitPointerLock();deathScreenOpen=true;updateMobileControlsVisibility();
+                singleplayerDirty=true;
+                if(singleplayerNetworkMode==='local'||singleplayerNetworkMode==='lan-host')saveSingleplayerWorld(true);
+                else sendLocalPlayerState(performance.now(),true);
             }
         }
         function updateHungerBar(){const c=document.getElementById('hungerBar');if(!c)return;c.innerHTML='';for(let i=0;i<10;i++){const p=document.createElement('div');p.className='hunger-pip';p.style.setProperty('--fill',String(Math.max(0,Math.min(1,(player.hunger-i*2)/2))));c.appendChild(p);}}
         function addExhaustion(amount){if(player.gamemode!=='survival'||amount<=0)return;if(gameRules.difficulty==='peaceful'){if(player.hunger!==20||player.exhaustion!==0){player.hunger=20;player.exhaustion=0;updateHungerBar();singleplayerDirty=true;}return;}player.exhaustion+=amount;while(player.exhaustion>=4&&player.hunger>0){player.exhaustion-=4;player.hunger=Math.max(0,player.hunger-1);updateHungerBar();singleplayerDirty=true;}}
 
         document.getElementById('respawnBtn').addEventListener('click', () => {
+            if(gameRules.difficulty==='hardcore')return;
             document.getElementById('deathScreen').style.display = 'none'; deathScreenOpen = false;
             placePlayerAtSavedRespawn();player.health=player.maxHealth;player.hunger=20;player.exhaustion=0;updateHealthBar();
             sendNetwork({ type: 'respawn', x: player.x, y: player.y, z: player.z, dimension: currentDimension });
@@ -9752,6 +10370,21 @@
             return false;
         }
 
+        function nearStairForAutoStep(nx, ny, nz, w) {
+            // Footprint-based test: on half of the stair orientations the riser
+            // is encountered while the player's CENTER is still in an adjacent
+            // cell. Only checking floor(nx/nz) missed those approaches.
+            const minY = Math.floor(ny - .05), maxY = Math.floor(ny + 1.02);
+            for (let x = Math.floor(nx - w); x <= Math.floor(nx + w); x++) {
+                for (let z = Math.floor(nz - w); z <= Math.floor(nz + w); z++) {
+                    for (let y = minY; y <= maxY; y++) {
+                        if (isStairBlock(getBlock(x, y, z))) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         function requestTravelAreaReady(x, z, w = 0.25) {
             const keys = new Set();
             for (const sx of [x - w, x + w]) for (const sz of [z - w, z + w]) {
@@ -9841,7 +10474,7 @@
             let visibleLocatorPlayers = 0;
 
             for (const rp of remotePlayers.values()) {
-                if (rp.dimension !== currentDimension || rp.health <= 0) continue;
+                if (rp.dimension !== currentDimension || rp.health <= 0 || rp.gamemode === 'spectator') continue;
                 if (rp.crouching) continue;
                 const dx = rp.x - player.x, dy = rp.y - player.y, dz = rp.z - player.z;
                 const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
@@ -10030,19 +10663,20 @@
                 mobMaintenanceTimer -= dt;
                 if (mobMaintenanceTimer <= 0) {
                     mobMaintenanceTimer = 0.5;
-                    let dimensionMobCount=0;
-                    for(const m of mobs) if(m.dimension===currentDimension) dimensionMobCount++;
+                    const docileCount=mobCountForCap(currentDimension,false);
+                    const hostileCount=mobCountForCap(currentDimension,true);
                     const hostingMobs=isMobHostForDimension(currentDimension);
+                    if(hostingMobs)replenishNighttimeHostiles(0.5);
                     if(hostingMobs&&gameRules.difficulty==='peaceful')for(const m of [...mobs])if(m.dimension===currentDimension&&m.type.hostile&&!m.type.isBoss)requestRemoveSharedMob(m,'despawn');
-                    if (hostingMobs && gameRules.doMobSpawning && dimensionMobCount === 0) spawnInitialMobs(currentDimension);
+                    if (hostingMobs && gameRules.doMobSpawning && docileCount === 0 && hostileCount === 0) spawnInitialMobs(currentDimension);
                     // Caves get additional nearby hostile encounters, rather than
                     // relying solely on the long-range surface-spawn ring.
-                    if(hostingMobs&&gameRules.doMobSpawning&&dimensionMobCount<MOB_CAP&&Math.random()<.82){
+                    if(hostingMobs&&gameRules.doMobSpawning&&hostileSpawningAllowed()&&hostileCount<HOSTILE_CAP&&Math.random()<.82){
                         const cave=chooseNearbyCaveSpawn();
-                        if(cave){spawnSharedMob(hostileMobKey(),cave.x,cave.y,cave.z,0);dimensionMobCount++;}
+                        if(cave)spawnSharedMob(hostileMobKey(),cave.x,cave.y,cave.z,0);
                     }
                     // Spread new spawns around all active players from two through six chunks away.
-                    if (hostingMobs && gameRules.doMobSpawning && dimensionMobCount < MOB_CAP && Math.random() < 0.95) {
+                    if (hostingMobs && gameRules.doMobSpawning && (docileCount < DOCILE_CAP || hostileCount < HOSTILE_CAP) && Math.random() < 0.95) {
                         const spot=chooseDistributedMobSpawnPoint(currentDimension);
                         if(spot){
                             const x=spot.x,z=spot.z; let typeKey=null,h=50;
@@ -10139,7 +10773,7 @@
             
             // Keep the 500-block weather horizon visible while still building obvious distance fog.
             let fd = liteShaderEnabled ? 0.0035 : 0.0;
-            if (liteShaderEnabled && currentDimension === 1) fd = 0.04;
+            if (liteShaderEnabled && currentDimension === 1) fd = 0.024;
             if (liteShaderEnabled && currentDimension === 2) fd = 0.02;
             if(liteShaderEnabled&&currentDimension===0&&playerEyeY()<CLOUD_LEVEL){const rainFog=weatherClamp01(localWeatherState.fog*.78+localWeatherState.rain*.52+localWeatherState.cloud*.08);fd=.0035+Math.pow(rainFog,2.05)*.080;}
             if(liteShaderEnabled&&currentDimension===0)fd=playerInCave?0:fd*weatherSkyExposure;
@@ -10211,7 +10845,7 @@
             for (const m of mobs) {
                 if (m.dimension !== currentDimension || m.health <= 0) continue;
                 const mdx=m.x-player.x, mdz=m.z-player.z, mobDistSq=mdx*mdx+mdz*mdz;
-                if (espEnabled || mobDistSq < 2500) {
+                if (mobDistSq < 2500) {
                     const humanoidFacingOffset = m.type.model === 'humanoid' ? Math.PI : 0;
                     const bMesh = getMobBodyMesh(m.type);
                     if (bMesh) drawMesh(bMesh, modelMatrix(m.x, m.y, m.z, m.bodyRotation + humanoidFacingOffset), true, 1);
@@ -10364,7 +10998,7 @@
             chunkMeshes.clear();
             if(!preserveStreamedWorldEditsForStart)sharedChunkEdits.clear();
             knownSaplings.clear();
-            mountainRegionCache.clear(); mountainInfoCache.clear();
+            biomeProvinceCache.clear(); structureHallCache.clear(); mansionOreCache.clear(); altMazeRoomCache.clear(); mountainRegionCache.clear(); mountainInfoCache.clear();
             megaCaveCache.clear();
             lavaPoolCache.clear();
             plainsTreeSpotCache.clear(); customBiomeInfoCache.clear();
@@ -10390,6 +11024,8 @@
             dimensionTransitionInProgress = false;
             if (!multiplayerConnected) worldTime = 0.25; 
 
+            deathScreenOpen=false;
+            document.getElementById('deathScreen').style.display='none';
             const restoredPlayer = applyRestoredPlayerState(pendingPlayerState);
             pendingPlayerState = null;
             if (!restoredPlayer || (bossDefeated && currentDimension === 2)) {
@@ -10409,7 +11045,7 @@
             applyItemSnapshot(pendingItemSnapshot);
             pendingMobSnapshot = []; pendingItemSnapshot = [];
             if (isMobHostForDimension(currentDimension) && !mobs.some(m => m.dimension === currentDimension)) spawnInitialMobs(currentDimension);
-            if (!isMobilePlaying) canvas.requestPointerLock();
+            if (!isMobilePlaying && !deathScreenOpen) canvas.requestPointerLock();
             updateMobileCreativeButton();
             updateMobileControlsVisibility();
             if(!mainLoopStarted){mainLoopStarted=true;lastTime=performance.now();requestAnimationFrame(loop);}

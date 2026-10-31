@@ -86,7 +86,8 @@ ORANGE_WOOL_ITEM = 141
 YELLOW_WOOL_ITEM = 142
 BLUE_WOOL_ITEM = 143
 PURPLE_WOOL_ITEM = 144
-MOB_CAP_PER_DIMENSION = 30
+DEFAULT_DOCILE_CAP = 18
+DEFAULT_HOSTILE_CAP = 12
 MAX_INVENTORY_SLOTS = 30
 MAX_STACK_SIZE = 100
 ALLOWED_SKINS = {"steve", "alex", "mellorite", "ember", "frost", "forest"}
@@ -157,7 +158,8 @@ DEFAULT_GAME_RULES: dict[str, bool | int | str] = {
     "doMobSpawning": True,
     "pvp": True,
     "difficulty": "normal",
-    "mobCap": MOB_CAP_PER_DIMENSION,
+    "docileCap": DEFAULT_DOCILE_CAP,
+    "hostileCap": DEFAULT_HOSTILE_CAP,
     "dayLength": int(DAY_LENGTH_SECONDS),
 }
 GAME_RULE_ORDER = tuple(DEFAULT_GAME_RULES)
@@ -166,7 +168,7 @@ GAME_RULE_ALIASES = {
     "daylightcycle": "doDaylightCycle", "dodaylightcycle": "doDaylightCycle",
     "weathercycle": "doWeatherCycle", "doweathercycle": "doWeatherCycle",
     "keepinventory": "keepInventory", "mobspawning": "doMobSpawning", "domobspawning": "doMobSpawning",
-    "pvp": "pvp", "difficulty": "difficulty", "mobcap": "mobCap", "daylength": "dayLength",
+    "pvp": "pvp", "difficulty": "difficulty", "docilecap": "docileCap", "passivecap": "docileCap", "hostilecap": "hostileCap", "daylength": "dayLength",
 }
 
 
@@ -186,7 +188,15 @@ def normalize_game_rules(value: Any) -> dict[str, bool | int | str]:
                 normalized[name] = bool(incoming)
     difficulty = str(raw.get("difficulty", normalized["difficulty"])).strip().lower()
     normalized["difficulty"] = difficulty if difficulty in DIFFICULTY_DAMAGE_SCALE else "normal"
-    for name, minimum, maximum in (("mobCap", 0, 200), ("dayLength", 60, 3600)):
+    # Old worlds stored a shared mobCap; split that budget 60/40 on migration.
+    if "mobCap" in raw:
+        try:
+            legacy_cap = max(0, min(200, round(float(raw["mobCap"]))))
+            if "docileCap" not in raw: normalized["docileCap"] = round(legacy_cap * .6)
+            if "hostileCap" not in raw: normalized["hostileCap"] = legacy_cap - round(legacy_cap * .6)
+        except (TypeError, ValueError):
+            pass
+    for name, minimum, maximum in (("docileCap", 0, 200), ("hostileCap", 0, 200), ("dayLength", 60, 3600)):
         try:
             normalized[name] = max(minimum, min(maximum, round(float(raw.get(name, normalized[name])))))
         except (TypeError, ValueError):
@@ -348,6 +358,7 @@ class MellorCraftWorld:
         self.mobs: dict[str, MobState] = {}
         self.items: dict[str, DroppedItemState] = {}
         self.furnaces: dict[str, dict[str, Any]] = {}
+        self.portal_links: dict[str, str] = {}
         self.mob_hosts: dict[int, str | None] = {0: None, 1: None, 2: None}
         self.damage_locks: dict[str, float] = {}
         self.teleport_locks: dict[str, float] = {}
@@ -559,6 +570,9 @@ class MellorCraftWorld:
                 blocks = self.legacy_chunk_edits_to_blocks(raw.get("chunkEdits"))
             if isinstance(blocks, dict):
                 self.blocks = {str(k): int(v) for k, v in blocks.items()}
+            raw_portals=raw.get("portalLinks", {})
+            if isinstance(raw_portals, dict):
+                self.portal_links={str(k):str(v) for k,v in raw_portals.items() if isinstance(k,str) and isinstance(v,str)}
             operators = raw.get("operators", [])
             if isinstance(operators, list):
                 self.operators = {str(name).strip().casefold() for name in operators if str(name).strip()}
@@ -633,12 +647,12 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 12, "version": "1.8.2", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 12, "version": "1.8.3", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
             "bossDefeated": self.boss_defeated, "gameRules": self.game_rules, "worldGen": self.world_gen,
             "blocks": self.blocks, "operators": sorted(self.operators), "bannedPlayers": sorted(self.banned_players), "playerProfiles": profiles,
             "mobs": [asdict(mob) for mob in self.mobs.values()], "items": [asdict(item) for item in self.items.values()],
-            "furnaces": self.furnaces,
+            "furnaces": self.furnaces, "portalLinks": self.portal_links,
             "updatedAt": int(time.time() * 1000),
         }
         self.save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1275,6 +1289,45 @@ async def spill_furnace_contents(dimension: int, x: int, y: int, z: int) -> None
     await broadcast({"type": "furnace_removed", "key": key}, minimum_protocol=6)
 
 
+def portal_link_point(raw: Any, expected_dim: int) -> str | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        dimension=int(raw.get('dimension'));x=int(raw.get('x'));y=int(raw.get('y'));z=int(raw.get('z'))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if dimension!=expected_dim or abs(x)>2_000_000 or abs(z)>2_000_000 or not 0<=y<WORLD_HEIGHT:
+        return None
+    return world.block_key(dimension,x,y,z)
+
+
+def save_portal_link(data: dict[str, Any]) -> None:
+    a=portal_link_point(data.get('overworld'),0)
+    b=portal_link_point(data.get('alternate'),1)
+    if not a or not b or world.blocks.get(a)!=PORTAL_BLOCK or world.blocks.get(b)!=PORTAL_BLOCK:
+        return
+    for key in (a,b):
+        old=world.portal_links.pop(key,None)
+        if old:world.portal_links.pop(old,None)
+    world.portal_links[a]=b;world.portal_links[b]=a
+    world.dirty=True
+
+
+async def remove_linked_portal(key: str, block_type: int, previous_type: int, player_id: str) -> None:
+    if block_type==PORTAL_BLOCK or (previous_type!=PORTAL_BLOCK and key not in world.portal_links):
+        return
+    partner=world.portal_links.pop(key,None)
+    if not partner:return
+    world.portal_links.pop(partner,None)
+    # The other end may be at a *different* X/Z and a different height.
+    # Remove only a linked portal; never erase unrelated terrain or create loot.
+    if world.blocks.get(partner)==PORTAL_BLOCK:
+        world.blocks[partner]=AIR_BLOCK
+        d,x,y,z=world.parse_block_key(partner)
+        await broadcast({'type':'block_update','playerId':player_id,'dimension':d,'x':x,'y':y,'z':z,'blockType':AIR_BLOCK})
+    world.dirty=True
+
+
 async def handle_block_change(player_id: str, data: dict[str, Any]) -> None:
     x = bounded_int(data.get("x"), -2_000_000, 2_000_000)
     y = bounded_int(data.get("y"), 0, WORLD_HEIGHT - 1)
@@ -1289,6 +1342,7 @@ async def handle_block_change(player_id: str, data: dict[str, Any]) -> None:
     # corrupting terrain and causing repeated teleport loops. Portal changes are
     # therefore stored only in the explicitly requested dimension.
     world.blocks[key] = block_type
+    await remove_linked_portal(key,block_type,previous_type,player_id)
     if block_type != FURNACE_BLOCK and (previous_type == FURNACE_BLOCK or f"{dimension},{x},{y},{z}" in world.furnaces):
         await spill_furnace_contents(dimension, x, y, z)
     if previous_type in BED_BLOCK_IDS and block_type != previous_type:
@@ -1315,6 +1369,7 @@ async def handle_block_batch(player_id: str, data: dict[str, Any]) -> None:
         block_type = bounded_int(entry.get("blockType"), 0, 255)
         key = world.block_key(dimension, x, y, z); previous_type = world.blocks.get(key, AIR_BLOCK)
         world.blocks[key] = block_type
+        await remove_linked_portal(key,block_type,previous_type,player_id)
         if block_type != FURNACE_BLOCK and (previous_type == FURNACE_BLOCK or f"{dimension},{x},{y},{z}" in world.furnaces):
             await spill_furnace_contents(dimension, x, y, z)
         if previous_type in BED_BLOCK_IDS and block_type != previous_type:
@@ -1504,11 +1559,18 @@ async def handle_mob_spawn(player_id: str, data: dict[str, Any]) -> None:
     dimension = bounded_int(data.get("dimension"), 0, 2)
     if world.mob_hosts.get(dimension) != player_id:
         return
-    if sum(1 for mob in world.mobs.values() if mob.dimension == dimension) >= int(world.game_rules["mobCap"]):
-        return
     type_key = str(data.get("typeKey", ""))
     if type_key not in MOB_DEFINITIONS:
         return
+    definition = MOB_DEFINITIONS[type_key]
+    if type_key != "MELLOR_BOSS":
+        hostile = bool(definition["hostile"])
+        category = "hostileCap" if hostile else "docileCap"
+        current = sum(1 for mob in world.mobs.values() if mob.dimension == dimension
+                      and mob.health > 0 and mob.typeKey != "MELLOR_BOSS"
+                      and bool(MOB_DEFINITIONS.get(mob.typeKey, {}).get("hostile")) == hostile)
+        if current >= int(world.game_rules[category]):
+            return
     requested_id = str(data.get("id", ""))
     mob_id = requested_id if ENTITY_ID_PATTERN.fullmatch(requested_id) and requested_id not in world.mobs else uuid.uuid4().hex
     definition = MOB_DEFINITIONS[type_key]
@@ -1790,7 +1852,7 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             player.dimension = bounded_int(data.get("dimension"), 0, 2, player.dimension)
         player.yaw = finite_number(data.get("yaw"), player.yaw)
         player.pitch = max(-math.pi / 2, min(math.pi / 2, finite_number(data.get("pitch"), player.pitch)))
-        if time.monotonic() >= world.damage_locks.get(player.id, 0.0):
+        if player.health > 0 and time.monotonic() >= world.damage_locks.get(player.id, 0.0):
             player.health = max(0.0, min(10.0, finite_number(data.get("health"), player.health)))
         player.hunger = max(0.0, min(20.0, finite_number(data.get("hunger"), player.hunger)))
         player.heldItem = bounded_int(data.get("heldItem"), 0, 255)
@@ -1889,6 +1951,8 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             result = await process_console_command(command)
             if result:
                 await send_json(world.connections[player_id], {"type": "system", "message": result})
+    elif message_type == "portal_link":
+        save_portal_link(data)
     elif message_type == "chat":
         message = str(data.get("message", "")).strip()[:200]
         if message:
@@ -1913,6 +1977,8 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
             world.dirty = True
             await broadcast({"type": "system", "message": f"{player.username} set the time to {hour:g}:00"})
     elif message_type == "respawn":
+        if player.health > 0 or str(world.game_rules.get("difficulty", "normal")) == "hardcore":
+            return
         position = player_respawn_position(player)
         player.x = float(position["x"]); player.y = float(position["y"]); player.z = float(position["z"]); player.dimension = int(position["dimension"])
         player.health = 10.0; world.damage_locks[player.id] = time.monotonic() + 2.0; world.dirty = True
@@ -2340,7 +2406,7 @@ async def process_gamerule_command(args: list[str]) -> str:
             return "Usage: /gamerule difficulty <peaceful|easy|normal|hard|hardcore>"
         value = raw_value
     else:
-        minimum, maximum = (0, 200) if name == "mobCap" else (60, 3600)
+        minimum, maximum = (60, 3600) if name == "dayLength" else (0, 200)
         try:
             value = int(args[1])
         except ValueError:
@@ -2531,7 +2597,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.8.2 World Selection")
+    print("\nMellorCraft v1.8.3 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -2622,7 +2688,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.8.2 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.8.3 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -2652,7 +2718,7 @@ def main() -> None:
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.8.2 multiplayer server is running")
+    print("\nMellorCraft v1.8.3 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")

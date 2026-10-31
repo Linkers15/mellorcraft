@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MellorCraft v1.8.2 Seed Map</title>
+<title>MellorCraft v1.8.3 Seed Map</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#15171b;color:#eee;font-family:Arial,sans-serif}
@@ -21,6 +21,15 @@ label{font-size:13px;color:#ccc}
 .legend-row{display:flex;align-items:center;gap:6px;margin:3px 0}
 .swatch{width:13px;height:13px;border:1px solid #aaa;display:inline-block}
 #status{font-size:12px;color:#bbb;min-width:230px}
+#mapFilters{position:fixed;z-index:10;right:12px;top:62px;background:#171b22;border:1px solid #66717f;border-radius:7px;width:min(330px,90vw);box-shadow:0 5px 20px #0008;font-size:13px}
+#mapFilters>summary{padding:10px 13px;cursor:pointer;font-weight:700}
+#mapFilters .filter-content{padding:0 12px 12px;max-height:55vh;overflow:auto}
+#mapFilters .filter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 8px;margin:7px 0}
+#mapFilters label{display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
+#mapFilters input{accent-color:#77bc8b}
+#mapFilters .filter-actions{display:flex;gap:7px;margin:6px 0 10px}
+#mapFilters .filter-actions button{padding:5px 9px;font-size:11px}
+#mapFilters h4{margin:8px 0 4px}
 .small{font-size:12px}
 </style>
 </head>
@@ -34,7 +43,7 @@ label{font-size:13px;color:#ccc}
     <option value="1">Alt Dimension</option>
     <option value="2">Boss Dimension</option>
   </select>
-  <label><input type="checkbox" id="structures" checked> Structures</label>
+  <label><input type="checkbox" id="structures" checked> Show structures</label>
   <label><input type="checkbox" id="grid" checked> Chunk grid</label>
   <label><input type="checkbox" id="weather" checked> Weather simulation</label>
   <button id="weatherPlay">▶ Play Weather</button>
@@ -44,6 +53,11 @@ label{font-size:13px;color:#ccc}
   <span id="weatherReadout" class="weather-readout"></span>
   <span id="status">Drag to pan • wheel to zoom</span>
 </div>
+<details id="mapFilters"><summary>Filter biomes &amp; structures ▾</summary><div class="filter-content">
+  <h4>Biomes</h4><div class="filter-actions"><button type="button" id="allBiomesBtn">Show all</button><button type="button" id="noBiomesBtn">Hide all</button></div><div id="biomeFilters" class="filter-grid"></div>
+  <h4>Structures</h4><div class="filter-actions"><button type="button" id="allStructuresBtn">Show all</button><button type="button" id="noStructuresBtn">Hide all</button></div><div id="structureFilters" class="filter-grid"></div>
+  <small style="color:#aabbcc">Hidden biomes appear dark gray. At extreme zoom-out the map uses larger samples for speed.</small>
+</div></details>
 <canvas id="map"></canvas>
 <div id="tooltip"></div>
 <div id="legend"></div>
@@ -144,20 +158,25 @@ class SimplexNoise {
 const BIOMES={
     PLAINS:0,DESERT_BARREN:1,DESERT_CACTUS:2,FOREST:3,
     MOUNTAINS_LOW:4,MOUNTAINS_MID:5,MOUNTAINS_HIGH:6,
-    TAIGA:7,STONY_PEAKS:8,BADLANDS:9,OCEAN:10,SWAMP:11,
+    TAIGA:7,SNOWY_PLAINS:8,BADLANDS:9,OCEAN:10,SWAMP:11,
     JUNGLE:12,SAVANNA:13,BEACH:14,FLOWER_FOREST:15
 };
 const ALT_BIOMES={RED:0,BLUE:1,GREEN:2};
-const BIOME_NAMES=['Plains','Barren Desert','Cactus Desert','Forest','Low Mountains','Medium Mountains','High Mountains','Taiga','Stony Peaks','Badlands','Ocean','Swamp','Jungle','Savanna','Beach','Flower Forest'];
-const BIOME_COLORS=['#78a84b','#d7b968','#d9c36d','#2f7b39','#859271','#7b8177','#e8edf0','#477d55','#7f858b','#b65c34','#2f69a8','#4c7658','#176d31','#a8aa49','#e5d394','#4f934f'];
+const BIOME_NAMES=['Plains','Barren Desert','Cactus Desert','Forest','Low Mountains','Medium Mountains','High Mountains','Taiga','Snowy Plains','Badlands','Ocean','Swamp','Jungle','Savanna','Beach','Flower Forest'];
+const BIOME_COLORS=['#78a84b','#d7b968','#d9c36d','#2f7b39','#859271','#7b8177','#e8edf0','#477d55','#eaf2fa','#b65c34','#2f69a8','#4c7658','#176d31','#a8aa49','#e5d394','#4f934f'];
 const ALT_NAMES=['Red Wastes','Blue Caverns','Green Depths'];
 const MOUNTAIN_XZ_SCALE=Math.SQRT1_2; // v1.4.1: half mountain land area, unchanged outline
 const ALT_COLORS=['#9a3434','#344f9a','#397a47'];
+const STRUCTURE_TYPES=['Mansion','Outpost','Cabin','Dungeon','Alt Maze','Boss Shrine','Boss Arena'];
+const enabledBiomes=new Set([...Array(BIOME_NAMES.length).keys()].map(n=>`0:${n}`).concat(ALT_NAMES.map((_,i)=>`1:${i}`),['2:0','2:1']));
+const enabledStructures=new Set(STRUCTURE_TYPES.filter(t=>t!=='Dungeon'));
+let filterRevision=0;
 const WATER_LEVEL=32;
 let WORLD_SEED=12345;
 let weatherSeed=1,weatherPhase=0,weatherPlaying=false,weatherAnimationLast=0,weatherLastRender=0;
 const weatherCloudFade=new Map();
 let noise,biomeNoise,treeNoise,caveNoise,oreNoise,ravineNoise,structNoise,continentalNoise,lavaNoise;
+const biomeProvinceCache=new Map();
 const mountainRegionCache=new Map();
 const mountainInfoCache=new Map();
 
@@ -169,7 +188,7 @@ function setSeed(value){
   treeNoise=new SimplexNoise(WORLD_SEED+2000);caveNoise=new SimplexNoise(WORLD_SEED+3000);
   oreNoise=new SimplexNoise(WORLD_SEED+4000);ravineNoise=new SimplexNoise(WORLD_SEED+5000);
   structNoise=new SimplexNoise(WORLD_SEED+6000);continentalNoise=new SimplexNoise(WORLD_SEED+7000);
-  lavaNoise=new SimplexNoise(WORLD_SEED+8000);mountainRegionCache.clear();mountainInfoCache.clear();weatherSeed=weatherSeedForWorldSeed(WORLD_SEED);weatherPhase=0;weatherCloudFade.clear();
+  lavaNoise=new SimplexNoise(WORLD_SEED+8000);biomeProvinceCache.clear();mountainRegionCache.clear();mountainInfoCache.clear();weatherSeed=weatherSeedForWorldSeed(WORLD_SEED);weatherPhase=0;weatherCloudFade.clear();
 }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
@@ -197,11 +216,11 @@ function pressureColor(p,alpha=.34){const t=clamp(p/WEATHER_PRESSURE_MAX,0,1),h=
 function seedCloudFadeAt(x,z,target){const key=`${Math.floor(x/32)},${Math.floor(z/32)}`,now=performance.now()/1000;let state=weatherCloudFade.get(key);if(!state){state={opacity:0,last:now,seen:now};weatherCloudFade.set(key,state)}const dt=Math.max(0,Math.min(1,now-state.last));state.last=now;state.seen=now;const rate=target>state.opacity?1.15:.32,ease=1-Math.exp(-dt*rate);state.opacity+=(target-state.opacity)*ease;if(state.opacity<.001&&target<=0)state.opacity=0;return state.opacity}
 
 function getClimate(x, z) {
-            const scale = 0.0008;
-            const temp = biomeNoise.octave(x * scale, z * scale, 3, 0.5);
-            const moist = biomeNoise.octave(x * scale + 5000, z * scale + 5000, 3, 0.5);
-            return { temp, moist };
-        }
+    const warpX = biomeNoise.octave(x * .0017 + 1407, z * .0017 - 2379, 2, .55) * 135;
+    const warpZ = biomeNoise.octave(x * .0017 - 3151, z * .0017 + 4783, 2, .55) * 135;
+    const sx=x+warpX, sz=z+warpZ, scale=.0008;
+    return {temp:biomeNoise.octave(sx*scale,sz*scale,3,.5),moist:biomeNoise.octave(sx*scale+5000,sz*scale+5000,3,.5)};
+}
 
 function getContinentValue(x, z) {
             // Broad, low-frequency coastlines keep ocean and land transitions
@@ -212,25 +231,108 @@ function getContinentValue(x, z) {
             return continent + coastDetail;
         }
 
+function getBiomeProvince(cellX, cellZ) {
+    // Cache climate at province centers. The warp changes borders, not biome
+    // assignment within a province; this prevents thin isotherm/isohyet bands.
+    const key = `${cellX},${cellZ}`;
+    const existing = biomeProvinceCache.get(key);
+    if (existing) return existing;
+    if (biomeProvinceCache.size > 20000) biomeProvinceCache.clear();
+    const size = 88;
+    const px = (cellX + .5 + (coordHash(cellX,cellZ,9101,WORLD_SEED)-.5)*.54)*size;
+    const pz = (cellZ + .5 + (coordHash(cellX,cellZ,9102,WORLD_SEED)-.5)*.54)*size;
+    // Independent continent-scale temperature and rainfall fields make nearby
+    // provinces climatically similar, rather than drawing unrelated biome IDs.
+    // Frequency is deliberately far below the province-grid frequency.
+    const temp = biomeNoise.octave(px*.00135+1351,pz*.00135-2791,2,.55)*1.4;
+    const moist = biomeNoise.octave(px*.00150-3701,pz*.00150+6143,2,.55)*1.25;
+    let biome;
+    if (temp >= .20) {
+        if (moist > .25) biome = BIOMES.JUNGLE;
+        else if (moist > .045) biome = BIOMES.SAVANNA;
+        else if (moist < -.33) biome = BIOMES.BADLANDS;
+        else if (moist < -.125) biome = BIOMES.DESERT_BARREN;
+        else biome = BIOMES.DESERT_CACTUS;
+    } else if (temp >= .10) {
+        if (moist > .29) biome = BIOMES.JUNGLE;
+        else if (moist < .12) biome = BIOMES.SAVANNA;
+        else biome = BIOMES.FOREST;
+    } else if (temp < -.34) {
+        if (moist > -.02 && coordHash(cellX,cellZ,9372,WORLD_SEED)<.32) biome = BIOMES.TAIGA;
+        else if (temp > -.70 && moist > -.20) biome = BIOMES.FOREST;
+        else biome = BIOMES.PLAINS;
+    } else if (temp < -.20) {
+        if (moist > .29 && coordHash(cellX,cellZ,9372,WORLD_SEED)<.24) biome = BIOMES.TAIGA;
+        else if (moist > .07) biome = BIOMES.FOREST;
+        else biome = BIOMES.PLAINS;
+    } else if (moist > .16) {
+        // A flower forest is a whole temperate province, not a small grid tile.
+        biome = temp > -.14 && temp < .12 && coordHash(cellX,cellZ,8151,WORLD_SEED) < .055
+            ? BIOMES.FLOWER_FOREST : BIOMES.FOREST;
+    } else {
+        biome = BIOMES.PLAINS;
+    }
+    // A second, climate-compatible draw gives forests about twice their former
+    // selection weight. Provinces stay at 88 blocks: no bigger forest patches.
+    // Only promote temperate plains; deserts, mountains and icy areas remain intact.
+    if (biome === BIOMES.PLAINS && temp >= -.34 && temp < .20 && moist > -.14 &&
+        coordHash(cellX, cellZ, 9403, WORLD_SEED) < .17) {
+        biome = (temp > -.14 && temp < .12 && coordHash(cellX,cellZ,8151,WORLD_SEED)<.055)
+            ? BIOMES.FLOWER_FOREST : BIOMES.FOREST;
+    }
+    // Preserve plausible climate neighbors at the scale of full provinces.
+    // Dry hot deserts should border savanna/badlands rather than jungle;
+    // cold taiga/peaks should reach them only through temperate plains.
+    // Changing the intervening province prevents a thin ecotone strip.
+    if ([BIOMES.TAIGA,BIOMES.JUNGLE,BIOMES.FOREST,BIOMES.FLOWER_FOREST].includes(biome)) {
+        outer: for (let dx=-2; dx<=2; dx++) for (let dz=-2; dz<=2; dz++) {
+            if (!dx && !dz) continue;
+            const nx=cellX+dx, nz=cellZ+dz;
+            const qx=(nx+.5+(coordHash(nx,nz,9101,WORLD_SEED)-.5)*.54)*size;
+            const qz=(nz+.5+(coordHash(nx,nz,9102,WORLD_SEED)-.5)*.54)*size;
+            const neighborTemp=biomeNoise.octave(qx*.00135+1351,qz*.00135-2791,2,.55)*1.4;
+            const neighborMoist=biomeNoise.octave(qx*.00150-3701,qz*.00150+6143,2,.55)*1.25;
+            const desertNeighbor=neighborTemp>=.20 && neighborMoist<=.045;
+            if (desertNeighbor) {
+                biome=(biome===BIOMES.JUNGLE||biome===BIOMES.FOREST||biome===BIOMES.FLOWER_FOREST) && temp>=.10
+                    ? BIOMES.SAVANNA : BIOMES.PLAINS;
+                break outer;
+            }
+            if ((biome===BIOMES.TAIGA) && Math.max(Math.abs(dx),Math.abs(dz))<=1 && neighborTemp>=.10 && neighborMoist<.28) {
+                biome=BIOMES.PLAINS;
+                break outer;
+            }
+        }
+    }
+    // Deterministic province-level 50/50 split preserves biome patch sizes.
+    if (biome === BIOMES.TAIGA && coordHash(cellX,cellZ,9373,WORLD_SEED)<0.5)
+        biome = BIOMES.SNOWY_PLAINS;
+    const result = { x:px, z:pz, biome, temp, moist };
+    biomeProvinceCache.set(key,result);
+    return result;
+}
+
 function getBaseBiome(x, z) {
-  const {temp,moist}=getClimate(x,z);
-  if(temp>.32){
-    if(moist>.48)return BIOMES.JUNGLE;
-    if(moist>.10)return BIOMES.SAVANNA;
-    if(moist<-.18)return BIOMES.BADLANDS;
-    if(moist<-.02)return BIOMES.DESERT_BARREN;
-    return BIOMES.DESERT_CACTUS;
-  }
-  if(temp<-.28){if(moist<-.70)return BIOMES.STONY_PEAKS;return BIOMES.TAIGA}
-  if(moist>-0.05&&temp>-0.18&&temp<0.28&&coordHash(Math.floor(x/190),Math.floor(z/190),8151)<0.075)return BIOMES.FLOWER_FOREST;
-  if(moist>.02)return BIOMES.FOREST;
-  return BIOMES.PLAINS;
+    // Seeded, jittered two-dimensional climate provinces. The closest center
+    // gives each biome a substantial rounded footprint instead of a thin strip
+    // formed where several climate thresholds almost coincide.
+    const warpX = biomeNoise.octave(x*.0046+1741,z*.0046-1927,2,.55)*18;
+    const warpZ = biomeNoise.octave(x*.0046-2881,z*.0046+3653,2,.55)*18;
+    const px=x+warpX,pz=z+warpZ,grid=88;
+    const cx=Math.floor(px/grid),cz=Math.floor(pz/grid);
+    let nearest=null,best=Infinity;
+    for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+        const province=getBiomeProvince(cx+dx,cz+dz);
+        const distance=(px-province.x)**2+(pz-province.z)**2;
+        if(distance<best){best=distance;nearest=province;}
+    }
+    return nearest.biome;
 }
 
 function getMountainRegion(cellX, cellZ) {
 const key = `${cellX},${cellZ}`;
 if (mountainRegionCache.has(key)) return mountainRegionCache.get(key);
-const grid = 680;
+const grid = 420;
 const mh = (salt) => coordHash(cellX, cellZ, salt, WORLD_SEED + salt * 131);
 // Mountain regions remain twice as common as the older generator, but
 // each seed receives different locations, chains, heights, and outlines.
@@ -242,7 +344,7 @@ if (mh(900) >= 0.38) {
 const cx = cellX * grid + 70 + mh(901) * (grid - 140);
 const cz = cellZ * grid + 70 + mh(902) * (grid - 140);
 const chainAngle = mh(903) * Math.PI * 2;
-const chainLength = 250 + mh(904) * 210;
+const chainLength = 155 + mh(904) * 130;
 const peakCount = 2 + Math.floor(mh(905) * 3);
 const maxTierRoll = mh(906);
 const maxTier = maxTierRoll < 0.35 ? 0 : (maxTierRoll < 0.74 ? 1 : 2);
@@ -250,7 +352,7 @@ const peaks = [];
 
 for (let i = 0; i < peakCount; i++) {
     const t = peakCount === 1 ? 0 : (i / (peakCount - 1) - 0.5);
-    const bend = (mh(920 + i) - 0.5) * 145;
+    const bend = (mh(920 + i) - 0.5) * 95;
     const along = t * chainLength + (mh(930 + i) - 0.5) * 55;
     const px = cx + Math.cos(chainAngle) * along - Math.sin(chainAngle) * bend;
     const pz = cz + Math.sin(chainAngle) * along + Math.cos(chainAngle) * bend;
@@ -269,8 +371,8 @@ for (let i = 0; i < peakCount; i++) {
         z: pz,
         height: peakHeight,
         tier,
-        spreadLong: (105 + mh(960 + i) * 100) * broadness,
-        spreadCross: (72 + mh(970 + i) * 78) * broadness,
+        spreadLong: (70 + mh(960 + i) * 65) * broadness,
+        spreadCross: (48 + mh(970 + i) * 48) * broadness,
         angle: chainAngle + (mh(980 + i) - 0.5) * 0.95,
         phaseX: mh(990 + i) * 4000,
         phaseZ: mh(1000 + i) * 4000
@@ -288,7 +390,7 @@ const cacheKey = `${ix},${iz}`;
 if (mountainInfoCache.has(cacheKey)) return mountainInfoCache.get(cacheKey);
 if (mountainInfoCache.size > 220000) mountainInfoCache.clear();
 
-const grid = 680;
+const grid = 420;
 const baseCellX = Math.floor(x / grid), baseCellZ = Math.floor(z / grid);
 let bestTarget = -Infinity;
 let best = null;
@@ -364,6 +466,8 @@ if (mountain) {
 }
 return getBaseBiome(x, z);
         }
+
+        
 
 function getAltBiome(x, z) {
             const val = biomeNoise.octave(x * 0.005 + 10000, z * 0.005 + 10000, 3, 0.5);
@@ -448,23 +552,56 @@ function getSurfaceStructuresInBounds(minX,minZ,maxX,maxZ){
       }
     }
   }
-  scan(128,.05,610,'Mansion',15,[BIOMES.FOREST,BIOMES.FLOWER_FOREST]);
-  scan(128,.10,620,'Outpost',4,[BIOMES.PLAINS,BIOMES.SAVANNA,BIOMES.FOREST,BIOMES.FLOWER_FOREST]);
-  scan(64,.15,630,'Cabin',3,[BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH,BIOMES.TAIGA]);
+  if(enabledStructures.has('Mansion'))scan(128,.05,610,'Mansion',15,[BIOMES.FOREST,BIOMES.FLOWER_FOREST]);
+  if(enabledStructures.has('Outpost'))scan(128,.05,620,'Outpost',4,[BIOMES.PLAINS,BIOMES.SAVANNA,BIOMES.FOREST,BIOMES.FLOWER_FOREST]);
+  if(enabledStructures.has('Cabin'))scan(64,.075,630,'Cabin',3,[BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH,BIOMES.TAIGA]);
+  if(enabledStructures.has('Dungeon')){
+    // Dungeon locations are hidden underground; calculate an approximate marker
+    // using the same region hash/position rule as the game. Do height math only
+    // for candidates and limit markers at deep zoom-out.
+    const stride=(maxX-minX)>5000?4:(maxX-minX)>2500?2:1;
+    const minCX=Math.floor(minX/56)-1,maxCX=Math.floor(maxX/56)+1;
+    const minCZ=Math.floor(minZ/56)-1,maxCZ=Math.floor(maxZ/56)+1;
+    for(let cellX=minCX;cellX<=maxCX;cellX+=stride)for(let cellZ=minCZ;cellZ<=maxCZ;cellZ+=stride){
+      if(coordHash(cellX,cellZ,760)>=.2)continue;
+      const cx=cellX*56+10+Math.floor(coordHash(cellX,cellZ,761)*36);
+      const cz=cellZ*56+10+Math.floor(coordHash(cellX,cellZ,762)*36);
+      if(cx<minX-4||cx>maxX+4||cz<minZ-4||cz>maxZ+4)continue;
+      let minY=248;
+      for(const ox of [-4,0,4])for(const oz of [-4,0,4])minY=Math.min(minY,getHeight(cx+ox,cz+oz));
+      if(minY-9>=5){const maxBase=minY-9;const y=48+4+Math.floor(coordHash(cellX,cellZ,763)*Math.max(1,maxBase-48-3));result.push({type:'Dungeon',cx,cz,y});}
+    }
+  }
   return result;
 }
 function getAltMazeCenter(cellX,cellZ){
   if(posRand(cellX*15,cellZ*15)<=.70)return null;
-  const cx=cellX*64+Math.floor(posRand(cellX,cellZ,6)*32)+16;
-  const cz=cellZ*64+Math.floor(posRand(cellX,cellZ,7)*32)+16;
+  // Keep maze markers exactly aligned with separated 1.8.3 game placement.
+  const cx=cellX*64+25+Math.floor(posRand(cellX,cellZ,6)*15);
+  const cz=cellZ*64+25+Math.floor(posRand(cellX,cellZ,7)*15);
   const baseY=4+Math.floor(clamp(posRand(cx,cz,556),0,.999999)*20);
-  const roomX=Math.floor(coordHash(cx,cz,99)*8),roomZ=Math.floor(coordHash(cx,cz,100)*8);
+  const layout=Math.floor(coordHash(cx,cz,9266)*3);
+  const branchZ=[20,10,30][layout];
+  const candidates=[];
+  for(let rz=1;rz<=7;rz++)for(let rx=1;rx<=7;rx++){
+    let safe=true;
+    for(let u=0;u<=5&&safe;u++)for(let v=0;v<=5;v++){
+      const mx=rx*5+u,mz=rz*5+v;
+      const central=(mx>=19&&mx<=21&&mz>=0&&mz<=38)||
+        (mx>=5&&mx<=35&&Math.abs(mz-branchZ)<=1);
+      if((mx>=15&&mx<=25&&mz>=15&&mz<=25)||
+         (mx>=16&&mx<=24&&mz>=13&&mz<=23)||central){safe=false;break;}
+    }
+    if(safe)candidates.push([rx,rz]);
+  }
+  if(!candidates.length)candidates.push([1,1]);
+  const [roomX,roomZ]=candidates[Math.floor(coordHash(cx,cz,99)*candidates.length)];
   const melloriteFloor=Math.floor(coordHash(cx,cz,101)*3);
   return {
     type:'Alt Maze',cx,cz,y:baseY,
     melloriteRelativeX:roomX*5-18,
     melloriteRelativeZ:roomZ*5-18,
-    melloriteFloor:melloriteFloor+1,
+    layout:layout+1,melloriteFloor:melloriteFloor+1,
     melloriteY:baseY+melloriteFloor*5+1
   };
 }
@@ -477,34 +614,87 @@ function altMazeAt(x,z){
 function getAltStructuresInBounds(minX,minZ,maxX,maxZ){
   const result=[];
   for(let x=Math.floor(minX/64)-1;x<=Math.floor(maxX/64)+1;x++)for(let z=Math.floor(minZ/64)-1;z<=Math.floor(maxZ/64)+1;z++){
-    const m=getAltMazeCenter(x,z);if(m&&m.cx>=minX-20&&m.cx<=maxX+20&&m.cz>=minZ-20&&m.cz<=maxZ+20)result.push(m);
+    const m=enabledStructures.has('Alt Maze')?getAltMazeCenter(x,z):null;if(m&&m.cx>=minX-20&&m.cx<=maxX+20&&m.cz>=minZ-20&&m.cz<=maxZ+20)result.push(m);
   }
   for(let cellX=Math.floor(minX/32)-1;cellX<=Math.floor(maxX/32)+1;cellX++)for(let cellZ=Math.floor(minZ/32)-1;cellZ<=Math.floor(maxZ/32)+1;cellZ++){
     if(posRand(cellX*25,cellZ*25)<=.70)continue;
     const cx=cellX*32+16,cz=cellZ*32+16;
     let near=false;for(const sx of [-5,0,5])for(const sz of [-5,0,5])if(altMazeAt(cx+sx,cz+sz))near=true;
-    if(!near&&cx>=minX-2&&cx<=maxX+2&&cz>=minZ-2&&cz<=maxZ+2)result.push({type:'Boss Shrine',cx,cz,y:7+Math.floor(clamp(posRand(cx,cz,555),0,.999999)*34)});
+    if(enabledStructures.has('Boss Shrine')&&!near&&cx>=minX-2&&cx<=maxX+2&&cz>=minZ-2&&cz<=maxZ+2)result.push({type:'Boss Shrine',cx,cz,y:7+Math.floor(clamp(posRand(cx,cz,555),0,.999999)*34)});
   }
   return result;
 }
 
 const canvas=document.getElementById('map'),ctx=canvas.getContext('2d');
 let centerX=0,centerZ=0,scale=1.8,drag=false,lastX=0,lastY=0,lastStructures=[];
-function resize(){const th=document.getElementById('toolbar').offsetHeight||58;canvas.style.top=th+'px';canvas.style.height=`calc(100% - ${th}px)`;canvas.width=innerWidth;canvas.height=Math.max(1,innerHeight-th);render()}
+function resize(){document.getElementById('mapFilters').style.top=(document.getElementById('toolbar').offsetHeight+5)+'px';const th=document.getElementById('toolbar').offsetHeight||58;canvas.style.top=th+'px';canvas.style.height=`calc(100% - ${th}px)`;canvas.width=innerWidth;canvas.height=Math.max(1,innerHeight-th);render()}
 addEventListener('resize',resize);
 function worldFromScreen(sx,sy){return {x:centerX+(sx-canvas.width/2)/scale,z:centerZ+(sy-canvas.height/2)/scale}}
 function screenFromWorld(x,z){return {x:(x-centerX)*scale+canvas.width/2,y:(z-centerZ)*scale+canvas.height/2}}
+// Paint a low-resolution biome raster as a single scaled image, instead of
+// drawing ~130,000 individual rectangles and running expensive terrain math on
+// every wheel event. Process samples within an ~8ms frame budget so inputs stay
+// responsive. Identical weather frames reuse the completed raster.
+let mapRenderGeneration=0,renderFrame=0,lastRasterKey='',pendingRasterKey='',mapRaster=null;
+const biomeHexColor=BIOME_COLORS.map(c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)]);
+const altHexColor=ALT_COLORS.map(c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)]);
+function mapPixelStep(){return scale<.35?20:scale<.7?14:scale<1.4?9:scale<3?6:4;}
 function render(){
   const dim=Number(document.getElementById('dimension').value);
-  const cellPx=4,worldStep=Math.max(1,cellPx/scale);
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  for(let sy=0;sy<canvas.height;sy+=cellPx)for(let sx=0;sx<canvas.width;sx+=cellPx){
-    const w=worldFromScreen(sx+cellPx/2,sy+cellPx/2);let color;
-    if(dim===0)color=BIOME_COLORS[getBiome(Math.floor(w.x),Math.floor(w.z))];
-    else if(dim===1)color=ALT_COLORS[getAltBiome(Math.floor(w.x),Math.floor(w.z))];
-    else color=Math.hypot(w.x,w.z)<=35?'#56176a':'#08030d';
-    ctx.fillStyle=color;ctx.fillRect(sx,sy,cellPx+1,cellPx+1);
+  if(mountainInfoCache.size>80000)mountainInfoCache.clear();
+  const key=[WORLD_SEED,dim,centerX,centerZ,scale,canvas.width,canvas.height,filterRevision].join('/');
+  if(key===lastRasterKey&&mapRaster){drawMapFinish(dim);return;}
+  if(key===pendingRasterKey)return;
+  pendingRasterKey=key;
+  const token=++mapRenderGeneration;
+  if(renderFrame)cancelAnimationFrame(renderFrame);
+  const step=mapPixelStep(),cols=Math.ceil(canvas.width/step),rows=Math.ceil(canvas.height/step);
+  const scratch=document.createElement('canvas');scratch.width=cols;scratch.height=rows;
+  const scratchCtx=scratch.getContext('2d',{alpha:false});
+  const pixels=scratchCtx.createImageData(cols,rows),buf=pixels.data;
+  // If zooming or panning, show the old raster transformed to the new viewport
+  // immediately, then replace it with the accurate result as chunks finish.
+  if(mapRaster&&mapRaster.dim===dim&&mapRaster.seed===WORLD_SEED&&mapRaster.revision===filterRevision){
+    const k=scale/mapRaster.scale;
+    const x=canvas.width/2+(mapRaster.centerX-centerX)*scale-mapRaster.width*k/2;
+    const y=canvas.height/2+(mapRaster.centerZ-centerZ)*scale-mapRaster.height*k/2;
+    ctx.fillStyle='#181c22';ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.imageSmoothingEnabled=false;
+    ctx.drawImage(mapRaster.canvas,x,y,mapRaster.width*k,mapRaster.height*k);
+  }else{ctx.fillStyle='#181c22';ctx.fillRect(0,0,canvas.width,canvas.height);}
+  document.getElementById('status').textContent=`Rendering ${cols*rows} samples…`;
+  let row=0;
+  function sampleFrame(){
+    if(token!==mapRenderGeneration)return;
+    const t0=performance.now();
+    while(row<rows){
+      for(let col=0;col<cols;col++){
+        const wx=Math.floor(centerX+((col+.5)*step-canvas.width/2)/scale),wz=Math.floor(centerZ+((row+.5)*step-canvas.height/2)/scale);
+        let rgb=[8,3,13];
+        if(dim===0){const biome=getBiome(wx,wz);rgb=enabledBiomes.has('0:'+biome)?biomeHexColor[biome]:[25,29,35];}
+        else if(dim===1){const biome=getAltBiome(wx,wz);rgb=enabledBiomes.has('1:'+biome)?altHexColor[biome]:[25,29,35];}
+        else{const inBoss=Math.hypot(wx,wz)<=35;rgb=enabledBiomes.has('2:'+(inBoss?0:1))?(inBoss?[86,23,106]:[8,3,13]):[25,29,35];}
+        const idx=(row*cols+col)*4;buf[idx]=rgb[0];buf[idx+1]=rgb[1];buf[idx+2]=rgb[2];buf[idx+3]=255;
+      }
+      row++;
+      if(performance.now()-t0>=8)break;
+    }
+    if(row<rows){renderFrame=requestAnimationFrame(sampleFrame);return;}
+    if(token!==mapRenderGeneration)return;
+    scratchCtx.putImageData(pixels,0,0);
+    const base=document.createElement('canvas');base.width=canvas.width;base.height=canvas.height;
+    const bctx=base.getContext('2d',{alpha:false});bctx.imageSmoothingEnabled=false;
+    bctx.drawImage(scratch,0,0,base.width,base.height);
+    mapRaster={canvas:base,dim,seed:WORLD_SEED,revision:filterRevision,centerX,centerZ,scale,width:base.width,height:base.height};
+    lastRasterKey=key;pendingRasterKey='';
+    drawMapFinish(dim);
   }
+  renderFrame=requestAnimationFrame(sampleFrame);
+}
+function drawMapFinish(dim){
+  if(!mapRaster)return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(mapRaster.canvas,0,0);
   if(dim===0&&document.getElementById('weather').checked){
     const weatherPx=18;
     for(let sy=0;sy<canvas.height;sy+=weatherPx)for(let sx=0;sx<canvas.width;sx+=weatherPx){
@@ -524,9 +714,9 @@ function render(){
   }
   lastStructures=[];
   if(document.getElementById('structures').checked){
-    lastStructures=dim===0?getSurfaceStructuresInBounds(bounds.minX,bounds.minZ,bounds.maxX,bounds.maxZ):dim===1?getAltStructuresInBounds(bounds.minX,bounds.minZ,bounds.maxX,bounds.maxZ):[{type:'Boss Arena',cx:0,cz:0,y:48}];
+    lastStructures=dim===0?getSurfaceStructuresInBounds(bounds.minX,bounds.minZ,bounds.maxX,bounds.maxZ):dim===1?getAltStructuresInBounds(bounds.minX,bounds.minZ,bounds.maxX,bounds.maxZ):(enabledStructures.has('Boss Arena')?[{type:'Boss Arena',cx:0,cz:0,y:48}]:[]);
     ctx.font='bold 12px Arial';ctx.textAlign='center';ctx.textBaseline='bottom';
-    const symbols={Mansion:'M',Outpost:'O',Cabin:'C','Alt Maze':'A','Boss Shrine':'S','Boss Arena':'B'};
+    const symbols={Mansion:'M',Outpost:'O',Cabin:'C',Dungeon:'D','Alt Maze':'A','Boss Shrine':'S','Boss Arena':'B'};
     for(const s of lastStructures){
       const p=screenFromWorld(s.cx,s.cz);if(p.x<-20||p.x>canvas.width+20||p.y<-20||p.y>canvas.height+20)continue;
       ctx.fillStyle='#ffdf4d';ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);ctx.fill();
@@ -535,8 +725,7 @@ function render(){
   }
   ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(canvas.width/2-8,canvas.height/2);ctx.lineTo(canvas.width/2+8,canvas.height/2);ctx.moveTo(canvas.width/2,canvas.height/2-8);ctx.lineTo(canvas.width/2,canvas.height/2+8);ctx.stroke();
   const centerWeather=weatherCellAt(centerX,centerZ);document.getElementById('weatherReadout').textContent=dim===0&&document.getElementById('weather').checked?`${weatherLabel(centerWeather)} • P ${centerWeather.pressure}/200 • Cloud ${Math.round(centerWeather.cloud*100)}% • Rain ${Math.round(centerWeather.rain*100)}% • Fog ${Math.round(centerWeather.fog*100)}%`:'';document.getElementById('status').textContent=`Seed ${WORLD_SEED} • Center ${Math.round(centerX)}, ${Math.round(centerZ)} • ${scale.toFixed(2)} px/block • Weather t=${weatherPhase.toFixed(1)}`;
-}
-canvas.addEventListener('mousedown',e=>{drag=true;lastX=e.clientX;lastY=e.clientY;canvas.classList.add('dragging')});
+}canvas.addEventListener('mousedown',e=>{drag=true;lastX=e.clientX;lastY=e.clientY;canvas.classList.add('dragging')});
 addEventListener('mouseup',()=>{drag=false;canvas.classList.remove('dragging')});
 addEventListener('mousemove',e=>{
   if(drag){centerX-=(e.clientX-lastX)/scale;centerZ-=(e.clientY-lastY)/scale;lastX=e.clientX;lastY=e.clientY;render()}
@@ -549,7 +738,7 @@ addEventListener('mousemove',e=>{
   if(near&&dist<30){
     lines.push(`Nearby: ${near.type} (${Math.round(dist)} blocks)`,`Structure Y: ${Math.round(near.y||0)}`);
     if(near.type==='Cabin')lines.push(`Cabin block: ${near.loot}`);
-    if(near.type==='Alt Maze')lines.push(`Maze base Y: ${near.y}`,`Mellorite room relative: X ${near.melloriteRelativeX}, Z ${near.melloriteRelativeZ}`,`Mellorite room floor: ${near.melloriteFloor}`,`Mellorite room Y: ${near.melloriteY}`);
+    if(near.type==='Alt Maze')lines.push(`Maze layout: ${near.layout}/3`, `Maze base Y: ${near.y}`,`Mellorite room relative: X ${near.melloriteRelativeX}, Z ${near.melloriteRelativeZ}`,`Mellorite room floor: ${near.melloriteFloor}`,`Mellorite room Y: ${near.melloriteY}`);
   }
   const tip=document.getElementById('tooltip');tip.innerHTML=lines.join('<br>');tip.style.display='block';tip.style.left=Math.min(innerWidth-280,e.clientX+14)+'px';tip.style.top=Math.min(innerHeight-110,e.clientY+14)+'px';
 });
@@ -557,7 +746,7 @@ canvas.addEventListener('mouseleave',()=>document.getElementById('tooltip').styl
 canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect(),before=worldFromScreen(e.clientX-r.left,e.clientY-r.top);scale=clamp(scale*(e.deltaY<0?1.22:.82),.15,12);const after=worldFromScreen(e.clientX-r.left,e.clientY-r.top);centerX+=before.x-after.x;centerZ+=before.z-after.z;render()},{passive:false});
 document.getElementById('apply').onclick=()=>{setSeed(document.getElementById('seed').value);centerX=0;centerZ=0;render()};
 document.getElementById('home').onclick=()=>{centerX=0;centerZ=0;render()};
-document.getElementById('dimension').onchange=()=>{buildLegend();render()};document.getElementById('structures').onchange=render;document.getElementById('grid').onchange=render;document.getElementById('weather').onchange=render;
+document.getElementById('dimension').onchange=()=>{buildLegend();buildFilters();render()};document.getElementById('structures').onchange=render;document.getElementById('grid').onchange=render;document.getElementById('weather').onchange=render;
 document.getElementById('weatherPlay').onclick=()=>{weatherPlaying=!weatherPlaying;const b=document.getElementById('weatherPlay');b.textContent=weatherPlaying?'⏸ Pause Weather':'▶ Play Weather';b.classList.toggle('active',weatherPlaying);weatherAnimationLast=performance.now()};
 document.getElementById('weatherReset').onclick=()=>{weatherPhase=0;weatherCloudFade.clear();weatherAnimationLast=performance.now();render()};
 document.getElementById('weatherSpeed').onchange=()=>{weatherAnimationLast=performance.now()};
@@ -566,11 +755,41 @@ function weatherAnimationFrame(now){if(weatherPlaying){const dt=Math.min(.1,Math
 requestAnimationFrame(weatherAnimationFrame);
 function buildLegend(){
  const dim=Number(document.getElementById('dimension').value),el=document.getElementById('legend');
- const active=[BIOMES.PLAINS,BIOMES.DESERT_BARREN,BIOMES.DESERT_CACTUS,BIOMES.FOREST,BIOMES.FLOWER_FOREST,BIOMES.MOUNTAINS_LOW,BIOMES.MOUNTAINS_MID,BIOMES.MOUNTAINS_HIGH,BIOMES.TAIGA,BIOMES.STONY_PEAKS,BIOMES.BADLANDS,BIOMES.JUNGLE,BIOMES.SAVANNA];
+ const active=BIOME_NAMES.map((_,i)=>i);
  const rows=dim===0?active.map(i=>[BIOME_NAMES[i],BIOME_COLORS[i]]):dim===1?ALT_NAMES.map((n,i)=>[n,ALT_COLORS[i]]):[['Boss island','#56176a'],['Void','#08030d']];
- el.innerHTML='<strong>Legend</strong>'+rows.map(r=>`<div class="legend-row"><span class="swatch" style="background:${r[1]}"></span>${r[0]}</div>`).join('')+'<hr><div>M Mansion • O Outpost • C Cabin<br>A Alt Maze • S Boss Shrine</div>'+(dim===0?'<hr><div><strong>Weather</strong><br><span style="color:#78a8ff">Low pressure</span> → <span style="color:#ff9a66">high pressure</span><br>Clouds fade in below pressure 100<br><span style="color:#8fc8ff">Blue</span> = rain/fog intensity<br>Overcast 50–100 • Light rain 30–50 • Moderate 15–30 • Heavy &lt;15</div>':'');
+ el.innerHTML='<strong>Legend</strong>'+rows.map(r=>`<div class="legend-row"><span class="swatch" style="background:${r[1]}"></span>${r[0]}</div>`).join('')+'<hr><div>M Mansion • O Outpost • C Cabin • D Dungeon<br>A Alt Maze • S Boss Shrine</div>'+(dim===0?'<hr><div><strong>Weather</strong><br><span style="color:#78a8ff">Low pressure</span> → <span style="color:#ff9a66">high pressure</span><br>Clouds fade in below pressure 100<br><span style="color:#8fc8ff">Blue</span> = rain/fog intensity<br>Overcast 50–100 • Light rain 30–50 • Moderate 15–30 • Heavy &lt;15</div>':'');
 }
-setSeed('12345');buildLegend();resize();
+function buildFilters(){
+ const dim=Number(document.getElementById('dimension').value);
+ const biomeItems=dim===0?BIOME_NAMES:dim===1?ALT_NAMES:['Boss island','Void'];
+ const bBox=document.getElementById('biomeFilters');bBox.replaceChildren();
+ biomeItems.forEach((name,index)=>{
+   const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=enabledBiomes.has(dim+':'+index);
+   input.onchange=()=>{const key=dim+':'+index;input.checked?enabledBiomes.add(key):enabledBiomes.delete(key);filterRevision++;render()};
+   label.append(input,document.createTextNode(name));bBox.append(label);
+ });
+ const structures=dim===0?['Mansion','Outpost','Cabin','Dungeon']:dim===1?['Alt Maze','Boss Shrine']:['Boss Arena'];
+ const sBox=document.getElementById('structureFilters');sBox.replaceChildren();
+ structures.forEach(name=>{const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=enabledStructures.has(name);
+ input.onchange=()=>{input.checked?enabledStructures.add(name):enabledStructures.delete(name);render()};
+ label.append(input,document.createTextNode(name));sBox.append(label);
+ });
+}
+function setAllFilters(kind,enabled){
+ const dim=Number(document.getElementById('dimension').value);
+ if(kind==='biomes'){
+   const n=dim===0?BIOME_NAMES.length:dim===1?ALT_NAMES.length:2;
+   for(let i=0;i<n;i++){const key=dim+':'+i;enabled?enabledBiomes.add(key):enabledBiomes.delete(key);}
+ }else{
+   const names=dim===0?['Mansion','Outpost','Cabin','Dungeon']:dim===1?['Alt Maze','Boss Shrine']:['Boss Arena'];
+   for(const n of names)enabled?enabledStructures.add(n):enabledStructures.delete(n);
+ }
+ if(kind==='biomes')filterRevision++;buildFilters();render();
+}
+for(const [id,kind,show] of [['allBiomesBtn','biomes',true],['noBiomesBtn','biomes',false],['allStructuresBtn','structures',true],['noStructuresBtn','structures',false]])
+ document.getElementById(id).addEventListener('click',()=>setAllFilters(kind,show));
+document.getElementById('mapFilters').addEventListener('toggle',()=>{document.getElementById('mapFilters').style.top=(document.getElementById('toolbar').offsetHeight+5)+'px'});
+setSeed('12345');buildLegend();buildFilters();resize();
 </script>
 </body>
 </html>

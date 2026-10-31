@@ -1,3 +1,558 @@
+MellorCraft 1.8.3 — Classic Mountains, Snowy Plains & Spruce Treeline
+========================================================================
+
+CURRENT BUILD — supersedes the older mountain-height/performance changes in
+historical release notes below. The game version remains 1.8.3.
+
+TERRAIN ROLLBACK / WORLD HEIGHT
+- Restored the mountain-region generator and mountain-height formula from the
+  pre-"Mobs & Mountains" 1.8.3 Forest/Structures/Portals release. This restores
+  its original peak count, ridges, altitude caps, mountain distribution, and
+  mountain details rather than merely reducing the new generator's frequency.
+- The Overworld again uses 248 internal voxel layers, corresponding to 200
+  nonnegative displayed Y levels (0 through 199) plus 48 underground layers
+  (Y=-48 through -1). The Timeless Void's 50-layer height is unchanged.
+- The newer 256-layer allocation, extra mountain octaves, and Stony Peaks
+  ridge-height computations are removed. Custom terrain returns to the old
+  Y=190 generated-terrain cap; user-placed blocks may reach displayed Y=199.
+
+SNOWY PLAINS
+- Replaced biome ID 8 (formerly Stony Peaks) with Snowy Plains in the normal,
+  custom, flat, and seed-map biome lists. No Stony Peaks terrain remains.
+- Eligible climate provinces that would have become Taiga receive a fixed,
+  seed-based 50/50 decision: Taiga or Snowy Plains. The decision is made per
+  province (not per block or chunk), preserving sensible biome shapes.
+- Snowy Plains have snow-covered surfaces, ordinary cold rolling elevations,
+  no natural trees, and rabbits rather than mountain goats as passive wildlife.
+- Legacy customized-world Stony Peaks settings are mapped to Snowy Plains
+  settings, including the old flat-world biome selection.
+
+LOW MOUNTAIN TREELINE
+- Low Mountain biomes occasionally produce spruce trees on their lower slopes.
+  Planting chance decreases gradually from 3.5% at Y<=103 to zero at Y>=122;
+  Mid/High Mountains and Snowy Plains remain treeless. The tree shapes use the
+  existing Taiga spruce trunk/leaves and randomized planting windows.
+- Skips the biome-canopy footprint check when a planting position is not
+  otherwise eligible, reducing unnecessary work in most chunks.
+
+RETAINED FEATURES
+- Independent docile/hostile mob caps and all recent multiplayer, portal,
+  mansion, Alt Maze, stair, cabin, seed-map, and relay fixes remain intact.
+- Save format 12, dedicated-server protocol 16, and relay protocol 1 remain.
+  The client, map, and server all use the restored heights.
+
+IMPORTANT WORLD BACKUPS
+- Back up all saves before opening them in this rollback. Worlds built in the
+  256-layer edition may have player positions, custom blocks, or structures at
+  displayed Y>=200 that no longer fit inside the active world. Such edits may
+  remain in save data but cannot be reached in the reduced-height world.
+- World-generation differences affect previously unedited/generated terrain;
+  visiting old and new chunks can expose terrain seams. For the most accurate
+  assessment of the restored performance and biomes, create a new test world.
+
+TESTS
+- Syntax checks for JS/Python, previous structure/relay/portal/mob-cap tests,
+  and game/seed-map biome/height agreement across 3 seeds. Snowy Plains made up
+  51% of sampled Taiga+Snowy Plains provinces in the deterministic sample.
+- The original mountain functions match the last pre-lag release.
+- Interactive WebGL/FPS profiling was not performed; perceived frame-rate
+  improvement is not guaranteed by the source rollback alone.
+
+============================================================================
+HISTORICAL CHANGELOG (some later superseded features described below)
+============================================================================
+
+MellorCraft 1.8.3 — Terrain Performance, Stair and Cabin Hotfix
+================================================================
+
+Changes relative to the preceding 1.8.3 Mobs/Mountains build
+--------------------------------------------------------------
+
+PERFORMANCE
+- The new mountain-range terrain routines were evaluating expensive octave
+  noise for peaks and ridges far outside their influence. They now use
+  precomputed range bounds and cheap distance checks to skip irrelevant
+  noise calls; peak trigonometry is precomputed and intermediate allocations
+  are reduced. The same optimized functions are used by chunk workers and
+  the seed map. Memory retained for the per-column mountain cache is bounded
+  more tightly (90,000 versus 220,000 positions).
+- In a Node.js 22 benchmark generating biome and height data for 9,216
+  terrain columns near a fixed seed, the previous version took about
+  0.86–0.95 s, and this update took about 0.38 s (~2.2–2.5x faster).
+  This is an algorithm benchmark, not an FPS measurement. Interactive
+  WebGL testing with different render distances/hardware is still needed.
+
+WORLD GENERATION
+- Mountain-range activation probability is reduced from 38% to 26% per
+  candidate planning cell. Mountain chains, unclipped summits and Stony
+  Peaks height generation remain supported; the game and seed map agree.
+- Forest weighting is slightly higher, without increasing the approved
+  88-block climate-province size. The extra promotion of eligible temperate
+  plains changes from 11.5% to 17%. Tree placement in Forest biome goes
+  from 8% to 9.2%, and Flower Forest from 5.5% to 6.2%.
+
+STAIR MOVEMENT
+- Auto-step detection now tests the whole player's collision footprint,
+  including stair blocks in an adjacent cell. This makes the raised halves
+  of all four directional stair blocks eligible for stepping when approached
+  along a correctly aligned continuous stair flight.
+- Automatic climbing for stairs is limited to one block above feet, rather
+  than allowing accidental 1.5-block climbs beside stairs.
+
+SNOW CABINS
+- Closed the triangular gaps underneath both gable ends of cabin roofs
+  with matching wood planks. Natural cabin generation and /place cabin
+  both receive the fix; the one doorway and glass windows remain.
+
+COMPATIBILITY / TESTING
+- Version remains 1.8.3. No change to save format 12, dedicated protocol 16
+  or relay protocol 1. Alt Maze floor plans and the 256-layer world are retained.
+- Tests include generation, biome/seed-map parity, structure layouts,
+  companion dimension portals, multiplayer saves, dedicated-server mob caps,
+  targeted four-direction stair and cabin-gable checks, and syntax checks.
+- Back up existing worlds. Regenerated terrain can reflect changed mountain
+  and forest distribution; saved block edits remain unchanged.
+- Full interactive desktop/mobile performance testing was not performed.
+
+===========================================================================
+
+MellorCraft 1.8.3 — Separate mob caps, mountain ranges & taller world
+======================================================================
+
+Changes relative to the preceding 1.8.3 Forest/Structures/Portals release
+---------------------------------------------------------------------------
+
+MOB SPAWNING
+- Replaced the single shared mob population limit with two independent,
+  per-dimension caps: docileCap (18 by default) and hostileCap (12 by default).
+  Animals cannot consume the slots reserved for enemies, including at night
+  when players remain stationary. Bosses are exempt from these ordinary caps.
+- Create/Edit World now has separate Docile Mob Cap and Hostile Mob Cap fields.
+  Operators can change them with /gamerule docileCap <0-200> and
+  /gamerule hostileCap <0-200>, including from the dedicated server console.
+  The old /mobcap shortcut now explains the replacement commands.
+- Authoritative dedicated servers and browser-hosted relay worlds enforce
+  the appropriate cap for each mob category; night and cave spawn attempts
+  no longer test the combined population. Peaceful still disallows enemies.
+- For worlds saved with the old mobCap rule, the previous limit is migrated
+  to 60% docile and 40% hostile (30 -> 18/12). Mob count defaults preserve
+  a similar total while ensuring independent capacity.
+
+MOUNTAINS / TERRAIN HEIGHT
+- Normal-world mountains now favor connected chains of 3-5 distinct summits
+  instead of isolated peaks, joined by irregular ridges, without changing
+  the approved 88-block climate-province scale or 420-block range grid.
+- Increased the Overworld voxel allocation from 248 to 256 layers. The
+  displayed-Y origin stays +48 internal layers, retaining Y=-48 bedrock
+  and providing internal layers through Y=255 (displayed Y=207). The
+  generator safely limits natural terrain to displayed Y=205 so the sky
+  remains above the tallest mountain. Existing saved block coordinates
+  are unchanged; old 248-stride legacy chunk-edits are still understood.
+- Removed forced flat ceilings at 130, 160, and 190 on mountain biomes.
+  Individual summits may rise past displayed Y=190 with irregular crests.
+- Stony Peaks have their own jagged 100-145 elevation profile with smooth
+  transitions at cold-dry province boundaries, no longer flat at low Y.
+  The updated seed map matches the client height algorithm.
+
+TESTING & COMPATIBILITY
+- JavaScript/Python syntax, existing biome/maze/mansion/seed-map/relay/
+  structure-command/portal tests, independent cap enforcement, terrain
+  summits, and client/seed-map equality regression checks are included.
+- Release remains version 1.8.3, save format 12, dedicated protocol 16,
+  relay protocol 1. No changes to approved Alt Maze layouts.
+- Backup existing worlds before upgrading: regenerated unmodified terrain
+  may change near mountain ranges and Stony Peaks, but saved block edits
+  retain their coordinates. Taller chunks add modest memory cost.
+- Interactive WebGL gameplay/multiplayer load testing was not performed.
+
+============================================================================
+
+MellorCraft 1.8.3 — Forest frequency, every structure command, linked portals
+============================================================================
+
+Changes relative to MellorCraft 1.8.3 Stair/Biome/Mansion Fix
+---------------------------------------------------------------
+
+FORESTS
+- Forest and Flower Forest provinces now occur approximately twice as often in
+  the default Normal world generator. Across five sampled seeds, forest province
+  frequency was about 2.0x the preceding build. Seed map and game use identical
+  province selection. The province grid size remains 88 blocks; forests are NOT
+  made larger by scaling up the biome map.
+- Customized world biome weights are not overridden. The mansion spawning chance
+  is unchanged; more qualifying forest terrain should yield more mansions.
+
+STRUCTURE COMMANDS
+- /locate <structure> finds the nearest procedurally generated structure using
+  the same deterministic seed, biome restrictions, and structure-priority rules
+  as terrain generation. It reports X/Y/Z, dimension, and horizontal distance.
+- /place <structure> builds that structure at/near the player's position using
+  the corresponding procedural materials and room layouts. Use these names:
+    mansion, outpost, cabin, dungeon, alt_maze, boss_shrine, boss_arena
+  Aliases such as "maze", "shrine", and "arena" are also accepted.
+- Normal/Overworld only: mansion, outpost, cabin, dungeon.
+  Timeless Void only: alt_maze, boss_shrine. Boss Dimension only: boss_arena.
+  /locate can search for a structure in any of the three dimensions.
+- Both commands remain operator commands, like the original /place.
+  They are entered in the game's chat command interface, not in the separate
+  Python dedicated-server console.
+- Large manual placements send shared block edits in bounded batches of 256
+  instead of transmitting tens of thousands of separate WebSocket messages.
+
+PAIRED PORTAL REMOVAL
+- When an Overworld portal is used to create/activate a counterpart in the
+  Timeless Void, its two actual positions are registered as a portal pair.
+  This accounts for a different Alt-Dimension Y (normally 30) and any displaced
+  X/Z required to create a safe landing.
+- Mining either member removes the registered counterpart without awarding
+  another portal item. Removal is enforced in local/browser-hosted worlds and
+  by the dedicated Python server (including block-batch updates).
+- Portal associations are saved in browser-world and dedicated-server saves,
+  without changing format version 12 or dedicated/relay protocol versions.
+- Existing portal blocks from older worlds do not automatically acquire an
+  association based solely on matching coordinates. Use/traverse the portal
+  once in this build to register its pair. Independently placed, unlinked
+  portal blocks are never removed just because X/Z happens to match.
+
+VALIDATION
+- The prior 1.8.3 biome, maze, mansion, seed-map, torch-lighting, multiplayer,
+  and relay regression suites pass.
+- Added /place and /locate tests for all seven structure types, plus checks for
+  bounded multiplayer structure batches.
+- Added dedicated-server portal tests for persistence, mining from either
+  dimension, and preserving unrelated blocks with matching coordinates.
+- Interactive desktop/mobile WebGL gameplay has not been fully playtested here.
+
+WORLD COMPATIBILITY
+- Version stays 1.8.3; save format remains 12, dedicated protocol 16, and
+  relay protocol 1. Back up worlds before upgrading. Only procedurally
+  regenerated (unmodified) terrain receives the new forest distribution.
+
+
+============================================================================
+
+MellorCraft v1.8.3 — Stair, Biome, Mansion & Spectator Corrections
+====================================================================
+
+THIS PACKAGE REMAINS VERSION 1.8.3
+
+- Alt Maze stairwell: The second-floor atrium now has a continuous solid
+  floor, except for intentional openings around the lower stair flight.
+  Both wooden stair flights rise from the floor surface and end at exactly
+  the same height as their next-floor landings; support blocks and clear
+  headroom are maintained. Player movement detects rising stair blocks at
+  feet level or one voxel higher and can step up without pressing Jump.
+- Smaller biomes: The jittered climate-province grid is 88 blocks (was 175)
+  and climate noise now varies at a higher, equally scaled X/Z frequency.
+  Mountain regions shrink from a 680-block to a 420-block planning grid,
+  with correspondingly shorter chains and smaller individual peaks.
+  Both the game and seed map use the same generation equations. Related
+  biome climates remain grouped; taiga remains present and desert strips
+  are avoided in sampled seeds.
+- Spectator privacy: Players in spectator gamemode do not appear in
+  in-world nametags or the multiplayer locator bar.
+- Two-story mansions: The mansion retains its original 12-block height
+  (local Y=0 through 11). A complete floor at local Y=6 separates the two
+  accessible stories. A supported wooden stair flight reaches the upper
+  landing. Each floor contains EXACTLY 15 ore display blocks, chosen from
+  room interiors independently of the stairwell, atrium, or corridors.
+  Each story has independently randomized side corridors; only the
+  central hallway follows one of the three established patterns.
+- All previous 1.8.3 changes are included: hidden 9-Mellorite maze room,
+  faster seed map and filters, secure relay guest saves, dimmer torches,
+  WebSocket scheme selectors, and the earlier multiplayer fixes.
+
+TESTING
+
+    node tests/test_183_structures.js
+    node tests/test_stairs_mansions_spectator.js
+    node tests/test_alt_maze_chunks.js
+    node tests/test_biomes_hotfix.js
+    node tests/test_183.js
+    node tests/test_seed_map_runtime.js
+    node tests/test_torch_floor_lighting.js
+    python tests/test_183_backend.py
+
+Automated checks cover 225 seeded mansion/maze layouts, both sets of stairs,
+15 ores on each of two mansion floors, 9 intact special-room ores, and
+spectator nametag/locator suppression. A full browser/WebGL playtest was
+not performed; manually verify feel of stair movement on desktop and mobile.
+
+Compatibility: Still save format 12, dedicated protocol 16 and relay protocol
+1. Changed biomes, mountain sizes, and structure generation affect newly
+regenerated terrain. Existing saved block edits may preserve older portions.
+Back up existing worlds before upgrading.
+
+-------------------------------------------------------------------------------
+
+MellorCraft 1.8.3 — Alt Maze & Torch Lighting Update
+===================================================
+
+LATEST FIXES (VERSION REMAINS 1.8.3)
+
+- Fixed overlapping Alt Mazes. Their centers now have enough separation that
+  the 41x41 structures and front approach cannot overwrite another maze's
+  hidden Mellorite chamber. This changes maze positions in newly generated
+  Alt Dimension terrain for the same seed.
+- The three possible layouts apply ONLY to the main, centered hallway spine
+  and branch. Outside that core, mansion hallways are randomly routed per
+  building; Alt Maze side corridors are independently randomized per floor.
+  Seeded spanning routes ensure all ordinary rooms remain connected.
+- The secret nine-Mellorite-ore room can now spawn in many different outer
+  rooms and on any of the three floors, rather than only four corners. Its
+  choice is made before random corridors are carved, and chamber blocks take
+  priority over hallways and decorations during generation. The chamber
+  remains sealed (no connecting doorway), as previously requested; mine
+  through its walls to enter. It contains all nine intact ore blocks and no
+  torches/crafting tables/chests.
+- Corrected torch light selection in multi-level buildings. The old selection
+  only considered horizontal coordinates and could spend all four shader
+  lights on a different floor. Lighting now favors torches near the player's
+  elevation and location, regardless of the material underneath the torch.
+  The four-point-light WebGL budget is retained for performance.
+- Updated the seed map's Alt Maze markers and Mellorite chamber tooltips to
+  match the revised world generation and room placement.
+- Version stays 1.8.3. Save format 12 and both multiplayer protocols remain
+  unchanged. Existing saved terrain edits may preserve older structures;
+  back up the world and test freshly generated terrain for the new layout.
+
+TESTS
+
+    node tests/test_183_structures.js
+    node tests/test_alt_maze_chunks.js
+    node tests/test_torch_floor_lighting.js
+    node tests/test_seed_map_runtime.js
+    node tests/test_183.js
+    node tests/test_biomes_hotfix.js
+    python tests/test_183_backend.py
+    python -m py_compile mellorcraft_relay.py mellorcraft_server.py
+
+225 structure layouts and randomized routing connectivity were checked;
+seven actual generated Alt Mazes retained nine special-room ores each, and
+62 seed-map markers matched game-side maze/chamber positions. WebGL rendering
+has not been manually playtested, so lighting quality should be checked
+in-game on both desktop and mobile.
+
+-------------------------------------------------------------------------------
+
+MellorCraft 1.8.3 — Biome and Structure Corrections
+====================================================
+
+LATEST FIXES (VERSION REMAINS 1.8.3)
+
+- Reduced the normal-world climate province size from 380 to 175 blocks and
+  adjusted the climate frequencies/edge warp together. This keeps broad,
+  irregular biome shapes and climate-related neighbors without the oversized
+  patches from the previous 1.8.3 build. The seed map uses identical equations.
+- Added the missing name for the Chest block (ID 23). Decorative chests in
+  mansions and Alt Mazes no longer display as "Unknown" when targeted/collected.
+- Mansions and Alt Mazes now each have exactly three deterministic central
+  hallway configurations. Main doors and atriums stay centered; side passages
+  are selected per structure seed, preserving room and ore display positions.
+- Rebuilt the Alt Maze's hidden 9-Mellorite-ore room as an actual sealed 3x3
+  ore chamber on one of three floors. It is chosen outside hallways, atrium,
+  stairwells, and landings; its walls have no doorway and the room has no
+  torches, crafting tables, or chests to replace the nine ores.
+- Replaced the two solid-brick Alt Maze stair flights with directional oak
+  stair blocks and continuous supporting masonry. Each ascends toward a solid
+  upper-level landing; headroom remains clear.
+- Centered the maze's entrance corridor at X 19–21 and removed decorations
+  that obstructed the atrium's centerline.
+- Added a level, cleared entrance apron beyond the front doorway of both
+  buildings. During terrain generation this overrides dirt/stone/Timeless Void
+  cave material immediately outside the front door; the forced mansion
+  placement command uses the same doorway geometry.
+- No version, saved-world format, dedicated multiplayer protocol, or relay
+  protocol increase. Prior 1.8.3 lighting, network, and seed-map speed/features
+  are retained. Changes affect newly generated/unmodified structure areas;
+  back up saved worlds before upgrading.
+
+VALIDATION
+
+    node tests/test_183_structures.js
+    node tests/test_seed_map_runtime.js
+    node tests/test_183.js
+    node tests/test_biomes_hotfix.js
+    python tests/test_183_backend.py
+    python -m py_compile mellorcraft_server.py mellorcraft_relay.py
+
+Geometry tests cover 25 structure coordinate seeds (all three variants),
+closed ore-room walls, nine intact ore blocks, named/valid decoration blocks,
+stair supports/landings, and carved exterior entrances. Biome climate checks
+run for five world seeds. Interactive gameplay and visual browser testing have
+not been completed. Existing saved edits may preserve portions of older
+structures, so a new seed/unmodified area is best for verifying layouts.
+
+-------------------------------------------------------------------------------
+
+MellorCraft v1.8.3 — Lighting, Fast Seed Map, Atriums & Stairwells
+====================================================================
+
+CHANGES FROM THE v1.8.3 BIOME HOTFIX
+
+- Torches are substantially dimmer, with smaller radii and lower light power
+  in both normal and lightweight-shader rendering. Shader settings now start
+  with 85% torch brightness and 80% range, and old saved brightness values are
+  capped at the new limits. Existing placed torches need not be replaced.
+- The Timeless Void has increased ambient visibility (0.20 to 0.34), somewhat
+  brighter biome-colored fog/sky, and lighter long-distance fog (0.04 to 0.024
+  with shaders enabled). It remains intentionally gloomy.
+- Seed map zoom and pan now use adaptive-resolution, batched terrain sampling;
+  painted map pixels are drawn through an image raster rather than one canvas
+  rectangle per 4 pixels. The interface stays responsive as the map is drawn,
+  and playing the weather animation reuses the base terrain raster.
+- Open "Filter biomes & structures" on the seed map to turn *each* Overworld
+  and Alt biome or each structure marker on/off, plus Show All/Hide All controls.
+  Dungeons are now an optional surface-map marker (off by default because
+  their underground locations can be expensive to calculate). Hidden biomes
+  appear charcoal. Distant zoom levels intentionally use coarser map samples.
+- In multiplayer's relay join pane, ws:// vs wss:// is labeled more clearly;
+  pasting a full address automatically selects the matching scheme. The
+  dropdown was present in v1.8.3; it is now more discoverable.
+- Procedural mansions now have a *single* 3-block-wide front doorway leading
+  through a foyer to a larger central atrium. A deterministic branching network
+  of room doors and extra loops ensures all reachable ore rooms connect to
+  the atrium. Mansions now have skylights, pillars, warm lamps, chests, tables,
+  and ore displays. /place mansion uses the same geometry as world generation.
+- Procedural Alt Mazes now have one front doorway, a central atrium, varied
+  connected room routes, galleries at upper levels and exactly two supported,
+  straight stair flights in fixed atrium locations (ground->second and
+  second->third). Random floating stair rooms are gone. Loot is kept outside
+  the atrium and the seed-map hint matches the relocated special ore room.
+- Chunk workers generate the same mansion and Alt Maze layout functions as
+  the main thread, so edges and rooms stay consistent across chunk borders.
+- Existing v1.8.3 world format (12), dedicated multiplayer protocol (16), and
+  relay protocol (1) remain unchanged. Saves should be backed up before any
+  upgrade; regenerated unedited areas containing structures will use the new
+  layouts, while saved player block edits remain authoritative.
+
+TESTS
+
+    node tests/test_183_structures.js
+    node tests/test_seed_map_runtime.js
+    node tests/test_183.js
+    node tests/test_biomes_hotfix.js
+    python tests/test_183_backend.py
+    python -m py_compile mellorcraft_server.py mellorcraft_relay.py
+
+Automated syntax, geometry, connectivity, map-runtime (mock canvas), and prior
+multiplayer regression tests pass. Real interactive browser/WebGL and mobile
+playtesting were not possible in this environment. The exact wall-clock
+speedup in your browser is not yet measured; coarser zoom levels involve far
+fewer biome samples, and each frame has a time budget.
+
+-------------------------------------------------------------------------------
+
+MellorCraft v1.8.3 — Biome/ESP Hotfix
+=======================================
+
+- Replaced narrow continuous-temperature/moisture biome bands in NORMAL worlds
+  with jittered, irregular 380-block climate provinces. A province's entire
+  biome is chosen using temperature and moisture sampled at its center. This
+  produces substantial patches of desert rather than many long narrow strips.
+- Related climate conditions drive neighboring province assignments: deserts
+  favor nearby savanna/badlands, with cool forest/plains transitions before
+  taiga. Taiga remains limited to cold, sufficiently moist provinces.
+- The seed map uses the exact same province selection as the game and terrain
+  generation workers. Custom and flat world generation remain unchanged.
+- Climate sampling and compatibility rules were checked on five large seeded
+  regions: no tested desert regions had extreme long/thin shapes or directly
+  touched jungle, forest, taiga, or stony peaks. This is a sampled regression,
+  not a guarantee for every possible seed and world location.
+- Removed ESP entirely: the /esp command, help entry, toggle variable, and
+  through-distance rendering override no longer exist in the shipped client.
+  As with any browser game, a modified client cannot be fully prevented from
+  implementing its own visualization cheats.
+- Existing normal worlds retain the same seed and saved block edits, but
+  unedited regenerated terrain may show new biome/vegetation boundaries. Back
+  up worlds before upgrading; for seamless new terrain, start a new world.
+- Save format 12 and both multiplayer protocols stay unchanged. No Python
+  backend changes were needed for these client-side fixes.
+
+New regression suite: `node tests/test_biomes_hotfix.js`, plus the existing
+`node tests/test_183.js` and `python tests/test_183_backend.py`.
+
+MellorCraft v1.8.3 — Biome, Save, Mob Spawning, Death and WebSocket Fixes
+===============================================================================
+
+Changes from v1.8.2
+-------------------
+
+- Flowers and saplings no longer brown grass merely by occupying the block above
+  it; solid blocks continue to block grass and exposed dirt can still spread.
+- Normal-world biome climate sampling now includes two-dimensional coordinate
+  warping and a second local moisture layer, reducing artificial stripe-shaped
+  deserts/badlands/savannas. Taiga has a stricter cold/moisture requirement,
+  making it less prevalent. The bundled seed map uses matching biome rules.
+- Browser-hosted relay worlds save each guest's inventory, position, equipment,
+  health, hunger, and respawn settings. Guest saves are keyed by a secret 256-bit
+  browser-held token, rather than claimable by entering someone else's username.
+  Guest profiles are written on disconnect and on normal host autosaves.
+- The initial 1.8.3 release allowed /help, /rd and /esp for non-operators;
+  /esp is removed in the subsequent biome hotfix. World-affecting/admin commands
+  remain permission-gated.
+- Nighttime mob spawning now periodically checks for too few hostile mobs near
+  stationary players. If the mob cap is filled with passive mobs, only a distant
+  passive mob may be replaced to reserve a hostile spawn slot. Peaceful mode,
+  the mob-spawning game rule and mob cap remain respected.
+- Death is saved immediately for browser-hosted worlds and sent immediately to
+  multiplayer hosts. Reconnecting restores zero health and a death screen;
+  player_update messages cannot turn dead players alive. Only the normal
+  respawn action restores health (unless the world uses Hardcore).
+- Dedicated server and relay join/host screens now each offer ws:// or wss://.
+  The scheme selection is saved. Explicit ws:// or wss:// typed into an address
+  continues to take precedence. HTTPS pages default to wss://.
+
+Compatibility and important usage notes
+---------------------------------------
+
+- Save format remains 12, the dedicated multiplayer protocol remains 16, and
+  relay protocol remains 1. Use the 1.8.3 client with the 1.8.3 relay because
+  relay guests must provide a valid persistent identity token.
+- Back up world saves before upgrading. Changed biome rules affect newly
+  generated/regenerated terrain in existing seeds; previously saved block edits
+  are retained. You might see biome changes at old/new generation boundaries.
+- Each relay guest's identity token is stored in localStorage in the browser,
+  scoped to the relay address, world name/seed, and username. Returning guests
+  should use the same browser profile, relay address, world, and username.
+  Clearing browser storage or changing device may lose access to the old guest
+  character. This is a bearer identity, not a password-protected account, so
+  protect browser storage and prefer encrypted wss:// for remote servers.
+- Existing anonymous v1.8.2 relay guest profiles were not saved and cannot
+  be recovered retroactively. Any older unverified username-only profiles are
+  deliberately not attached to newly authenticated relay guests.
+- wss:// requires a TLS-enabled WebSocket endpoint, often via a reverse proxy;
+  simply switching the selector does not enable TLS in the Python scripts.
+  On HTTPS pages, browsers generally block unencrypted ws:// mixed content.
+- Hardcore death restrictions do not convert a password-free relay into a
+  durable account service; players with a different new identity are treated
+  as new players. Dedicated server logins remain password-authenticated.
+
+Tests
+-----
+
+- `node tests/test_183.js` covers soil ticks, game/seed-map biome parity,
+  websocket schemes, unprivileged /rd, saved guest identities, death snapshots,
+  and stationary-player nighttime hostile replenishment.
+- `python tests/test_183_backend.py` covers relay handshake/token forwarding,
+  guest messaging, dedicated death preservation, and legitimate respawn.
+- The inline HTML JavaScript passes Node syntax checks and both Python
+  backends pass Python syntax checks. An interactive browser/WebGL smoke test
+  could not be completed in the restricted test-browser environment, so
+  gameplay on desktop and mobile should still receive a hands-on playtest.
+
+To run
+------
+
+- Dedicated server: `python mellorcraft_server.py` (serves HTTP 8000 and WebSocket 8765).
+- Relay: `python mellorcraft_relay.py --port 8000`.
+- Standalone game: open `mellorcraft.html` directly, or serve the folder and open
+  `index.html` to play or download the client.
+
+===============================================================================
+
+Previous release history follows.
+
 MellorCraft v1.8.2 — Grass Growth, Universal Pause Settings, Relay Identities + Host Console
 =======================================================================================
 

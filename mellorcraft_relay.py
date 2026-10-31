@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MellorCraft v1.8.2 password-free browser-world relay.
+"""MellorCraft v1.8.3 password-free browser-world relay.
 
 The relay is intentionally world-agnostic. A browser that owns a singleplayer save
 registers as the authoritative host. Other singleplayer clients discover that world
@@ -141,6 +141,10 @@ async def handler(ws: Any, *_args: Any) -> None:
                 if username.casefold() in used:
                     await send_json(ws, {"type": "error", "message": "That username is already in use in this world."})
                     continue
+                identity_token=str(data.get("identityToken", ""))
+                if not re.fullmatch(r"[0-9a-f]{64}",identity_token):
+                    await send_json(ws,{"type":"error","message":"Relay identity is missing or invalid. Use a current MellorCraft client."})
+                    continue
                 guest_id = uuid.uuid4().hex
                 room_id = requested
                 room.guests[guest_id] = ws
@@ -151,6 +155,7 @@ async def handler(ws: Any, *_args: Any) -> None:
                 await send_json(room.host, {
                     "type": "guest_joined", "guestId": guest_id,
                     "username": username,
+                    "identityToken": identity_token,
                     "skin": skin,
                     "deviceClass": "mobile" if str(data.get("deviceClass", "desktop")).lower() == "mobile" else "desktop",
                 })
@@ -197,10 +202,10 @@ async def handler(ws: Any, *_args: Any) -> None:
                     pass
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="MellorCraft v1.8.2 singleplayer LAN relay")
+    parser = argparse.ArgumentParser(description="MellorCraft v1.8.3 singleplayer LAN relay")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="WebSocket relay port (default: 8000)")
     args = parser.parse_args()
-    print("MellorCraft v1.8.2 Singleplayer LAN Relay")
+    print("MellorCraft v1.8.3 Singleplayer LAN Relay")
     print(f"Relay: ws://127.0.0.1:{args.port}")
     print(f"LAN:   ws://{lan_ip()}:{args.port}")
     print("Keep this window open while singleplayer worlds are shared to LAN.")
