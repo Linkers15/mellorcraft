@@ -1,3 +1,227 @@
+MellorCraft 1.8.4 — Hotbar, Dynamic Drops & Exact Extended Chunks
+=================================================================
+
+CURRENT BUILD — retains version number 1.8.4, climate changes, irregular
+mega-caves, and ~50% Timeless Void rock concentration.
+
+CONTROLS
+- Mouse wheel forward/back switches among the 9 hotbar slots during gameplay.
+  Menu lists, inventory, chat, and settings continue to scroll normally.
+- /rd controls high-resolution range; /edrd controls optional extended range.
+
+DROPPED-ITEM SUPPORT
+- Previously dropped items now check whether the supporting voxel has been
+  removed and fall to the next actual floor. Applies to mined blocks and Q
+  drops. The dedicated host validates client-reported replacement floors.
+- Browser/LAN authoritative host and Python dedicated server both updated.
+
+EXTENDED RENDERING
+- Replaced height-only tiles plus a separate vegetation generator with tiles
+  meshed from the SAME fully generated 16x16 voxel chunks as nearby terrain.
+- All exposed generated block types (terrain, underground cave surfaces,
+  flowers, cacti, tree blocks, structures, ores and saved block edits) are
+  included. Chunk masking prevents cactus/terrain from disappearing at the
+  high-resolution transition. Geometry remains at block scale; quality affects
+  texture resolution ONLY: 8x8, 4x4 (default), 2x2 pixels per tile.
+- Worker generates exact voxel face masks; coplanar matching blocks are greedily
+  merged within each chunk and textures repeat per world block in shader.
+- Full-resolution chunks replace the matching subset of exact distant tiles.
+
+PERFORMANCE NOTE
+- This is more geometrically expensive than the former height-only distant
+  terrain. At 32-64 chunks, exact tiles load progressively and may take longer
+  to populate or use more GPU memory, depending on terrain and hardware.
+  Performance/FPS at these settings has not been verified interactively.
+- Distant stair, glass and flower blocks retain their source block IDs and
+  atlas textures; some special block shapes/transparency are approximated
+  by opaque voxels in the distant mesh until their full-detail chunk loads.
+
+TESTING
+- JavaScript syntax, Python compile, climate/weather/mega-cave tests,
+  deterministic exact-voxel mesh and texture-only LOD tests, chunk-substitution
+  and saved-edit checks, and server dropped-item support regression passed.
+- Headless browser/WebGL visual testing was not available. Please back up saves
+  and test in an ordinary desktop browser before deploying to a shared server.
+
+-----------------------------------------------------------------------------
+
+MellorCraft v1.8.4 — High-Resolution + Extended Render Distance Revision
+============================================================================
+
+VERSION: 1.8.4 (per request; this incorporates the climate/weather work from the
+previously distributed build labeled 1.8.5, without advancing the version).
+
+TWO SEPARATE RENDER DISTANCES
+- High-resolution distance: 2–16 chunks on desktop (2–4/5/10 on mobile,
+  depending on the device cap). /rd <n> adjusts this local client setting.
+- Optional Extended Render Distance: choose a number GREATER than the high-res
+  radius, up to 64 chunks. Enable in either Settings menu, or use
+  /edrd <n> to set and enable it without operator permission.
+- /edrd off disables extension while preserving the selected extended value.
+- Both settings persist in local browser storage; they are never world rules.
+- When extended mode is disabled, the high-resolution radius is the visible
+  range; lightweight placeholder tiles remain near generating chunks.
+
+REAL DISTANT DECORATIONS + TEXTURES
+- Distant trees, flowers, and cacti now follow the actual chunk decoration
+  generator, at the same deterministic positions and with the same species.
+  The former invented tree-per-chunk silhouettes are gone.
+- Distant block-geometry is batched and distant leaves are grouped on a small
+  voxel grid to reduce draw calls and triangles. The farther mesh is still
+  a visual proxy, NOT fully simulated voxel chunks, and structures/edits
+  outside the high-resolution radius are not displayed by those proxies.
+- The distant texture atlas is genuinely reduced per original 16x16 block tile:
+    High: 8 texture pixels per side, 4-block terrain sampling
+    Balanced: 4 pixels per side, 8-block terrain sampling
+    Fast: 2 pixels per side, 16-block terrain sampling
+  Original nearby texture detail remains unchanged.
+- Retains terrain skirts and mesh replacement guards to reduce void flashes.
+  A stale worker result cannot replace a differently configured tile.
+
+WORLD GENERATION
+- Mega-cave boundaries now have two scales of 3D shape warping and overlapping
+  lobes, breaking up spherical outlines without changing cave frequencies.
+- Timeless Void: air versus solid rock uses a zero-centered noise threshold
+  with low-frequency, region-dependent offsets. Seeded sampling measured ~49%
+  solid blocks in the unmodified interior (bedrock, structures, ores excluded),
+  with small natural regional differences. Density is approximate, not an
+  enforced exact 50% for each finite area.
+- Retains all four large climate groups, sensible biome boundaries,
+  cold-only mountain ranges, snowstorms and open-ravine fog from the previous
+  build. The seed map uses matching biome functions.
+
+COMPATIBILITY & TESTING
+- World save format 12, dedicated multiplayer protocol 16, and relay protocol 1
+  remain unchanged. Existing saved block edits should be preserved; newly
+  generated Timeless Void terrain and mega-caves can differ from earlier builds.
+- Tests: JS syntax, Python compilation, exact vs full-chunk decoration comparison
+  on sampled test chunks, three LOD levels, near/far seam masking, climate-map
+  agreement and weather logic. Actual interactive WebGL/FPS testing remains
+  necessary on supported hardware.
+- Back up saved worlds before testing world-generation changes. Use a NEW
+  test world to evaluate the revised cave/alt-dimensional distribution.
+
+----------------------------------------------------------------------------
+PREVIOUS RELEASE NOTES (historical; some prior render-distance behavior below is
+superseded by this revision)
+----------------------------------------------------------------------------
+
+Inherited climate/weather improvements (included in v1.8.4)
+=========================================================================
+
+CLIMATE AND WEATHER NOTES
+
+DISTANT RENDERING
+- Added deterministic lightweight distant tree meshes: oak, spruce, jungle and
+  acacia silhouettes with block-like textured trunks and leaf canopies.
+  Tree density decreases progressively with LOD detail to preserve frame rate
+  at long render distances (64 chunks remains supported).
+- Added downward overlap skirts at tile borders and transitions to full chunks,
+  reducing flashes of sky/void and see-through terrain at mismatched LOD heights.
+- Existing tiles remain visible while replacement detail samples arrive, avoiding
+  temporary blank terrain during quality switches.
+- Full-detail chunks still own gameplay, edits, collisions, trees and structures.
+  Distant trees are visual approximations and are not collidable.
+
+NEW NORMAL-WORLD CLIMATE GENERATION
+- Four broad climate regions follow gently warped temperature/moisture fields:
+  Cold: Low/Mid/High Mountains, Taiga, Snowy Plains.
+  Temperate: Forest, Flower Forest, Plains.
+  Warm: Jungle, Savanna.
+  Arid: Barren Desert, Cactus Desert, Badlands.
+- Regions extend around 1,000 blocks in typical spans (terrain noise can vary).
+  The familiar 88-block provinces now subdivide these large climate regions,
+  rather than independently mixing unrelated biomes.
+- Ecotones favor forest/taiga and plains/snowy-plains transitions, with savannas
+  bridging warm regions and desert country. Mountain planning requires at least
+  7 of 9 surrounding 230-block climate probes to be cold; mountain surfaces
+  themselves do not render as mountain biomes outside cold regions.
+- The standard height generator now uses the same macroclimate map as the biome
+  chooser. Customized/flat world biome selection remains configurable.
+- The seed map shares the normal-world climate and mountain algorithms.
+
+WEATHER
+- A storm passing through cold regions produces snow instead of rain.
+  Snowflakes are drawn as small six-vertex shapes and fall much more slowly
+  than rain, with sideways drift. No rain splashes are drawn for snow.
+- Existing local-pressure storm strength, clouds, and fog remain unchanged.
+- Fog and precipitation now use the actual loaded overhead column for cover;
+  open ravines can show storm fog even below the nominal surface elevation.
+- The seed-map weather readout labels cold-region precipitation as snow.
+
+SAVE & SERVER COMPATIBILITY
+- Save format 12, dedicated-server protocol 16, relay protocol 1 unchanged.
+  Existing worlds still open, but regenerated/previously unmodified terrain
+  can change near region boundaries. Back up worlds before upgrading; a new
+  test world is recommended for judging climate placement and FPS.
+- The climate-aware generator changes terrain relative to the original early 1.8.4 build.
+  Structure logic and the 200-block above-zero height limit are preserved.
+
+VALIDATION
+- Passed JS syntax checks (main client and seed map), Python syntax checks,
+  LOD geometry/replacement tests, climate/seed-map parity across three seeds,
+  mountain climate restrictions, and snow/ravine-fog logic checks.
+- Interactive WebGL/FPS testing could not be completed in this container:
+  Chromium headless startup timed out in its graphics environment. Please
+  validate distant seams, FPS at 32/64 chunks, and storms in an actual browser.
+
+==========================================================================
+HISTORICAL 1.8.4 CHANGELOG
+==========================================================================
+
+MellorCraft 1.8.4 — Chunk Border Occlusion & Distant Terrain LOD
+================================================================
+
+CHANGE 1 — UNGENERATED CHUNK GAPS
+- Meshing now treats unseen or unmeshed neighboring chunks as unknown/opaque,
+  not empty air, so it does not expose cutaway faces/underground ores and caves.
+- Once a neighboring chunk's first real mesh is completed, existing border
+  meshes are scheduled for rebuilding with the correct actual shared faces.
+- Separate, temporary low-resolution terrain surface tiles cover still-pending
+  chunks while full chunks stream in, reducing visible holes in the horizon.
+  Proxies are approximate and do not include edits, structures, vegetation or
+  underground features; they are replaced by real meshes as those load.
+
+CHANGE 2 — RENDER DISTANCES THROUGH 64 CHUNKS
+- The render-distance control (in the main menu and pause settings) and /rd
+  command now allow values 2 through 64.
+- The nearest 16 chunks of terrain use the original full voxel renderer on
+  desktop. On mobile, the existing hardware-dependent full-chunk cap (4, 5,
+  or 10) continues to apply for performance and distant proxies cover the rest.
+- Terrain beyond the full-detail radius uses lightweight height-based surface
+  tiles of 4x4 chunks. No voxel array, cave carving, underground ore meshes, or
+  near-field block interactions are computed for these distant-only tiles.
+- Added configurable Distant Terrain Detail settings in the main menu and
+  pause menu: High (4-block sample cells), Balanced (8, default), Fast (16).
+  Terrain meshes and settings are generated progressively and stored only while
+  they remain near the player; this reduces the high-distance resource cost.
+- Terrain height comes from the seeded height/biome generator; edits,
+  structures, trees and underground details are only shown with full meshes.
+- The camera clipping plane expands with selected render distance.
+- Both world-generation workers are seeded identically; changing LOD quality
+  rebuilds distant tiles without changing the world or the save.
+
+COMPATIBILITY
+- Save format 12, dedicated-server protocol 16, relay protocol 1, original
+  terrain generation and all other 1.8.3 mechanics are unchanged.
+- The seed map uses the same world generation as 1.8.3 and is version-labeled.
+- Large render distances are graphics/CPU intensive even with LOD; 16–32 is a
+  sensible starting point. Distant previews are visual only, not collision or
+  server-authoritative world edits.
+- The new performance system depends on browser Web Workers. If disabled by
+  security policy/browser restrictions, the normal nearby world remains playable
+  but distant proxy terrain will not generate.
+
+TESTING
+- JavaScript/Python syntax checks and targeted LOD geometry unit tests have
+  been run. Browser GPU smoke testing was blocked by the test environment's
+  WebGL/browser navigation restrictions; full interactive FPS profiling across
+  hardware and all weather/dimension/multiplayer modes has not been performed.
+
+================================================================
+HISTORICAL 1.8.3 NOTES (AS PROVIDED)
+================================================================
+
 MellorCraft 1.8.3 — Classic Mountains, Snowy Plains & Spruce Treeline
 ========================================================================
 

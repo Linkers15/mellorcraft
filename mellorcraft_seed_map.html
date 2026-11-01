@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MellorCraft v1.8.3 Seed Map</title>
+<title>MellorCraft v1.8.4 Seed Map</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#15171b;color:#eee;font-family:Arial,sans-serif}
@@ -216,13 +216,12 @@ function pressureColor(p,alpha=.34){const t=clamp(p/WEATHER_PRESSURE_MAX,0,1),h=
 function seedCloudFadeAt(x,z,target){const key=`${Math.floor(x/32)},${Math.floor(z/32)}`,now=performance.now()/1000;let state=weatherCloudFade.get(key);if(!state){state={opacity:0,last:now,seen:now};weatherCloudFade.set(key,state)}const dt=Math.max(0,Math.min(1,now-state.last));state.last=now;state.seen=now;const rate=target>state.opacity?1.15:.32,ease=1-Math.exp(-dt*rate);state.opacity+=(target-state.opacity)*ease;if(state.opacity<.001&&target<=0)state.opacity=0;return state.opacity}
 
 function getClimate(x, z) {
-    const warpX = biomeNoise.octave(x * .0017 + 1407, z * .0017 - 2379, 2, .55) * 135;
-    const warpZ = biomeNoise.octave(x * .0017 - 3151, z * .0017 + 4783, 2, .55) * 135;
-    const sx=x+warpX, sz=z+warpZ, scale=.0008;
-    return {temp:biomeNoise.octave(sx*scale,sz*scale,3,.5),moist:biomeNoise.octave(sx*scale+5000,sz*scale+5000,3,.5)};
-}
+            // Height, snowline and biome families must sample the SAME macroclimate.
+            const zone=getClimateZone(x,z);
+            return {temp:zone.temp,moist:zone.moist};
+        }
 
-function getContinentValue(x, z) {
+        function getContinentValue(x, z) {
             // Broad, low-frequency coastlines keep ocean and land transitions
             // rounded. The former high-frequency detail could change the coastal
             // blend too much in only a few blocks and create sheer walls.
@@ -231,83 +230,64 @@ function getContinentValue(x, z) {
             return continent + coastDetail;
         }
 
-function getBiomeProvince(cellX, cellZ) {
-    // Cache climate at province centers. The warp changes borders, not biome
-    // assignment within a province; this prevents thin isotherm/isohyet bands.
-    const key = `${cellX},${cellZ}`;
-    const existing = biomeProvinceCache.get(key);
-    if (existing) return existing;
-    if (biomeProvinceCache.size > 20000) biomeProvinceCache.clear();
-    const size = 88;
-    const px = (cellX + .5 + (coordHash(cellX,cellZ,9101,WORLD_SEED)-.5)*.54)*size;
-    const pz = (cellZ + .5 + (coordHash(cellX,cellZ,9102,WORLD_SEED)-.5)*.54)*size;
-    // Independent continent-scale temperature and rainfall fields make nearby
-    // provinces climatically similar, rather than drawing unrelated biome IDs.
-    // Frequency is deliberately far below the province-grid frequency.
-    const temp = biomeNoise.octave(px*.00135+1351,pz*.00135-2791,2,.55)*1.4;
-    const moist = biomeNoise.octave(px*.00150-3701,pz*.00150+6143,2,.55)*1.25;
+function getClimateZone(x,z) {
+    // Climate zones follow broad, warped temperature/moisture contours. Adjacent
+    // zones are ordered cold -> temperate -> warm -> arid, with wet hot land
+    // remaining warm instead of turning into desert. The underlying wavelengths
+    // are ~1,000+ blocks; 88-block biome provinces subdivide each broad zone.
+    const wx = biomeNoise.octave(x*.00025+1813,z*.00025-2341,2,.55)*175;
+    const wz = biomeNoise.octave(x*.00025-3411,z*.00025+4187,2,.55)*175;
+    const sx=x+wx,sz=z+wz;
+    const temp=biomeNoise.octave(sx*.00018+1307,sz*.00018-2417,3,.55)*1.55;
+    const moist=biomeNoise.octave(sx*.00022-3893,sz*.00022+5819,3,.55)*1.3;
+    // Four stable climate families with ecotones, not independently scattered IDs.
+    const heat=temp-moist*.16;
+    const zone=heat<-.34?'cold':heat<.03?'temperate':heat<.41?'warm':'arid';
+    return {zone,temp,moist};
+}
+function climateTouchesZone(x,z,zone,radius=135) {
+    // A cheap, shared ecotone rule: choose sensible biome neighbors on both
+    // sides of climate borders without using recursive biome lookups.
+    return getClimateZone(x+radius,z).zone===zone||
+        getClimateZone(x-radius,z).zone===zone||
+        getClimateZone(x,z+radius).zone===zone||
+        getClimateZone(x,z-radius).zone===zone;
+}
+
+function getBiomeProvince(cellX,cellZ) {
+    const key=`${cellX},${cellZ}`;
+    const existing=biomeProvinceCache.get(key);if(existing)return existing;
+    if(biomeProvinceCache.size>20000)biomeProvinceCache.clear();
+    const size=88;
+    const px=(cellX+.5+(coordHash(cellX,cellZ,9101,WORLD_SEED)-.5)*.54)*size;
+    const pz=(cellZ+.5+(coordHash(cellX,cellZ,9102,WORLD_SEED)-.5)*.54)*size;
+    const climate=getClimateZone(px,pz),{zone,temp,moist}=climate;
+    const rand=coordHash(cellX,cellZ,9372,WORLD_SEED);
     let biome;
-    if (temp >= .20) {
-        if (moist > .25) biome = BIOMES.JUNGLE;
-        else if (moist > .045) biome = BIOMES.SAVANNA;
-        else if (moist < -.33) biome = BIOMES.BADLANDS;
-        else if (moist < -.125) biome = BIOMES.DESERT_BARREN;
-        else biome = BIOMES.DESERT_CACTUS;
-    } else if (temp >= .10) {
-        if (moist > .29) biome = BIOMES.JUNGLE;
-        else if (moist < .12) biome = BIOMES.SAVANNA;
-        else biome = BIOMES.FOREST;
-    } else if (temp < -.34) {
-        if (moist > -.02 && coordHash(cellX,cellZ,9372,WORLD_SEED)<.32) biome = BIOMES.TAIGA;
-        else if (temp > -.70 && moist > -.20) biome = BIOMES.FOREST;
-        else biome = BIOMES.PLAINS;
-    } else if (temp < -.20) {
-        if (moist > .29 && coordHash(cellX,cellZ,9372,WORLD_SEED)<.24) biome = BIOMES.TAIGA;
-        else if (moist > .07) biome = BIOMES.FOREST;
-        else biome = BIOMES.PLAINS;
-    } else if (moist > .16) {
-        // A flower forest is a whole temperate province, not a small grid tile.
-        biome = temp > -.14 && temp < .12 && coordHash(cellX,cellZ,8151,WORLD_SEED) < .055
-            ? BIOMES.FLOWER_FOREST : BIOMES.FOREST;
+    if(zone==='cold') {
+        // Moist wooded cold borders adjoin forests; open icy fields adjoin plains.
+        biome=moist>.02?(rand<.72?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS):
+            (rand<.28?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS);
+    } else if(zone==='temperate') {
+        // Avoid desert meeting deep forest and snow meeting savanna directly.
+        const warmEdge=climateTouchesZone(px,pz,'warm');
+        const coldEdge=climateTouchesZone(px,pz,'cold');
+        const forestChance=moist>.06?.77:moist>-.12?.49:.22;
+        const chance=coldEdge&&moist>.04?Math.max(.78,forestChance):
+            warmEdge&&moist<.04?Math.min(.25,forestChance):forestChance;
+        biome=rand<chance?(coordHash(cellX,cellZ,8151,WORLD_SEED)<.095?
+            BIOMES.FLOWER_FOREST:BIOMES.FOREST):BIOMES.PLAINS;
+    } else if(zone==='warm') {
+        const aridEdge=climateTouchesZone(px,pz,'arid');
+        biome=aridEdge||moist<.035||rand>.84?BIOMES.SAVANNA:BIOMES.JUNGLE;
     } else {
-        biome = BIOMES.PLAINS;
+        // At warm/arid edges, choose savanna next to ordinary deserts.
+        const edge=climateTouchesZone(px,pz,'warm');
+        biome=moist<-.30&&rand<.55?BIOMES.BADLANDS:
+            (rand<.52?BIOMES.DESERT_CACTUS:BIOMES.DESERT_BARREN);
+        if(edge&&biome===BIOMES.BADLANDS)biome=BIOMES.DESERT_CACTUS;
     }
-    // A second, climate-compatible draw gives forests about twice their former
-    // selection weight. Provinces stay at 88 blocks: no bigger forest patches.
-    // Only promote temperate plains; deserts, mountains and icy areas remain intact.
-    if (biome === BIOMES.PLAINS && temp >= -.34 && temp < .20 && moist > -.14 &&
-        coordHash(cellX, cellZ, 9403, WORLD_SEED) < .17) {
-        biome = (temp > -.14 && temp < .12 && coordHash(cellX,cellZ,8151,WORLD_SEED)<.055)
-            ? BIOMES.FLOWER_FOREST : BIOMES.FOREST;
-    }
-    // Preserve plausible climate neighbors at the scale of full provinces.
-    // Dry hot deserts should border savanna/badlands rather than jungle;
-    // cold taiga/peaks should reach them only through temperate plains.
-    // Changing the intervening province prevents a thin ecotone strip.
-    if ([BIOMES.TAIGA,BIOMES.JUNGLE,BIOMES.FOREST,BIOMES.FLOWER_FOREST].includes(biome)) {
-        outer: for (let dx=-2; dx<=2; dx++) for (let dz=-2; dz<=2; dz++) {
-            if (!dx && !dz) continue;
-            const nx=cellX+dx, nz=cellZ+dz;
-            const qx=(nx+.5+(coordHash(nx,nz,9101,WORLD_SEED)-.5)*.54)*size;
-            const qz=(nz+.5+(coordHash(nx,nz,9102,WORLD_SEED)-.5)*.54)*size;
-            const neighborTemp=biomeNoise.octave(qx*.00135+1351,qz*.00135-2791,2,.55)*1.4;
-            const neighborMoist=biomeNoise.octave(qx*.00150-3701,qz*.00150+6143,2,.55)*1.25;
-            const desertNeighbor=neighborTemp>=.20 && neighborMoist<=.045;
-            if (desertNeighbor) {
-                biome=(biome===BIOMES.JUNGLE||biome===BIOMES.FOREST||biome===BIOMES.FLOWER_FOREST) && temp>=.10
-                    ? BIOMES.SAVANNA : BIOMES.PLAINS;
-                break outer;
-            }
-            if ((biome===BIOMES.TAIGA) && Math.max(Math.abs(dx),Math.abs(dz))<=1 && neighborTemp>=.10 && neighborMoist<.28) {
-                biome=BIOMES.PLAINS;
-                break outer;
-            }
-        }
-    }
-    // Deterministic province-level 50/50 split preserves biome patch sizes.
-    if (biome === BIOMES.TAIGA && coordHash(cellX,cellZ,9373,WORLD_SEED)<0.5)
-        biome = BIOMES.SNOWY_PLAINS;
-    const result = { x:px, z:pz, biome, temp, moist };
+    const result={x:px,z:pz,biome,temp,moist,zone};
     biomeProvinceCache.set(key,result);
     return result;
 }
@@ -343,6 +323,16 @@ if (mh(900) >= 0.38) {
 
 const cx = cellX * grid + 70 + mh(901) * (grid - 140);
 const cz = cellZ * grid + 70 + mh(902) * (grid - 140);
+            // Peaks must lie inside substantial cold regions, not span a warm border.
+            const climateSamples=[[0,0],[230,0],[-230,0],[0,230],[0,-230],
+                [180,180],[180,-180],[-180,180],[-180,-180]];
+            let coldCount=0;
+            for(const [dx,dz] of climateSamples)
+                if(getClimateZone(cx+dx,cz+dz).zone==='cold')coldCount++;
+            if(coldCount<7||getClimateZone(cx,cz).zone!=='cold') {
+                mountainRegionCache.set(key,null);return null;
+            }
+
 const chainAngle = mh(903) * Math.PI * 2;
 const chainLength = 155 + mh(904) * 130;
 const peakCount = 2 + Math.floor(mh(905) * 3);
@@ -390,7 +380,13 @@ const cacheKey = `${ix},${iz}`;
 if (mountainInfoCache.has(cacheKey)) return mountainInfoCache.get(cacheKey);
 if (mountainInfoCache.size > 220000) mountainInfoCache.clear();
 
-const grid = 420;
+            // A candidate range may graze an ecotone; never label warm or
+            // temperate terrain as a mountain just because its cold center is nearby.
+            if(getClimateZone(x,z).zone!=='cold'){
+                mountainInfoCache.set(cacheKey,null);return null;
+            }
+
+            const grid = 420;
 const baseCellX = Math.floor(x / grid), baseCellZ = Math.floor(z / grid);
 let bestTarget = -Infinity;
 let best = null;
@@ -731,7 +727,7 @@ addEventListener('mousemove',e=>{
   if(drag){centerX-=(e.clientX-lastX)/scale;centerZ-=(e.clientY-lastY)/scale;lastX=e.clientX;lastY=e.clientY;render()}
   const rect=canvas.getBoundingClientRect(),w=worldFromScreen(e.clientX-rect.left,e.clientY-rect.top),x=Math.floor(w.x),z=Math.floor(w.z),dim=Number(document.getElementById('dimension').value);
   let lines=[`X: ${x} &nbsp; Z: ${z}`];
-  if(dim===0){const b=getBiome(x,z);lines.push(`Biome: ${BIOME_NAMES[b]}`,`Surface Y: ${getHeight(x,z,b)}`);if(document.getElementById('weather').checked){const wx=weatherCellAt(x,z);lines.push(`Weather: ${weatherLabel(wx)}`,`Pressure: ${wx.pressure}/200`,`Cloud: ${Math.round(wx.cloud*100)}% • Rain: ${Math.round(wx.rain*100)}% • Fog: ${Math.round(wx.fog*100)}%`)}}
+  if(dim===0){const b=getBiome(x,z);lines.push(`Biome: ${BIOME_NAMES[b]}`,`Surface Y: ${getHeight(x,z,b)}`);if(document.getElementById('weather').checked){const wx=weatherCellAt(x,z);lines.push(`Weather: ${getClimateZone(x,z).zone==='cold'?weatherLabel(wx).replace('Rain','Snow'):weatherLabel(wx)}`,`Pressure: ${wx.pressure}/200`,`Cloud: ${Math.round(wx.cloud*100)}% • Rain: ${Math.round(wx.rain*100)}% • Fog: ${Math.round(wx.fog*100)}%`)}}
   else if(dim===1)lines.push(`Biome: ${ALT_NAMES[getAltBiome(x,z)]}`,`Alt Dimension height: 50 blocks (Y 0-49)`);
   else lines.push(Math.hypot(x,z)<=35?'Inside boss island':'Void');
   let near=null,dist=Infinity;for(const s of lastStructures){const d=Math.hypot(s.cx-x,s.cz-z);if(d<dist){dist=d;near=s}}

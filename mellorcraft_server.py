@@ -647,7 +647,7 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 12, "version": "1.8.3", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 12, "version": "1.8.4", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
             "bossDefeated": self.boss_defeated, "gameRules": self.game_rules, "worldGen": self.world_gen,
             "blocks": self.blocks, "operators": sorted(self.operators), "bannedPlayers": sorted(self.banned_players), "playerProfiles": profiles,
@@ -1328,6 +1328,40 @@ async def remove_linked_portal(key: str, block_type: int, previous_type: int, pl
     world.dirty=True
 
 
+def update_drop_support_after_mining(dimension: int, x: int, y: int, z: int,
+                                      block_type: int, reported: Any) -> None:
+    """Drop supports are dynamic. The browser knows the procedural terrain below
+    an edit; the server owns the final item position and validates any proposed
+    support floor against the block removal and the drop's recorded support.
+    """
+    if block_type != AIR_BLOCK:
+        return
+    floors: dict[str, float] = {}
+    if isinstance(reported, list):
+        for entry in reported[:32]:
+            if not isinstance(entry, dict):
+                continue
+            item_id = str(entry.get('id', ''))
+            proposed = finite_number(entry.get('floorY'), float('nan'))
+            if math.isfinite(proposed):
+                floors[item_id] = proposed
+    for item in world.items.values():
+        if item.dimension != dimension or item.floorY is None:
+            continue
+        if math.floor(item.x) != x or math.floor(item.z) != z:
+            continue
+        if abs(float(item.floorY) - (y + 1.18)) >= 0.16:
+            continue
+        # If no proposal arrived (e.g. another client/server command), let the
+        # item fall at least one block instead of locking it to a removed floor.
+        target = floors.get(item.id, float(item.floorY) - 1)
+        if target > float(item.floorY) - 0.10 or target < -0.5:
+            target = max(0.18, float(item.floorY) - 1)
+        item.floorY = max(0.18, min(float(item.floorY) - 0.10, target))
+        item.vy = min(0.0, item.vy)
+        world.dirty = True
+
+
 async def handle_block_change(player_id: str, data: dict[str, Any]) -> None:
     x = bounded_int(data.get("x"), -2_000_000, 2_000_000)
     y = bounded_int(data.get("y"), 0, WORLD_HEIGHT - 1)
@@ -1342,6 +1376,7 @@ async def handle_block_change(player_id: str, data: dict[str, Any]) -> None:
     # corrupting terrain and causing repeated teleport loops. Portal changes are
     # therefore stored only in the explicitly requested dimension.
     world.blocks[key] = block_type
+    update_drop_support_after_mining(dimension,x,y,z,block_type,data.get('itemSupportFloors'))
     await remove_linked_portal(key,block_type,previous_type,player_id)
     if block_type != FURNACE_BLOCK and (previous_type == FURNACE_BLOCK or f"{dimension},{x},{y},{z}" in world.furnaces):
         await spill_furnace_contents(dimension, x, y, z)
@@ -1369,6 +1404,7 @@ async def handle_block_batch(player_id: str, data: dict[str, Any]) -> None:
         block_type = bounded_int(entry.get("blockType"), 0, 255)
         key = world.block_key(dimension, x, y, z); previous_type = world.blocks.get(key, AIR_BLOCK)
         world.blocks[key] = block_type
+        update_drop_support_after_mining(dimension,x,y,z,block_type,entry.get('itemSupportFloors'))
         await remove_linked_portal(key,block_type,previous_type,player_id)
         if block_type != FURNACE_BLOCK and (previous_type == FURNACE_BLOCK or f"{dimension},{x},{y},{z}" in world.furnaces):
             await spill_furnace_contents(dimension, x, y, z)
@@ -1807,10 +1843,15 @@ async def handle_drop_item(player_id: str, data: dict[str, Any]) -> None:
         return
     look_x = -math.sin(player.yaw)
     look_z = -math.cos(player.yaw)
+    # The client supplies the procedural support height just as it does for
+    # mined blocks. Validate it against the authoritative spawn position.
+    drop_y = player.y + 1.1
+    requested = finite_number(data.get('floorY'), float('nan'))
+    floor = requested if math.isfinite(requested) and 0.0 <= requested <= drop_y else None
     await spawn_dropped_item(
         item_id, 1,
-        player.x + look_x * 0.8, player.y + 1.1, player.z + look_z * 0.8,
-        player.dimension, look_x * 3.5, 1.2, look_z * 3.5,
+        player.x + look_x * 0.8, drop_y, player.z + look_z * 0.8,
+        player.dimension, look_x * 3.5, 1.2, look_z * 3.5, floor,
     )
 
 
@@ -1857,7 +1898,7 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         player.hunger = max(0.0, min(20.0, finite_number(data.get("hunger"), player.hunger)))
         player.heldItem = bounded_int(data.get("heldItem"), 0, 255)
         player.crouching = bool(data.get("crouching", False))
-        player.renderDistance = bounded_int(data.get("renderDistance"), 2, 32, player.renderDistance)
+        player.renderDistance = bounded_int(data.get("renderDistance"), 2, 64, player.renderDistance)
         if world.client_protocols.get(player_id, 1) >= 4:
             inventory = world.sanitize_inventory(data.get("inventory"))
             if inventory is not None:
@@ -2597,7 +2638,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.8.3 World Selection")
+    print("\nMellorCraft v1.8.4 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -2688,7 +2729,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.8.3 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.8.4 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -2718,7 +2759,7 @@ def main() -> None:
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.8.3 multiplayer server is running")
+    print("\nMellorCraft v1.8.4 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")
