@@ -919,10 +919,10 @@
               </select>
             </div>
             <p>Choose one of the original MellorCraft player colors.</p>
-            <div class="setting-group"><label>High-resolution Render Distance: <span id="menuRdVal">6</span> chunks</label><input type="range" id="menuSetRd" min="2" max="16" value="6"></div>
-            <div class="setting-group"><label class="shader-toggle-row"><span>Extended Render Distance</span><input type="checkbox" id="menuExtendedEnabled"></label><div class="setting-help">Optional lightweight terrain and true world decorations beyond the normal high-resolution limit.</div></div>
-            <div class="setting-group"><label>Extended Distance: <span id="menuExtendedVal">32</span> chunks</label><input type="range" id="menuExtendedRd" min="3" max="64" value="32"></div>
-            <div class="setting-group"><label>Extended Texture Resolution:</label><select id="menuSetLodDetail"><option value="4">High (8×8 textures / full block geometry)</option><option value="8" selected>Balanced (4×4 textures / full block geometry)</option><option value="16">Fast (2×2 textures / full block geometry)</option></select><div class="setting-help">Extended terrain uses surface meshes plus generated world decorations, with texture quality following this setting.</div></div>
+            <div class="setting-group"><label>High-resolution Render Distance: <span id="menuRdVal">6</span> chunks</label><input type="range" id="menuSetRd" min="2" max="64" value="6"></div>
+            <div class="setting-group"><label class="shader-toggle-row"><span>Extended Render Distance</span><input type="checkbox" id="menuExtendedEnabled"></label><div class="setting-help">Optional reduced-geometry terrain beyond the high-resolution limit, with actual trees and structures.</div></div>
+            <div class="setting-group"><label>Extended Distance: <span id="menuExtendedVal">32</span> chunks</label><input type="range" id="menuExtendedRd" min="3" max="96" value="32"></div>
+            <div class="setting-group"><label>Extended Detail (Geometry + Textures):</label><select id="menuSetLodDetail"><option value="4">High (8×8 texture, exact contours)</option><option value="8" selected>Balanced (4×4 texture, adaptive surface)</option><option value="16">Fast (2×2 texture, adaptive low detail)</option></select><div class="setting-help">Distant ground follows actual terrain heights; only nearly-flat patches are simplified. Trees and structures remain block-aligned.</div></div>
             <div class="setting-group"><label>Master Volume: <span id="menuVolVal">45</span>%</label><input type="range" id="menuSetVol" min="0" max="100" value="45"></div>
             <div class="setting-group"><label>Field of View: <span id="menuFovVal">60</span></label><input type="range" id="menuSetFov" min="30" max="110" value="60"></div>
             <div class="setting-group"><label>Look Sensitivity: <span id="menuSensVal">100</span>%</label><input type="range" id="menuSetSens" min="10" max="300" value="100"></div>
@@ -973,14 +973,14 @@
         </div>
         <div class="setting-group">
             <label>High-resolution Render Distance: <span id="rdVal">6</span> chunks</label>
-            <input type="range" id="setRd" min="2" max="16" value="6">
+            <input type="range" id="setRd" min="2" max="64" value="6">
         </div>
-        <div class="setting-group"><label class="shader-toggle-row"><span>Extended Render Distance</span><input type="checkbox" id="setExtendedEnabled"></label><div class="setting-help">When enabled, render all generated blocks beyond the high-resolution range, using lower-resolution textures.</div></div>
-        <div class="setting-group"><label>Extended Distance: <span id="extendedVal">32</span> chunks</label><input type="range" id="setExtendedRd" min="3" max="64" value="32"></div>
+        <div class="setting-group"><label class="shader-toggle-row"><span>Extended Render Distance</span><input type="checkbox" id="setExtendedEnabled"></label><div class="setting-help">When enabled, show simplified terrain beyond full-detail chunks. Trees, cacti and buildings retain their actual positions.</div></div>
+        <div class="setting-group"><label>Extended Distance: <span id="extendedVal">32</span> chunks</label><input type="range" id="setExtendedRd" min="3" max="96" value="32"></div>
         <div class="setting-group">
-            <label>Extended Texture Resolution:</label>
-            <select id="setLodDetail"><option value="4">High (8×8 textures / full block geometry)</option><option value="8" selected>Balanced (4×4 textures / full block geometry)</option><option value="16">Fast (2×2 textures / full block geometry)</option></select>
-            <div class="setting-help">Used only when extended distance is enabled. Nearby chunks remain full-resolution; extended chunks display all exposed generated blocks, including structures and decorations, with reduced texture pixels.</div>
+            <label>Extended Detail (Geometry + Textures):</label>
+            <select id="setLodDetail"><option value="4">High (8×8 texture, exact contours)</option><option value="8" selected>Balanced (4×4 texture, adaptive surface)</option><option value="16">Fast (2×2 texture, adaptive low detail)</option></select>
+            <div class="setting-help">Used only when extended distance is enabled. Nearby chunks remain full-resolution. Beyond them, surface faces are merged and nearly-flat areas simplified without floating slab artifacts. Trees and structures retain their positions.</div>
         </div>
         <div class="setting-group">
             <label>Master Volume: <span id="volVal">45</span>%</label>
@@ -1207,7 +1207,7 @@
             document.getElementById('positionLabel').textContent = 'Pos:';
             document.getElementById('gamemodeLabel').textContent = 'Mode:';
             const mobileDefaultDistance = isIOSDevice ? 2 : 4;
-            document.getElementById('setRd').max = isIOSDevice ? '5' : '10';
+            document.getElementById('setRd').max = '64';
             document.getElementById('setRd').value = String(mobileDefaultDistance);
             document.getElementById('rdVal').textContent = String(mobileDefaultDistance);
         }
@@ -1281,14 +1281,14 @@
         function getDimensionHeight(dim = currentDimension) { return dim === 1 ? ALT_WORLD_HEIGHT : WORLD_HEIGHT; }
         const MOBILE_DEFAULT_RENDER_DISTANCE = LOW_END_MOBILE ? 2 : (isIOSDevice ? 2 : 4);
         const MOBILE_MAX_RENDER_DISTANCE = LOW_END_MOBILE ? 4 : (isIOSDevice ? 5 : 10);
-        let RENDER_DISTANCE = Math.max(2,Math.min(isMobilePlaying?MOBILE_MAX_RENDER_DISTANCE:16,parseInt(safeStorageGet('mellorcraftRenderDistance'))||(isMobilePlaying?MOBILE_DEFAULT_RENDER_DISTANCE:6)));
+        let RENDER_DISTANCE = Math.max(2,Math.min(64,parseInt(safeStorageGet('mellorcraftRenderDistance'))||(isMobilePlaying?MOBILE_DEFAULT_RENDER_DISTANCE:6)));
         let EXTENDED_ENABLED = safeStorageGet('mellorcraftExtendedEnabled') === '1';
-        let EXTENDED_RENDER_DISTANCE = Math.max(RENDER_DISTANCE+1,Math.min(64,parseInt(safeStorageGet('mellorcraftExtendedDistance'))||32));
+        let EXTENDED_RENDER_DISTANCE = Math.max(RENDER_DISTANCE+1,Math.min(96,parseInt(safeStorageGet('mellorcraftExtendedDistance'))||32));
         function visibleRenderDistance(){return EXTENDED_ENABLED ? Math.max(RENDER_DISTANCE+1,EXTENDED_RENDER_DISTANCE) : RENDER_DISTANCE;}
         let LOD_DETAIL = [4,8,16].includes(Number(safeStorageGet('mellorcraftLodDetail'))) ? Number(safeStorageGet('mellorcraftLodDetail')) : 8;
-        // Avoid allocating 13,000 full voxel chunks at a 64-chunk view distance.
-        // Mobile retains its smaller safe radius of fully generated terrain.
-        function fullDetailRadius() { return Math.min(RENDER_DISTANCE, isMobilePlaying ? MOBILE_MAX_RENDER_DISTANCE : 16); }
+        // Honor the user-selected high-resolution radius. Chunk generation remains
+        // progressive, so very large values can take time and significant RAM.
+        function fullDetailRadius() { return RENDER_DISTANCE; }
         const DEFAULT_DOCILE_CAP = 18;
         const DEFAULT_HOSTILE_CAP = 12;
         let DOCILE_CAP = DEFAULT_DOCILE_CAP;
@@ -6987,15 +6987,18 @@ function getBaseBiome(x, z) {
             return out;
         }
 
-        // Extended distance uses the EXACT same generated voxel chunks as normal
-        // gameplay. Only exposed faces are retained. Greedy quads are restricted
-        // to 16x16 chunk boundaries so full-detail chunks can replace proxies
-        // individually without disappearing cactus or z-fighting seams.
-        // The step parameter controls TEXTURE PIXELS, not geometric downsampling.
+        // Extended LOD is a hybrid mesh built from the same deterministic chunks
+        // as gameplay. Overworld natural terrain follows actual surface heights,
+        // while distinctive decorations,
+        // man-made structures, and other non-terrain blocks keep their original
+        // positions. Greedy surfaces save geometry without turning mountains
+        // into flat floating slabs. Each quad remains inside ONE source chunk for seamless
+        // replacement when that chunk's full-resolution mesh is ready.
         function generateLodTile(gx,gz,dim,step,edits=[]) {
             const size=4*CHUNK_SIZE, stride=size*size;
             const height=dim===1?ALT_WORLD_HEIGHT:WORLD_HEIGHT;
             const voxels=new Uint8Array(stride*height);
+            const preservedEdits=new Set();
             let highest=1;
             for(let cz=0;cz<4;cz++)for(let cx=0;cx<4;cx++){
                 const chunk=generateChunk(gx*4+cx,gz*4+cz,dim);
@@ -7009,62 +7012,224 @@ function getBaseBiome(x, z) {
             for(const entry of edits){
                 const x=entry[0]|0,y=entry[1]|0,z=entry[2]|0,id=entry[3]|0;
                 if(x>=0&&x<size&&z>=0&&z<size&&y>=0&&y<height){
-                    voxels[y*stride+z*size+x]=id;highest=Math.max(highest,y);
+                    const pos=y*stride+z*size+x;voxels[pos]=id;
+                    if(id)preservedEdits.add(pos);highest=Math.max(highest,y);
                 }
             }
             const upper=Math.min(height-1,highest+2);
             const idx=(x,y,z)=>y*stride+z*size+x;
-            // A plane stores a mask of visible block faces (ID+1; zero means no face).
-            // Only active planes allocate masks; deep solid stone is never meshed.
-            const planes=new Map();
-            const widths=[size,size,size,size,size,size];
-            const heights=[size,size,upper+1,upper+1,upper+1,upper+1];
-            function mark(f,plane,u,v,id){
-                const key=f*(height+1)+plane;
-                let mask=planes.get(key);
-                if(!mask){mask=new Uint16Array(widths[f]*heights[f]);planes.set(key,mask);}
-                mask[v*widths[f]+u]=id+1;
-            }
-            function exposed(id,neighbor){
-                if(!neighbor)return true;
-                // Transparency and foliage boundaries stay visible, but common
-                // adjacent leaves/glass/water faces are still culled.
-                const transparent=(v)=>v===BLOCKS.GLASS||v===BLOCKS.LEAVES||
-                    v===BLOCKS.SPRUCE_LEAVES||v===BLOCKS.JUNGLE_LEAVES||v===BLOCKS.ACACIA_LEAVES||
-                    (v>=BLOCKS.WATER_SOURCE&&v<=BLOCKS.WATER_FLOW_3)||
-                    (v>=BLOCKS.LAVA_SOURCE&&v<=BLOCKS.LAVA_FLOW_3);
-                return id!==neighbor && (transparent(id)||transparent(neighbor));
-            }
-            for(let y=0;y<=upper;y++)for(let z=0;z<size;z++)for(let x=0;x<size;x++){
-                const id=voxels[idx(x,y,z)];if(!id)continue;
-                if(exposed(id,y<upper?voxels[idx(x,y+1,z)]:0))mark(0,y,x,z,id);
-                if(exposed(id,y>0?voxels[idx(x,y-1,z)]:0))mark(1,y,x,z,id);
-                if(exposed(id,x<size-1?voxels[idx(x+1,y,z)]:0))mark(2,x,z,y,id);
-                if(exposed(id,x>0?voxels[idx(x-1,y,z)]:0))mark(3,x,z,y,id);
-                if(exposed(id,z<size-1?voxels[idx(x,y,z+1)]:0))mark(4,z,x,y,id);
-                if(exposed(id,z>0?voxels[idx(x,y,z-1)]:0))mark(5,z,x,y,id);
+            const natural=new Uint8Array(256);
+            for(const id of [BLOCKS.GRASS,BLOCKS.DIRT,BLOCKS.STONE,BLOCKS.SAND,BLOCKS.SNOW,
+                BLOCKS.RED_SAND,BLOCKS.TERRACOTTA,BLOCKS.PACKED_ICE,BLOCKS.BEDROCK,
+                BLOCKS.GRANITE,BLOCKS.DIORITE,BLOCKS.ANDESITE,BLOCKS.LIMESTONE,
+                BLOCKS.SLATE,BLOCKS.DEEPSLATE,BLOCKS.RED_STONE,BLOCKS.BLUE_STONE,
+                BLOCKS.COAL_ORE,BLOCKS.IRON_ORE,BLOCKS.GOLD_ORE,BLOCKS.DIAMOND_ORE,
+                BLOCKS.WATER_SOURCE,BLOCKS.WATER_FLOW_1,BLOCKS.WATER_FLOW_2,BLOCKS.WATER_FLOW_3,
+                BLOCKS.LAVA_SOURCE,BLOCKS.LAVA_FLOW_1,BLOCKS.LAVA_FLOW_2,BLOCKS.LAVA_FLOW_3]){
+                if(Number.isInteger(id)&&id>=0&&id<256)natural[id]=1;
             }
             const quads=[];
-            for(const [key,mask] of planes){
-                const f=Math.floor(key/(height+1)),plane=key%(height+1);
-                const w=widths[f],h=heights[f];
-                for(let v=0;v<h;v++)for(let u=0;u<w;u++){
-                    const idPlus=mask[v*w+u];if(!idPlus)continue;
-                    // Do not merge over a chunk X/Z boundary; whole chunks can
-                    // be removed from a tile mesh when their high-res mesh arrives.
-                    const maxWidth=(f<=1||f>=4)?CHUNK_SIZE-(u%CHUNK_SIZE):CHUNK_SIZE-(u%CHUNK_SIZE);
-                    const maxHeight=f<=1?CHUNK_SIZE-(v%CHUNK_SIZE):h-v;
-                    let a=1,b=1;
-                    while(a<maxWidth&&u+a<w&&mask[v*w+u+a]===idPlus)a++;
-                    outer:while(b<maxHeight&&v+b<h){for(let du=0;du<a;du++)if(mask[(v+b)*w+u+du]!==idPlus)break outer;b++;}
-                    for(let dv=0;dv<b;dv++)for(let du=0;du<a;du++)mask[(v+dv)*w+u+du]=0;
-                    let x=0,y=0,z=0,sx=1,sy=1,sz=1;
-                    if(f<=1){x=u;y=plane;z=v;sx=a;sz=b;}
-                    else if(f<=3){x=plane;y=v;z=u;sy=b;sz=a;}
-                    else {x=u;y=v;z=plane;sx=a;sy=b;}
-                    quads.push(x,y,z,sx,sy,sz,f,idPlus-1);
+            // A volume-majority coarse voxel approximation made mountain and
+            // snow surfaces look like floating checkerboard slabs. Instead,
+            // follow the actual highest natural ground block at every X/Z
+            // position and simplify only nearly-flat patches. This preserves
+            // terrain silhouettes, ravines, and biome borders without drawing
+            // every interior underground block.
+            const surfaceY=new Int16Array(size*size);
+            const surfaceId=new Uint8Array(size*size);
+            const featureGround=new Uint8Array(size*size);
+            const atSurface=(x,z)=>z*size+x;
+            if(dim===0){
+                for(let z=0;z<size;z++)for(let x=0;x<size;x++){
+                    for(let y=upper;y>=0;y--){
+                        const pos=idx(x,y,z),id=voxels[pos];
+                        if(id && natural[id] && !preservedEdits.has(pos)){
+                            const s=atSurface(x,z);surfaceY[s]=y+1;surfaceId[s]=id;
+                            // Do not flatten the ground below a real cactus,
+                            // tree, flower, or structure: their block-aligned
+                            // geometry must stay connected to its base.
+                            for(let fy=y+1;fy<=upper&&fy<=y+16;fy++){
+                                const fpos=idx(x,fy,z),fblock=voxels[fpos];
+                                if(fblock&&!natural[fblock] || preservedEdits.has(fpos)){
+                                    featureGround[s]=1;break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                // Adjacent horizontal cells are collapsed only when their
+                // heights are already close. Steep terrain and ravine edges
+                // are never converted into large flat voxel blocks.
+                const soften=(unit,tolerance)=>{
+                    for(let z0=0;z0<size;z0+=unit)for(let x0=0;x0<size;x0+=unit){
+                        const hs=[];let id=0,lo=32767,hi=-1,compatible=true;
+                        for(let dz=0;dz<unit&&compatible;dz++)for(let dx=0;dx<unit;dx++){
+                            const p=atSurface(x0+dx,z0+dz),h=surfaceY[p],m=surfaceId[p];
+                            if(!m||featureGround[p]||(id&&m!==id)){compatible=false;break;}
+                            id=m;hs.push(h);lo=Math.min(lo,h);hi=Math.max(hi,h);
+                        }
+                        if(!compatible||hi-lo>tolerance)continue;
+                        hs.sort((a,b)=>a-b);
+                        const median=hs[Math.floor((hs.length-1)/2)];
+                        for(let dz=0;dz<unit;dz++)for(let dx=0;dx<unit;dx++){
+                            surfaceY[atSurface(x0+dx,z0+dz)]=median;
+                        }
+                    }
+                };
+                if(step===8)soften(2,1);
+                if(step===16){soften(4,2);soften(2,1);}
+                // Greedy top-face merging on the true surface, bounded by each
+                // source chunk so full-detail replacement cannot hide only
+                // part of a distant polygon.
+                const visited=new Uint8Array(size*size);
+                for(let z=0;z<size;z++)for(let x=0;x<size;x++){
+                    const pos=atSurface(x,z),h=surfaceY[pos],id=surfaceId[pos];
+                    if(!h||!id||visited[pos])continue;
+                    const right=Math.min(size,x+CHUNK_SIZE-(x%CHUNK_SIZE));
+                    const bottom=Math.min(size,z+CHUNK_SIZE-(z%CHUNK_SIZE));
+                    let width=1,depth=1;
+                    while(x+width<right){const p=atSurface(x+width,z);
+                        if(visited[p]||surfaceY[p]!==h||surfaceId[p]!==id)break;
+                        width++;
+                    }
+                    nextRow:while(z+depth<bottom){
+                        for(let dx=0;dx<width;dx++){
+                            const p=atSurface(x+dx,z+depth);
+                            if(visited[p]||surfaceY[p]!==h||surfaceId[p]!==id)break nextRow;
+                        }
+                        depth++;
+                    }
+                    for(let dz=0;dz<depth;dz++)for(let dx=0;dx<width;dx++)visited[atSurface(x+dx,z+dz)]=1;
+                    quads.push(x,h-1,z,width,1,depth,0,id);
+                }
+                // Emit only visible cliff sides, using the actual blocks in
+                // each column to retain stone/dirt/snow strata. Unlike filled
+                // coarse volumes, these cannot create floating terrain slabs.
+                const wallRuns=new Map();
+                for(let z=0;z<size;z++)for(let x=0;x<size;x++){
+                    const h=surfaceY[atSurface(x,z)];if(!h)continue;
+                    for(let face=2;face<=5;face++){
+                        const nx=x+(face===2?1:face===3?-1:0);
+                        const nz=z+(face===4?1:face===5?-1:0);
+                        const inTile=nx>=0&&nx<size&&nz>=0&&nz<size;
+                        const other=inTile?surfaceY[atSurface(nx,nz)]:Math.max(0,h-4);
+                        if(h<=other)continue;
+                        let runId=0,runStart=other;
+                        const flush=top=>{
+                            if(!runId||top<=runStart)return;
+                            const qx=face===2?x+1:x,qz=face===4?z+1:z;
+                            // Greedy merge coplanar adjacent cliff faces, without
+                            // merging across the 16-block chunk transition.
+                            const along=face===2||face===3?z:x;
+                            const plane=face===2||face===3?qx:qz;
+                            const key=[face,plane,runStart,top,runId,Math.floor(along/CHUNK_SIZE)].join(':');
+                            const previous=wallRuns.get(key);
+                            if(previous!==undefined){
+                                const prevPos=face===2||face===3?quads[previous+2]+quads[previous+5]:quads[previous]+quads[previous+3];
+                                if(prevPos===along){
+                                    quads[previous+(face===2||face===3?5:3)]++;
+                                    return;
+                                }
+                            }
+                            const next=quads.length;
+                            quads.push(qx,runStart,qz,1,top-runStart,1,face,runId);
+                            wallRuns.set(key,next);
+                        };
+                        for(let y=other;y<h;y++){
+                            const block=voxels[idx(x,y,z)];
+                            // A shifted/softened surface still gets a wall
+                            // underneath it, but not an invented upper ledge.
+                            const id=block&&natural[block]?block:((y>=h-2)?surfaceId[atSurface(x,z)]:BLOCKS.STONE);
+                            if(runId!==id){flush(y);runId=id;runStart=y;}
+                        }
+                        flush(h);
+                    }
                 }
             }
+            // Non-Overworld dimensions can contain floating disconnected rock
+            // (notably the Timeless Void), so retain their 3D voxel shapes.
+            const cell=step===4?2:step===8?4:8,vertical=2;
+            const nx=size/cell,nz=nx,ny=Math.ceil((upper+1)/vertical);
+            const coarse=new Uint8Array(dim===0?0:nx*nz*ny);
+            const at=(x,y,z)=>y*nx*nz+z*nx+x;
+            if(dim!==0)for(let cy=0;cy<ny;cy++)for(let cz=0;cz<nz;cz++)for(let cx=0;cx<nx;cx++){
+                const x=cx*cell,z=cz*cell,y=cy*vertical;
+                let filled=0,bestId=0,bestCount=0;
+                const samples=[];
+                for(const dz of [0,cell-1])for(const dx of [0,cell-1])for(const dy of [0,1]){
+                    const sy=y+dy,id=sy<=upper?voxels[idx(x+dx,sy,z+dz)]:0;
+                    if(!natural[id]||!id)continue;
+                    filled++;samples.push(id);
+                    let count=0;for(const v of samples)if(v===id)count++;
+                    if(count>=bestCount){bestCount=count;bestId=id;}
+                }
+                if(filled>=4)coarse[at(cx,cy,cz)]=bestId;
+            }
+            // Greedy merge of coarse terrain faces. Each mask is one face-plane;
+            // masks never merge over the 16x16 chunk boundaries.
+            function emitPass(w,h,depth,sx,sy,sz,material){
+                const planes=new Map();
+                const widths=[w,w,h,h,w,w];
+                const heights=[h,h,depth,depth,depth,depth];
+                const planeStride=Math.max(w,h,depth)+1;
+                function mark(f,plane,u,v,id){
+                    const key=f*planeStride+plane;
+                    let mask=planes.get(key);
+                    if(!mask){mask=new Uint16Array(widths[f]*heights[f]);planes.set(key,mask);}
+                    mask[v*widths[f]+u]=id+1;
+                }
+                for(let yy=0;yy<depth;yy++)for(let zz=0;zz<h;zz++)for(let xx=0;xx<w;xx++){
+                    const id=material(xx,yy,zz);if(!id)continue;
+                    const neighbor=(x,y,z)=>x>=0&&x<w&&y>=0&&y<depth&&z>=0&&z<h?material(x,y,z):0;
+                    // Opaque neighbors hide matching faces. Different
+                    // translucent plant/glass/liquid materials retain a seam.
+                    const exposed=(nb)=>{
+                        if(!nb)return true;
+                        if(nb===id)return false;
+                        const transparent=v=>v===BLOCKS.GLASS||v===BLOCKS.LEAVES||
+                            v===BLOCKS.SPRUCE_LEAVES||v===BLOCKS.JUNGLE_LEAVES||
+                            v===BLOCKS.ACACIA_LEAVES||(v>=BLOCKS.WATER_SOURCE&&v<=BLOCKS.LAVA_FLOW_3);
+                        return transparent(id)||transparent(nb);
+                    };
+                    if(exposed(neighbor(xx,yy+1,zz)))mark(0,yy+1,xx,zz,id);
+                    if(exposed(neighbor(xx,yy-1,zz)))mark(1,yy,xx,zz,id);
+                    // Preserve an outward-facing wall at chunk boundaries so
+                    // a neighboring coarse cell can be hidden independently by
+                    // its arriving full-resolution chunk without opening a seam.
+                    const chunkW=CHUNK_SIZE/sx,chunkD=CHUNK_SIZE/sz;
+                    if(xx%chunkW===chunkW-1||exposed(neighbor(xx+1,yy,zz)))mark(2,xx+1,zz,yy,id);
+                    if(xx%chunkW===0||exposed(neighbor(xx-1,yy,zz)))mark(3,xx,zz,yy,id);
+                    if(zz%chunkD===chunkD-1||exposed(neighbor(xx,yy,zz+1)))mark(4,zz+1,xx,yy,id);
+                    if(zz%chunkD===0||exposed(neighbor(xx,yy,zz-1)))mark(5,zz,xx,yy,id);
+                }
+                for(const [key,mask] of planes){
+                    const f=Math.floor(key/planeStride),plane=key%planeStride;
+                    const width=widths[f],high=heights[f];
+                    for(let v=0;v<high;v++)for(let u=0;u<width;u++){
+                        const idPlus=mask[v*width+u];if(!idPlus)continue;
+                        const unit=CHUNK_SIZE/sx;
+                        const maxWidth=unit-(u%unit);
+                        const maxHeight=f<=1?CHUNK_SIZE/sz-(v%(CHUNK_SIZE/sz)):high-v;
+                        let a=1,b=1;
+                        while(a<maxWidth&&u+a<width&&mask[v*width+u+a]===idPlus)a++;
+                        outer:while(b<maxHeight&&v+b<high){for(let du=0;du<a;du++)if(mask[(v+b)*width+u+du]!==idPlus)break outer;b++;}
+                        for(let dv=0;dv<b;dv++)for(let du=0;du<a;du++)mask[(v+dv)*width+u+du]=0;
+                        let x=0,y=0,z=0,dx=1,dy=1,dz=1;
+                        if(f<=1){x=u*sx;y=plane*sy;z=v*sz;dx=a*sx;dz=b*sz;}
+                        else if(f<=3){x=plane*sx;y=v*sy;z=u*sz;dy=b*sy;dz=a*sz;}
+                        else {x=u*sx;y=v*sy;z=plane*sz;dx=a*sx;dy=b*sy;}
+                        quads.push(x,y,z,dx,dy,dz,f,idPlus-1);
+                    }
+                }
+            }
+            if(dim!==0)emitPass(nx,nz,ny,cell,vertical,cell,(x,y,z)=>coarse[at(x,y,z)]);
+            // Preserve thin decorations and the exact layout of cabins, mansions,
+            // outposts, dungeon entrances, fences, glass, saplings and cacti.
+            // Natural terrain is already represented above so it is not emitted
+            // as millions of individual distant block faces.
+            const feat=(x,y,z)=>{const pos=idx(x,y,z),id=voxels[pos];return natural[id]&&!preservedEdits.has(pos)?0:id;};
+            emitPass(size,size,upper+1,1,1,1,feat);
             return {quads:new Uint16Array(quads),step};
         }
 
@@ -7786,11 +7951,11 @@ function getBaseBiome(x, z) {
                 const x=source[i],y=source[i+1],z=source[i+2];
                 const sx=source[i+3],sy=source[i+4],sz=source[i+5];
                 const f=source[i+6],id=source[i+7];
-                // Every exact generated block belongs to one 16x16 chunk.
-                // Greedy quads never cross those boundaries.
+                // Every source quad belongs to one 16x16 chunk.
+                // Both coarse and detailed quads stop at those boundaries.
                 if(chunkMeshes.has(chunkKey(tile.dim,
-                    tile.gx*LOD_GROUP_CHUNKS+Math.floor(x/CHUNK_SIZE),
-                    tile.gz*LOD_GROUP_CHUNKS+Math.floor(z/CHUNK_SIZE))))continue;
+                    tile.gx*LOD_GROUP_CHUNKS+Math.floor((x-(f===2?0.001:0))/CHUNK_SIZE),
+                    tile.gz*LOD_GROUP_CHUNKS+Math.floor((z-(f===4?0.001:0))/CHUNK_SIZE))))continue;
                 const color=BLOCK_COLORS[id]||BLOCK_COLORS[BLOCKS.STONE];
                 const rgb=f===0?color.top:f===1?color.bottom:color.side;
                 const v=verts[f],normal=normals[f];
@@ -9757,8 +9922,8 @@ function getBaseBiome(x, z) {
                         addChatMessage("/tp <player> <x> <y> <z> <dimension> - 1 Overworld, 2 Timeless Void, 3 Boss", "chatSystem");
                     } else addChatMessage("/tp [x] [y] [z] - Teleport", "chatSystem");
                     addChatMessage("/time [0-24] - Set time of day", "chatSystem");
-                    addChatMessage("/rd <2-16> - High-resolution render distance", "chatSystem");
-                    addChatMessage("/edrd <high-res+1 to 64|off> - Extended render distance (local only)","chatSystem");
+                    addChatMessage("/rd <2-64> - High-resolution render distance (local only)", "chatSystem");
+                    addChatMessage("/edrd <high-res+1 to 96|off> - Extended render distance (local only)","chatSystem");
                     addChatMessage("/place <mansion|outpost|cabin|dungeon|alt_maze|boss_shrine|boss_arena> - Generate structure", "chatSystem");
                     addChatMessage("/locate <structure> - Find the nearest generated structure", "chatSystem");
                     addChatMessage("/killall - Kill loaded mobs", "chatSystem");
@@ -9822,14 +9987,14 @@ function getBaseBiome(x, z) {
                 case 'rd':
                     if (args.length < 1) return addChatMessage("Usage: /rd [distance]", "chatError");
                     const newRd = parseInt(args[0]);
-                    if (!isNaN(newRd) && newRd >= 2 && newRd <= (isMobilePlaying?MOBILE_MAX_RENDER_DISTANCE:16)) { setRenderDistance(newRd); addChatMessage(`High-res distance set to ${newRd} chunks`, "chatSuccess"); } 
+                    if (!isNaN(newRd) && newRd >= 2 && newRd <= 64) { setRenderDistance(newRd); addChatMessage(`High-res distance set to ${newRd} chunks`, "chatSuccess"); } 
                     else addChatMessage("Invalid render distance.", "chatError");
                     break;
                 case 'edrd':
-                    if(args.length!==1){addChatMessage(`Usage: /edrd <${RENDER_DISTANCE+1}-64|off>`, 'chatError');break;}
+                    if(args.length!==1){addChatMessage(`Usage: /edrd <${RENDER_DISTANCE+1}-96|off>`, 'chatError');break;}
                     if(args[0].toLowerCase()==='off'){setExtendedEnabled(false);addChatMessage('Extended distance disabled','chatSuccess');break;}
                     if(setExtendedDistance(Number(args[0])))addChatMessage(`Extended distance set to ${EXTENDED_RENDER_DISTANCE} chunks`,'chatSuccess');
-                    else addChatMessage(`Extended distance must be greater than high-res distance (${RENDER_DISTANCE}) and at most 64`,'chatError');
+                    else addChatMessage(`Extended distance must be greater than high-res distance (${RENDER_DISTANCE}) and at most 96`,'chatError');
                     break;
                 case 'mobcap':
                     break;
@@ -10667,22 +10832,22 @@ function getBaseBiome(x, z) {
         function syncCoreSettingsUI(){
             for(const id of ['setLodDetail','menuSetLodDetail']) { const el=document.getElementById(id); if(el) el.value=String(LOD_DETAIL); }
             for(const id of ['setExtendedEnabled','menuExtendedEnabled']) {const el=document.getElementById(id);if(el)el.checked=EXTENDED_ENABLED;}
-            for(const id of ['setExtendedRd','menuExtendedRd']) {const el=document.getElementById(id);if(el){el.min=String(RENDER_DISTANCE+1);el.value=String(EXTENDED_RENDER_DISTANCE);el.disabled=!EXTENDED_ENABLED;}}
+            for(const id of ['setExtendedRd','menuExtendedRd']) {const el=document.getElementById(id);if(el){el.min=String(RENDER_DISTANCE+1);el.max='96';el.value=String(EXTENDED_RENDER_DISTANCE);el.disabled=!EXTENDED_ENABLED;}}
             for(const id of ['extendedVal','menuExtendedVal']) {const el=document.getElementById(id);if(el)el.textContent=String(EXTENDED_RENDER_DISTANCE);} 
             for(const id of ['setTextures','menuSetTextures']){const el=document.getElementById(id);if(el)el.checked=Boolean(texturesEnabled);}
-            for(const id of ['setRd','menuSetRd']) {const el=document.getElementById(id);if(el)el.max=String(isMobilePlaying?MOBILE_MAX_RENDER_DISTANCE:16);}
+            for(const id of ['setRd','menuSetRd']) {const el=document.getElementById(id);if(el)el.max='64';}
             for(const [id,value] of [['setRd',RENDER_DISTANCE],['menuSetRd',RENDER_DISTANCE],['setVol',Math.round(masterVolume*100)],['menuSetVol',Math.round(masterVolume*100)],['setFov',FOV],['menuSetFov',FOV],['setSens',Math.round(MOUSE_SENSITIVITY/.002*100)],['menuSetSens',Math.round(MOUSE_SENSITIVITY/.002*100)]]){const el=document.getElementById(id);if(el)el.value=String(value);}
             for(const [id,value] of [['rdVal',RENDER_DISTANCE],['menuRdVal',RENDER_DISTANCE],['volVal',Math.round(masterVolume*100)],['menuVolVal',Math.round(masterVolume*100)],['fovVal',FOV],['menuFovVal',FOV],['sensVal',Math.round(MOUSE_SENSITIVITY/.002*100)],['menuSensVal',Math.round(MOUSE_SENSITIVITY/.002*100)]]){const el=document.getElementById(id);if(el)el.textContent=String(value);}
         }
         function setRenderDistance(value){
-            RENDER_DISTANCE=Math.max(2,Math.min(isMobilePlaying?MOBILE_MAX_RENDER_DISTANCE:16,parseInt(value)||6));
+            RENDER_DISTANCE=Math.max(2,Math.min(64,parseInt(value)||6));
             EXTENDED_RENDER_DISTANCE=Math.max(RENDER_DISTANCE+1,EXTENDED_RENDER_DISTANCE);
             safeStorageSet('mellorcraftRenderDistance',String(RENDER_DISTANCE));
             safeStorageSet('mellorcraftExtendedDistance',String(EXTENDED_RENDER_DISTANCE));
             chunkMaintenanceTimer=0;syncCoreSettingsUI();
         }
         function setExtendedEnabled(value){EXTENDED_ENABLED=Boolean(value);safeStorageSet('mellorcraftExtendedEnabled',EXTENDED_ENABLED?'1':'0');chunkMaintenanceTimer=0;clearLodTiles();syncCoreSettingsUI();}
-        function setExtendedDistance(value){const n=Number(value);if(!Number.isInteger(n)||n<=RENDER_DISTANCE||n>64)return false;
+        function setExtendedDistance(value){const n=Number(value);if(!Number.isInteger(n)||n<=RENDER_DISTANCE||n>96)return false;
             EXTENDED_RENDER_DISTANCE=n;EXTENDED_ENABLED=true;safeStorageSet('mellorcraftExtendedDistance',String(n));safeStorageSet('mellorcraftExtendedEnabled','1');chunkMaintenanceTimer=0;syncCoreSettingsUI();return true;
         }
         for(const id of ['setExtendedEnabled','menuExtendedEnabled'])document.getElementById(id).addEventListener('change',e=>setExtendedEnabled(e.target.checked));
@@ -10985,7 +11150,14 @@ function getBaseBiome(x, z) {
                 } else if(!chunkMeshes.has(key)&&!chunkBuildSet.has(key)) needed.push({key,distSq,remesh:false});
             }
             needed.sort((a,b)=>a.distSq-b.distSq);
-            for(const entry of needed) entry.remesh ? scheduleChunkRemesh(entry.key) : queueChunkBuild(entry.key);
+            // Huge chosen radii (up to 64) should stream progressively instead of
+            // flooding generation queues with all ~13,000 possible chunks.
+            let queued=0;
+            const remaining=Math.max(0,(isMobilePlaying?80:384)-chunkBuildSet.size-chunkGenerationQueued.size);
+            for(const entry of needed){
+                if(entry.remesh)scheduleChunkRemesh(entry.key);
+                else if(queued<remaining){queueChunkBuild(entry.key);queued++;}
+            }
             const unloadSq=(fullDetailRadius()+2)*(fullDetailRadius()+2);
             for(const [key,mesh] of chunkMeshes){
                 if(!mesh||(mesh.dim===currentDimension&&(mesh.cx-px)*(mesh.cx-px)+(mesh.cz-pz)*(mesh.cz-pz)>unloadSq)){
@@ -11317,7 +11489,7 @@ function getBaseBiome(x, z) {
                 }
             }
 
-            // Lightweight distant/placeholder terrain (one draw per 4x4 chunk tile).
+            // Coarse distant terrain and exact decorations (one draw per 4x4 chunk tile).
             setPointLights([]);
             gl.uniform1f(uDistantAtlasMode,1);
             for(const tile of lodTiles.values()){

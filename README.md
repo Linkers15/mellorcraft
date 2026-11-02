@@ -1,3 +1,99 @@
+MellorCraft v1.8.4 — Visual Terrain LOD Fix
+==========================================
+
+CURRENT HOTFIX (version remains 1.8.4)
+
+FIXED: DISTANT TERRAIN PATCHWORK / FLOATING-LOOKING SLABS
+- Distant Overworld terrain now follows the actual generated surface height at
+  every column. It no longer decides whether entire 2x2/4x4/8x8 voxel volumes
+  are solid based on a few corner samples: that was the cause of unnatural
+  floating snowy patches, huge square ledges, and dark cliffs in the screenshot.
+- Ground surfaces are greedily merged into faces only where their height and
+  block material match. Adjacent cliff faces are also merged for efficiency.
+- Balanced/Fast simplify only *nearly flat* patches (respectively 2x2 and 4x4
+  adaptive areas). Ravines and steep slopes retain their actual contours.
+- No surface smoothing is applied to the ground directly beneath trees, cacti,
+  flowers, saved edits, or structures, preventing decorations from floating.
+- Other dimensions retain their 3D floating rock geometry; the Timeless Void
+  still has the previous approximately 50% rock density.
+
+RENDER DISTANCES AND FEATURES
+- High-resolution distance remains configurable up to 64 chunks.
+- Extended distance remains optional and must exceed high-resolution distance;
+  /rd and /edrd commands are unchanged (maximum extended distance 96 chunks).
+- Distant texture resolutions are still High 8x8, Balanced 4x4, Fast 2x2.
+- Exact tree, cactus, structure and player-edit placements are still emitted.
+  This preserves recognizable scene landmarks.
+- Saves, server and relay protocols, climates, snow, caves, and drops are unchanged.
+
+VALIDATION AND PERFORMANCE NOTE
+- JavaScript syntax, existing climate/weather/cave/Timeless Void tests, server
+  drop tests and new 1x1 terrain coverage/height anchoring/chunk masking tests
+  passed. Distant meshes produced ~7256 / 7228 / 6987 quads in the synthetic
+  High/Balanced/Fast test; counts vary considerably with terrain.
+- Following real terrain heights may create more distant faces than the prior
+  broken coarse-voxel approximation. Exact FPS and visual appearance have NOT
+  been verified in an interactive WebGL session here. Try 12-16 high-res and
+  32 extended with Balanced detail before raising the distances.
+- Back up valuable worlds before switching builds; save-format compatibility
+  is retained. For a fair comparison use the same seed and camera location.
+
+------------------------------------------------------------------------
+HISTORICAL v1.8.4 NOTES (older LOD method below is superseded)
+------------------------------------------------------------------------
+
+MellorCraft v1.8.4 — Coarse Extended Terrain + 64-Chunk High Resolution
+======================================================================
+
+CURRENT BUILD (version remains 1.8.4)
+
+GEOMETRY-BASED EXTENDED DETAIL
+- Replaced the expensive per-block distant terrain mesh with actual lower-detail
+  geometry derived from the same seeded voxel chunks as the playable world.
+- Ordinary natural terrain (stone, grass, dirt, sand, snow, common stone
+  variants, and liquids) is pooled into larger voxel cells. This simplifies
+  rocky slopes and cave surfaces instead of just lowering texture resolution.
+- Non-terrain features such as tree trunks/leaves, cacti, flowers, cabins,
+  mansions, building materials and special blocks retain their source position
+  and shape. Explicit saved edits also remain represented at source positions.
+- Quality settings adjust BOTH terrain geometry AND block texture atlas:
+    High:     2x2 horizontal terrain cells / 8x8 texture pixels
+    Balanced: 4x4 horizontal terrain cells / 4x4 texture pixels (default)
+    Fast:     8x8 horizontal terrain cells / 2x2 texture pixels
+  Vertical detail for natural terrain is grouped in 2-block cells.
+- Individual distant chunks transition to their full meshes as they are
+  generated. Tile face masks are prevented from merging across chunk
+  boundaries; exposed boundary sides are retained to avoid disappearing seams.
+- This intentionally does NOT preserve every natural block in the distance.
+  Thin natural ledges, small cave openings and fine terrain detail may be
+  simplified. Distinctive structures and placed blocks remain recognizable.
+
+TWO INDEPENDENT RENDER DISTANCES
+- High-resolution distance is selectable from 2 to 64 chunks in Settings or
+  with /rd <2-64>. The previous hidden desktop 16-chunk mesh cap is removed.
+- Extended distance is optional, ranges from high-res+1 to 96 chunks, and can
+  be changed with /edrd <n> or /edrd off (no operator permissions required).
+- Increasing the high-res value automatically raises the saved extended value
+  if necessary, preserving extended > high-res whenever extension is enabled.
+- These settings are saved locally; no world save or protocol changes.
+- At high values (especially 32-64 full-resolution chunks), memory and GPU
+  demands can be substantial. New chunk requests are queued in bounded batches
+  rather than all at once. The selected radius is honored progressively, but
+  very large worlds can take time to populate and may exceed device resources.
+
+REGRESSIONS / VALIDATION
+- Targeted test scenes generated ~2,898 / 1,241 / 584 distant quads at the
+  High / Balanced / Fast settings, while retaining original cactus, tree,
+  building, glass and edit geometry. These figures are sample-dependent.
+- Existing climate/seed-map, mega-cave, Timeless Void, snow, ravine-fog and
+  dedicated-server dropped-item tests passed. JS and Python syntax passed.
+- No interactive WebGL/FPS benchmark has been completed. Test with a new world
+  and back up valuable saves before setting very large render distances.
+
+------------------------------------------------------------------------
+PREVIOUS v1.8.4 CHANGELOG (earlier rendering rules below may be superseded)
+------------------------------------------------------------------------
+
 MellorCraft 1.8.4 — Hotbar, Dynamic Drops & Exact Extended Chunks
 =================================================================
 
