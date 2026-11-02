@@ -1,3 +1,43 @@
+MellorCraft v1.8.4 — Distant Seam and Maximum-FOV Wall Hotfix
+==============================================================
+
+CURRENT UPDATE (version remains 1.8.4)
+
+DISTANT TERRAIN GAPS
+- Closed the vertical skirts at the edges of the 4x4-chunk LOD tiles down
+  to the dimension floor instead of leaving them only four blocks deep.
+  This eliminates see-through cracks when adjacent terrain has a larger
+  height difference, including while a distant tile is loading.
+- For full-detail chunks beside ready distant tiles, the adjacent terrain
+  surface height now determines which boundary faces need to be visible.
+  Missing/unready tiles remain opaque to prevent seeing underground.
+- When a distant tile first becomes drawable, any nearby full-detail mesh
+  touching an unfinished neighbor is queued for a boundary refresh.
+- Retained surface-height contours, real block/structure placement, the
+  existing 8x8/4x4/2x2 LOD texture choices and /rd /edrd behavior.
+
+MAXIMUM FOV WALL CLIPPING
+- At high FOV and on wide screens, the camera's old fixed 0.1-unit
+  near clipping plane could extend beyond the player's collision footprint.
+  While close to a wall, the near plane now shrinks enough for its corners
+  to remain within that footprint, preventing edge-of-screen wall peeking.
+- When not near a wall, the original 0.1-unit near plane is retained to
+  preserve depth-buffer precision for far terrain. The FOV range stays 30-110.
+- Wall probes use already-loaded block data and never force new chunks to
+  generate during rendering.
+
+TESTING AND LIMITATIONS
+- JavaScript parsing, original gameplay/terrain tests, and Python syntax
+  checks pass. Additional tests check complete vertical side-wall coverage
+  across an 18-block LOD height discontinuity in all quality settings and
+  near-plane clearance up to 110 FOV on ultrawide displays.
+- No interactive WebGL screenshot or live GPU/FPS test was possible in this
+  environment; please test both issues at their original locations.
+- Back up worlds before updates as usual. No save, server, or relay
+  protocol changes were needed for this client-side hotfix.
+
+----------------------------------------------------------------------------
+
 MellorCraft v1.8.4 — Visual Terrain LOD Fix
 ==========================================
 

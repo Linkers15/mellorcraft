@@ -4918,6 +4918,26 @@
             sun.style.display = 'block';
         }
 
+        // The eye sits within a 0.25-block horizontal collision half-width.
+        // At large FOVs the corners of a fixed 0.1 near clip plane can extend
+        // outside that footprint and clip a wall pressed against the player.
+        // Keep the ENTIRE near plane within the body, including wide monitors.
+        function playerCameraNearPlane(fovDegrees, aspect, nearWall=true) {
+            // Preserve 0.1 depth precision for distant geometry when no wall
+            // is close enough to clip the screen corners.
+            if(!nearWall)return 0.1;
+            const halfAngle=Math.max(1,fovDegrees)*Math.PI/360;
+            const cornerSlope=Math.tan(halfAngle)*Math.hypot(aspect,1);
+            return Math.min(0.1,0.22/Math.max(0.0001,cornerSlope));
+        }
+        function wallCloseToCamera() {
+            if(player.gamemode==='spectator')return false;
+            const y=Math.floor(playerEyeY()),r=0.46;
+            for(const [dx,dz] of [[-1,0],[1,0],[0,-1],[0,1],[-.707,-.707],[-.707,.707],[.707,-.707],[.707,.707]]){
+                if(SOLID_BLOCKS.has(peekLoadedBlock(Math.floor(player.x+dx*r),y,Math.floor(player.z+dz*r))))return true;
+            }
+            return false;
+        }
         function perspective(fov, aspect, near, far) {
             const f = 1.0 / Math.tan(fov / 2);
             return new Float32Array([
@@ -7113,7 +7133,12 @@ function getBaseBiome(x, z) {
                         const nx=x+(face===2?1:face===3?-1:0);
                         const nz=z+(face===4?1:face===5?-1:0);
                         const inTile=nx>=0&&nx<size&&nz>=0&&nz<size;
-                        const other=inTile?surfaceY[atSurface(nx,nz)]:Math.max(0,h-4);
+                        // Tile borders must be closed all the way to the world floor.
+                        // The old four-block skirt left transparent holes whenever
+                        // the adjacent LOD tile (or full-detail chunk) was lower by
+                        // more than four blocks. Interior columns still meet at
+                        // their actual two surface heights, so no slabs are added.
+                        const other=inTile?surfaceY[atSurface(nx,nz)]:0;
                         if(h<=other)continue;
                         let runId=0,runStart=other;
                         const flush=top=>{
@@ -7709,17 +7734,32 @@ function getBaseBiome(x, z) {
                 [[1,0,0],[0,0,0],[0,1,0],[1,0,0],[0,1,0],[1,1,0]]
             ];
             const norms = [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
+            const neighborSurfaceCache = new Map();
 
             function voxel(x, y, z) {
                 if (y < 0 || y >= dimensionHeight) return BLOCKS.AIR;
                 if (x >= 0 && x < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE) return chunk[indexOf(x, y, z)];
                 const wx = worldX0 + x, wz = worldZ0 + z;
-                // A missing or unmeshed neighboring chunk is UNKNOWN, not air.
-                // Treat it as opaque until both chunks have drawable meshes; otherwise
-                // chunk gaps expose a cutaway view of stone, ores and underground caves.
+                // Unknown adjacent chunks are NOT empty air: doing so exposes
+                // underground cross sections. But when a matching LOD tile is
+                // already drawable, hiding every full-detail boundary face
+                // creates a crack above the lower LOD terrain. Use a cached
+                // conservative terrain height only for that LOD handoff.
                 const ncx = Math.floor(wx / CHUNK_SIZE), ncz = Math.floor(wz / CHUNK_SIZE);
                 const neighborKey = chunkKey(dim, ncx, ncz);
-                if (!chunkMeshes.has(neighborKey)) return BLOCKS.STONE;
+                if (!chunkMeshes.has(neighborKey)) {
+                    const neighborTile=lodTiles.get(lodGroupKey(dim,
+                        Math.floor(ncx/LOD_GROUP_CHUNKS),Math.floor(ncz/LOD_GROUP_CHUNKS)));
+                    if(dim!==0||!neighborTile||!neighborTile.gpu||neighborTile.gpu.empty)
+                        return BLOCKS.STONE;
+                    const columnKey=wx+','+wz;
+                    let surface=neighborSurfaceCache.get(columnKey);
+                    if(surface===undefined){
+                        surface=getHeight(wx,wz,getBiome(wx,wz));
+                        neighborSurfaceCache.set(columnKey,surface);
+                    }
+                    return y>surface?BLOCKS.AIR:BLOCKS.STONE;
+                }
                 const neighborChunk = chunks.get(neighborKey);
                 if (!neighborChunk) return BLOCKS.STONE;
                 const nlx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
@@ -7983,6 +8023,22 @@ function getBaseBiome(x, z) {
                 const tile=lodTiles.get(key);if(!tile||!tile.quads)continue;
                 const previous=tile.gpu;
                 tile.gpu=buildLodMesh(tile);
+                if(!previous && tile.gpu && !tile.gpu.empty && tile.dim===currentDimension){
+                    // Rebuild the small set of loaded chunk boundaries which
+                    // previously treated this still-loading tile as opaque.
+                    for(let dz=-1;dz<=LOD_GROUP_CHUNKS;dz++)for(let dx=-1;dx<=LOD_GROUP_CHUNKS;dx++){
+                        const cx=tile.gx*LOD_GROUP_CHUNKS+dx,cz=tile.gz*LOD_GROUP_CHUNKS+dz;
+                        const key=chunkKey(tile.dim,cx,cz);
+                        if(!chunkMeshes.has(key))continue;
+                        if(Math.abs(cx-Math.floor(player.x/CHUNK_SIZE))>fullDetailRadius()+1||
+                           Math.abs(cz-Math.floor(player.z/CHUNK_SIZE))>fullDetailRadius()+1)continue;
+                        // Only meshes touching an unfinished neighbor need
+                        // their new height-aware boundary masks recomputed.
+                        if([[1,0],[-1,0],[0,1],[0,-1]].some(([ox,oz])=>
+                            !chunkMeshes.has(chunkKey(tile.dim,cx+ox,cz+oz))))
+                            scheduleChunkRemesh(key);
+                    }
+                }
                 if(previous)disposeChunkMesh(previous);
                 if(++count>=budget)break;
             }
@@ -11381,7 +11437,10 @@ function getBaseBiome(x, z) {
 
             gl.enable(gl.DEPTH_TEST);
             gl.useProgram(program);
-            uProjectionMat = perspective((FOV * Math.PI) / 180, canvas.width / canvas.height, 0.1, Math.max(1000, (visibleRenderDistance()+4)*CHUNK_SIZE*1.5));
+            const cameraAspect=canvas.width/Math.max(1,canvas.height);
+            uProjectionMat = perspective((FOV * Math.PI) / 180, cameraAspect,
+                playerCameraNearPlane(FOV,cameraAspect,wallCloseToCamera()),
+                Math.max(1000, (visibleRenderDistance()+4)*CHUNK_SIZE*1.5));
             uViewMat = viewMatrix([player.x, playerEyeY(), player.z], player.pitch, player.yaw);
             
             gl.uniformMatrix4fv(uProjection, false, uProjectionMat);
