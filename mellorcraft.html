@@ -1077,6 +1077,7 @@
         <div id="timeDisplay">Day 1 - 12:00</div>
         <div id="info">
             <div>FPS: <span id="fps">0</span></div>
+            <div id="perfStats" style="display:none;font-size:11px;white-space:pre-line;"></div>
             <div><span id="positionLabel">Position:</span> <span id="position">0, 0, 0</span></div>
             <div>Biome: <span id="biome">Plains</span></div>
             <div><span id="gamemodeLabel">Gamemode:</span> <span id="gmDisplay">Survival</span></div>
@@ -4712,39 +4713,60 @@
         }
 
 
-        // Gather every loaded torch independently of the camera position. Terrain
-        // chooses lights per chunk, not per player; distant torches remain lit.
+        // Cache world lights in chunk-sized buckets. Previously every visible
+        // chunk scanned *all* world torches every frame (O(chunks × torches));
+        // this scales badly at 32–64 chunk high-resolution distances.
+        let cachedWorldLightBuckets=null, cachedWorldLightRevision=-1;
+        let cachedWorldLightDimension=-1, cachedWorldLightAt=0;
         function allLoadedPointLights(){
-            const points=[];
-            for(const mesh of chunkMeshes.values())if(mesh&&mesh.dim===currentDimension&&mesh.torchLights)points.push(...mesh.torchLights);
+            const now=performance.now();
+            if(cachedWorldLightBuckets&&cachedWorldLightRevision===chunkMeshRevision &&
+                cachedWorldLightDimension===currentDimension&&now-cachedWorldLightAt<350)
+                return cachedWorldLightBuckets;
+            const buckets=new Map();
+            const add=p=>{
+                const key=`${Math.floor(p[0]/CHUNK_SIZE)},${Math.floor(p[2]/CHUNK_SIZE)}`;
+                let list=buckets.get(key);
+                if(!list){list=[];buckets.set(key,list);}
+                list.push(p);
+            };
+            for(const mesh of chunkMeshes.values()){
+                if(mesh&&mesh.dim===currentDimension&&mesh.torchLights)
+                    for(const p of mesh.torchLights)add(p);
+            }
             for(const [key,f] of furnaceStates){
                 if(!f||Number(f.burnTime)<=0||Number(f.ingredientCount)<=0||!FURNACE_RECIPES[Number(f.ingredientId)])continue;
                 const parts=key.split(',').map(Number);
                 if(parts.length===4&&parts[0]===currentDimension&&peekLoadedBlock(parts[1],parts[2],parts[3],currentDimension)===BLOCKS.FURNACE)
-                    points.push([parts[1]+.5,parts[2]+.62,parts[3]+.5]);
+                    add([parts[1]+.5,parts[2]+.62,parts[3]+.5]);
             }
-            return points;
+            cachedWorldLightBuckets=buckets;cachedWorldLightRevision=chunkMeshRevision;
+            cachedWorldLightDimension=currentDimension;cachedWorldLightAt=now;
+            return buckets;
         }
-        function chunkPointLights(mesh,points){
+        function chunkPointLights(mesh,buckets){
             const nearest=[];
             const eyeY=playerEyeY();
             const maxTorchRadius=(liteShaderEnabled?5.0:2.9)*shaderTorchRange;
-            for(const p of points){
-                const dx=Math.max(0,Math.abs(p[0]-mesh.centerX)-8);
-                const dz=Math.max(0,Math.abs(p[2]-mesh.centerZ)-8);
-                const horizontal=dx*dx+dz*dz;
-                if(horizontal>(maxTorchRadius+1)*(maxTorchRadius+1))continue;
-                // Previous code compared only X/Z. In a multi-level maze it
-                // could choose four basement torches for the upper floor, so
-                // torches on those floors visibly emitted no light at all.
-                // Follow the viewed floor and favor nearby lamps on that floor.
-                const dy=p[1]-eyeY;
-                const px=p[0]-player.x,pz=p[2]-player.z;
-                const score=horizontal*3+dy*dy*1.6+(px*px+pz*pz)*0.14;
-                let i=nearest.length;
-                while(i>0&&nearest[i-1].score>score)i--;
-                nearest.splice(i,0,{p,score});
-                if(nearest.length>4)nearest.pop();
+            const cx=mesh.cx,cz=mesh.cz;
+            // Torches farther than one adjacent chunk are always outside the
+            // supported light radius; only nine buckets need examination.
+            for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+                const points=buckets.get(`${cx+dx},${cz+dz}`);
+                if(!points)continue;
+                for(const p of points){
+                    const bx=Math.max(0,Math.abs(p[0]-mesh.centerX)-8);
+                    const bz=Math.max(0,Math.abs(p[2]-mesh.centerZ)-8);
+                    const horizontal=bx*bx+bz*bz;
+                    if(horizontal>(maxTorchRadius+1)*(maxTorchRadius+1))continue;
+                    const dy=p[1]-eyeY;
+                    const px=p[0]-player.x,pz=p[2]-player.z;
+                    const score=horizontal*3+dy*dy*1.6+(px*px+pz*pz)*0.14;
+                    let i=nearest.length;
+                    while(i>0&&nearest[i-1].score>score)i--;
+                    nearest.splice(i,0,{p,score});
+                    if(nearest.length>4)nearest.pop();
+                }
             }
             return nearest.map(v=>v.p);
         }
@@ -5092,7 +5114,11 @@
         const lodTiles = new Map();
         const lodRequestQueue = [], lodRequestSet = new Set();
         const lodDirtyTiles = new Set();
+        // Keep quick decorated previews independent of slow 16-chunk exact LOD jobs.
+        // Neither worker exists while extended rendering is switched off.
         let lodWorker = null, lodPendingKey = null, lodWorkerReady = false;
+        let lodExactWorker = null, lodExactPendingKey = null, lodExactWorkerReady = false;
+        let lodWorkerSource = null;
         let lodEpoch = 0;
         const sharedChunkEdits = new Map();
         let chunkBuildQueue = [];
@@ -6973,17 +6999,20 @@ function getBaseBiome(x, z) {
         }
 
 
-        function generateDecorationChunk(cx,cz){
+        function generateDecorationChunk(cx,cz,sampledHeights=null,sampledBiomes=null,originX=0,originZ=0,sourceWidth=0){
             const chunk=new Uint8Array(CHUNK_SIZE*WORLD_HEIGHT*CHUNK_SIZE);
             const indexOf=(x,y,z)=>x+y*CHUNK_SIZE+z*CHUNK_SIZE*WORLD_HEIGHT;
             const heights=new Uint16Array(CHUNK_SIZE*CHUNK_SIZE);
+            let hasStructure=false;
             for(let x=0;x<CHUNK_SIZE;x++)for(let z=0;z<CHUNK_SIZE;z++){
                 const wx=cx*CHUNK_SIZE+x,wz=cz*CHUNK_SIZE+z;
-                const biome=getBiome(wx,wz);
-                if(![BIOMES.PLAINS,BIOMES.FOREST,BIOMES.FLOWER_FOREST,BIOMES.TAIGA,BIOMES.MOUNTAINS_LOW,BIOMES.JUNGLE,BIOMES.SAVANNA,BIOMES.DESERT_CACTUS].includes(biome))continue;
-                const height=getHeight(wx,wz,biome);
-                heights[z*CHUNK_SIZE+x]=height;
+                const sampleIndex=sampledHeights?(originZ+z)*sourceWidth+originX+x:0;
+                const biome=sampledBiomes?sampledBiomes[sampleIndex]:getBiome(wx,wz);
                 const struct=getSurfaceStructure(wx,wz);
+                if(struct)hasStructure=true;
+                if(![BIOMES.PLAINS,BIOMES.FOREST,BIOMES.FLOWER_FOREST,BIOMES.TAIGA,BIOMES.MOUNTAINS_LOW,BIOMES.JUNGLE,BIOMES.SAVANNA,BIOMES.DESERT_CACTUS].includes(biome))continue;
+                const height=sampledHeights?sampledHeights[sampleIndex]-1:getHeight(wx,wz,biome);
+                heights[z*CHUNK_SIZE+x]=height;
                 // World generation suppresses natural decorations over structures
                 // and ravines, even when the coarse distant surface spans them.
                 const ravine=getRavineRange(wx,wz,height);
@@ -7004,7 +7033,181 @@ function getBaseBiome(x, z) {
                     const id=chunk[indexOf(x,y,z)];if(id&&id!==BLOCKS.AIR)out.push(x,y,z,id);
                 }
             }
+            out.hasStructure=hasStructure;
             return out;
+        }
+
+        // Quick first-pass coverage while the exact distant tile is generating.
+        // Previous builds left an entire 64x64 tile invisible until a second
+        // worker had generated SIXTEEN full underground voxel chunks. That is
+        // particularly noticeable while flying: nearby chunks suddenly appear
+        // only once the player approaches and the normal chunk worker catches up.
+        // The preview samples actual world heights at each block (no coarse
+        // 4x4 floating slabs), covers every surface column and fills cliff edges.
+        // The full LOD worker result subsequently replaces this provisional mesh
+        // with structures, edits, trees and other real world details.
+        function generateLodPreview(gx,gz,dim,step,edits=[]){
+            const size=LOD_GROUP_CHUNKS*CHUNK_SIZE, area=size*size;
+            const heights=new Uint16Array(area),materials=new Uint8Array(area),biomes=new Uint8Array(area);
+            const idx=(x,z)=>z*size+x;
+            for(let z=0;z<size;z++)for(let x=0;x<size;x++){
+                const wx=gx*size+x,wz=gz*size+z;
+                const biome=getBiome(wx,wz);
+                const y=Math.max(1,Math.min(WORLD_HEIGHT-2,Math.round(getHeight(wx,wz,biome))));
+                biomes[idx(x,z)]=biome;
+                heights[idx(x,z)]=y+1;
+                materials[idx(x,z)]=biome===BIOMES.DESERT_BARREN||biome===BIOMES.DESERT_CACTUS?BLOCKS.SAND:
+                    biome===BIOMES.BADLANDS?BLOCKS.RED_SAND:
+                    biome===BIOMES.TAIGA||biome===BIOMES.SNOWY_PLAINS||
+                    biome===BIOMES.MOUNTAINS_LOW||biome===BIOMES.MOUNTAINS_MID||
+                    biome===BIOMES.MOUNTAINS_HIGH?BLOCKS.SNOW:BLOCKS.GRASS;
+            }
+            const quads=[];
+            const visited=new Uint8Array(area);
+            for(let z=0;z<size;z++)for(let x=0;x<size;x++){
+                const n=idx(x,z),h=heights[n],material=materials[n];
+                if(visited[n])continue;
+                const xmax=x+CHUNK_SIZE-(x%CHUNK_SIZE),zmax=z+CHUNK_SIZE-(z%CHUNK_SIZE);
+                let w=1,d=1;
+                while(x+w<xmax){const j=idx(x+w,z);if(visited[j]||heights[j]!==h||materials[j]!==material)break;w++;}
+                rows:while(z+d<zmax){for(let a=0;a<w;a++){
+                    const j=idx(x+a,z+d);
+                    if(visited[j]||heights[j]!==h||materials[j]!==material)break rows;
+                }d++;}
+                for(let rz=0;rz<d;rz++)for(let rx=0;rx<w;rx++)visited[idx(x+rx,z+rz)]=1;
+                quads.push(x,h-1,z,w,1,d,0,material);
+            }
+            // Boundary skirts are intentionally deep: an adjacent tile may not
+            // have its preview uploaded yet. They do not invent horizontal slabs.
+            for(let z=0;z<size;z++)for(let x=0;x<size;x++){
+                const h=heights[idx(x,z)];
+                for(let face=2;face<=5;face++){
+                    const nx=x+(face===2?1:face===3?-1:0);
+                    const nz=z+(face===4?1:face===5?-1:0);
+                    const nh=nx>=0&&nx<size&&nz>=0&&nz<size?heights[idx(nx,nz)]:0;
+                    if(h<=nh)continue;
+                    const id=h-nh<=2?materials[idx(x,z)]:BLOCKS.STONE;
+                    // Quads store their block-space ORIGIN. The face vertex
+                    // template adds +1 on east/south faces during rendering.
+                    // Adding it here too displaced cliff walls by a full block.
+                    quads.push(x,nh,z,1,h-nh,1,face,id);
+                }
+            }
+            // The preview must never be bare ground for an extended period.
+            // The complete distant tile is expensive (16 underground chunks),
+            // so place the SAME seeded decorations as normal chunks immediately.
+            // Only chunks with surface structures run complete generation here;
+            // ordinary forest, desert and plains tiles remain lightweight.
+            if(dim===0)appendLodPreviewFeatures(quads,gx,gz,edits,heights,biomes);
+            return {quads:new Uint16Array(quads),step,preview:true};
+        }
+
+        function appendLodPreviewFeatures(quads,gx,gz,edits=[],sampledHeights=null,sampledBiomes=null){
+            const size=LOD_GROUP_CHUNKS*CHUNK_SIZE;
+            const stride=size*size;
+            // Scratch storage lives only inside the worker for a single request.
+            // Sparse positions prevent a full 3-D scan of empty preview space.
+            const features=new Uint8Array(stride*WORLD_HEIGHT);
+            const occupied=new Set();
+            const at=(x,y,z)=>y*stride+z*size+x;
+            const place=(x,y,z,id)=>{
+                if(x<0||x>=size||z<0||z>=size||y<0||y>=WORLD_HEIGHT)return;
+                const p=at(x,y,z);
+                features[p]=id;
+                if(id)occupied.add(p);
+                else occupied.delete(p);
+            };
+            // Match the terrain generator's vegetation and cactus decisions;
+            // this is NOT a separate random set of decorative proxy trees.
+            const natural=new Uint8Array(256);
+            for(const id of [BLOCKS.GRASS,BLOCKS.DIRT,BLOCKS.STONE,BLOCKS.SAND,BLOCKS.SNOW,
+                BLOCKS.RED_SAND,BLOCKS.TERRACOTTA,BLOCKS.PACKED_ICE,BLOCKS.BEDROCK,
+                BLOCKS.GRANITE,BLOCKS.DIORITE,BLOCKS.ANDESITE,BLOCKS.LIMESTONE,
+                BLOCKS.SLATE,BLOCKS.DEEPSLATE,BLOCKS.RED_STONE,BLOCKS.BLUE_STONE,
+                BLOCKS.COAL_ORE,BLOCKS.IRON_ORE,BLOCKS.GOLD_ORE,BLOCKS.DIAMOND_ORE,
+                BLOCKS.WATER_SOURCE,BLOCKS.WATER_FLOW_1,BLOCKS.WATER_FLOW_2,BLOCKS.WATER_FLOW_3,
+                BLOCKS.LAVA_SOURCE,BLOCKS.LAVA_FLOW_1,BLOCKS.LAVA_FLOW_2,BLOCKS.LAVA_FLOW_3]){
+                if(Number.isInteger(id)&&id>=0&&id<256)natural[id]=1;
+            }
+            for(let dz=0;dz<LOD_GROUP_CHUNKS;dz++)for(let dx=0;dx<LOD_GROUP_CHUNKS;dx++){
+                const cx=gx*LOD_GROUP_CHUNKS+dx,cz=gz*LOD_GROUP_CHUNKS+dz;
+                const decoration=generateDecorationChunk(cx,cz,sampledHeights,sampledBiomes,
+                    dx*CHUNK_SIZE,dz*CHUNK_SIZE,size);
+                for(let i=0;i<decoration.length;i+=4)
+                    place(dx*CHUNK_SIZE+decoration[i],decoration[i+1],dz*CHUNK_SIZE+decoration[i+2],decoration[i+3]);
+                // Surface structures are uncommon. Use original block generation
+                // only for their chunks, so cabins, mansions and outposts are
+                // visible without waiting for the slow whole-tile upgrade.
+                if(decoration.hasStructure){
+                    const chunk=generateChunk(cx,cz,0);
+                    const top=Math.min(WORLD_HEIGHT-1,Number(chunk.generatedMaxY)||WORLD_HEIGHT-1);
+                    for(let z=0;z<CHUNK_SIZE;z++)for(let y=0;y<=top;y++){
+                        const base=y*CHUNK_SIZE+z*CHUNK_SIZE*WORLD_HEIGHT;
+                        for(let x=0;x<CHUNK_SIZE;x++){
+                            const id=chunk[base+x];
+                            if(id&&!natural[id])place(dx*CHUNK_SIZE+x,y,dz*CHUNK_SIZE+z,id);
+                        }
+                    }
+                }
+            }
+            // Apply saved changes before drawing the preview. The later exact
+            // LOD job still handles missing underground faces and cave details.
+            for(const entry of edits){
+                const x=entry[0]|0,y=entry[1]|0,z=entry[2]|0,id=entry[3]|0;
+                place(x,y,z,id);
+            }
+            const neighbor=(x,y,z)=>
+                x>=0&&x<size&&z>=0&&z<size&&y>=0&&y<WORLD_HEIGHT?features[at(x,y,z)]:0;
+            const transparent=id=>id===BLOCKS.GLASS||id===BLOCKS.LEAVES||
+                id===BLOCKS.SPRUCE_LEAVES||id===BLOCKS.JUNGLE_LEAVES||
+                id===BLOCKS.ACACIA_LEAVES||isLiquidBlock(id);
+            const exposed=(id,next)=>!next||(next!==id&&(transparent(id)||transparent(next)));
+            // Greedy-merge identical exposed flower, leaf, trunk and building
+            // faces. Without this step dense forests create tens of thousands
+            // of separate preview faces per tile. Merging stops at each 16x16
+            // chunk border so full-resolution chunks can replace them safely.
+            const planeStride=WORLD_HEIGHT+size+1;
+            const masks=new Map();
+            const faceWidth=size;
+            function mark(face,plane,u,v,id){
+                const key=face*planeStride+plane;
+                let mask=masks.get(key);
+                if(!mask){mask=new Uint16Array(size*(face<=1?size:WORLD_HEIGHT));masks.set(key,mask);}
+                mask[v*faceWidth+u]=id+1;
+            }
+            for(const p of occupied){
+                const id=features[p];if(!id)continue;
+                const y=Math.floor(p/stride),rem=p-y*stride,z=Math.floor(rem/size),x=rem-z*size;
+                if(exposed(id,neighbor(x,y+1,z)))mark(0,y+1,x,z,id);
+                if(exposed(id,neighbor(x,y-1,z)))mark(1,y,x,z,id);
+                if(exposed(id,neighbor(x+1,y,z)))mark(2,x+1,z,y,id);
+                if(exposed(id,neighbor(x-1,y,z)))mark(3,x,z,y,id);
+                if(exposed(id,neighbor(x,y,z+1)))mark(4,z+1,x,y,id);
+                if(exposed(id,neighbor(x,y,z-1)))mark(5,z,x,y,id);
+            }
+            for(const [key,mask] of masks){
+                const face=Math.floor(key/planeStride),plane=key%planeStride;
+                const high=face<=1?size:WORLD_HEIGHT;
+                for(let v=0;v<high;v++)for(let u=0;u<size;u++){
+                    const idPlus=mask[v*faceWidth+u];if(!idPlus)continue;
+                    const maxWidth=CHUNK_SIZE-(u%CHUNK_SIZE);
+                    const maxHeight=face<=1?CHUNK_SIZE-(v%CHUNK_SIZE):high-v;
+                    let width=1,depth=1;
+                    while(width<maxWidth&&u+width<size&&mask[v*faceWidth+u+width]===idPlus)width++;
+                    row:while(depth<maxHeight&&v+depth<high){
+                        for(let du=0;du<width;du++)if(mask[(v+depth)*faceWidth+u+du]!==idPlus)break row;
+                        depth++;
+                    }
+                    for(let dv=0;dv<depth;dv++)for(let du=0;du<width;du++)mask[(v+dv)*faceWidth+u+du]=0;
+                    const id=idPlus-1;
+                    if(face===0)quads.push(u,plane-1,v,width,1,depth,face,id);
+                    else if(face===1)quads.push(u,plane,v,width,1,depth,face,id);
+                    else if(face===2)quads.push(plane-1,v,u,1,depth,width,face,id);
+                    else if(face===3)quads.push(plane,v,u,1,depth,width,face,id);
+                    else if(face===4)quads.push(u,v,plane-1,width,depth,1,face,id);
+                    else quads.push(u,v,plane,width,depth,1,face,id);
+                }
+            }
         }
 
         // Extended LOD is a hybrid mesh built from the same deterministic chunks
@@ -7158,7 +7361,9 @@ function getBaseBiome(x, z) {
                                 }
                             }
                             const next=quads.length;
-                            quads.push(qx,runStart,qz,1,top-runStart,1,face,runId);
+                            // qx/qz above identify the face PLANE for merging;
+                            // the renderer expects the originating block cell.
+                            quads.push(x,runStart,z,1,top-runStart,1,face,runId);
                             wallRuns.set(key,next);
                         };
                         for(let y=other;y<h;y++){
@@ -7242,8 +7447,8 @@ function getBaseBiome(x, z) {
                         for(let dv=0;dv<b;dv++)for(let du=0;du<a;du++)mask[(v+dv)*width+u+du]=0;
                         let x=0,y=0,z=0,dx=1,dy=1,dz=1;
                         if(f<=1){x=u*sx;y=plane*sy;z=v*sz;dx=a*sx;dz=b*sz;}
-                        else if(f<=3){x=plane*sx;y=v*sy;z=u*sz;dy=b*sy;dz=a*sz;}
-                        else {x=u*sx;y=v*sy;z=plane*sz;dx=a*sx;dy=b*sy;}
+                        else if(f<=3){x=(plane-(f===2?1:0))*sx;y=v*sy;z=u*sz;dy=b*sy;dz=a*sz;}
+                        else {x=u*sx;y=v*sy;z=(plane-(f===4?1:0))*sz;dx=a*sx;dy=b*sy;}
                         quads.push(x,y,z,dx,dy,dz,f,idPlus-1);
                     }
                 }
@@ -7269,9 +7474,93 @@ function getBaseBiome(x, z) {
             }
         }
 
+        function ensureLodWorker(){
+            if(!EXTENDED_ENABLED||!lodWorkerSource||typeof Worker==='undefined')return;
+            // A long exact tile must never stall the preview worker. This is
+            // especially important in flight when new 64x64 tiles enter view.
+            const create=(exact)=>{
+                let url=null;
+                try{
+                    url=URL.createObjectURL(new Blob([lodWorkerSource],{type:'application/javascript'}));
+                    const worker=new Worker(url);
+                    if(exact)lodExactWorker=worker;else lodWorker=worker;
+                    worker.onmessage=event=>{
+                        const data=event.data||{};
+                        if(data.type==='ready'){
+                            if(url){URL.revokeObjectURL(url);url=null;}
+                            if(exact)lodExactWorkerReady=true;else lodWorkerReady=true;
+                            dispatchLodRequest();return;
+                        }
+                        if(data.type==='error'){
+                            console.warn(exact?'Distant detail worker:':'Distant preview worker:',data.message);
+                            if(exact)lodExactPendingKey=null;else lodPendingKey=null;
+                            const failed=lodTiles.get(data.key);
+                            if(failed){
+                                failed.errorCount=(failed.errorCount||0)+1;
+                                if(!exact)failed.previewFailed=true;
+                                if(failed.errorCount<3&&!lodRequestSet.has(data.key)){
+                                    lodRequestSet.add(data.key);lodRequestQueue.push(data.key);
+                                }
+                            }
+                            dispatchLodRequest();return;
+                        }
+                        if(data.type!==(exact?'lod':'lod_preview'))return;
+                        if(exact)lodExactPendingKey=null;else lodPendingKey=null;
+                        const tile=lodTiles.get(data.key);
+                        if(tile && tile.step===data.step && (tile.revision||0)===(data.revision||0) &&
+                           tile.dim===data.dim && data.dim===currentDimension){
+                            // An older preview must never overwrite an exact tile.
+                            if(exact||!tile.quads||tile.preview){
+                                tile.quads=new Uint16Array(data.quads);
+                                tile.appliedRevision=data.revision||0;
+                                tile.preview=!exact;tile.previewFailed=false;tile.errorCount=0;
+                                lodDirtyTiles.add(data.key);
+                            }
+                            if(!exact&&!lodRequestSet.has(data.key)){
+                                // Exact geometry, subterranean features, and all
+                                // saved edits can follow without delaying previews.
+                                lodRequestSet.add(data.key);lodRequestQueue.push(data.key);
+                            }
+                        }else if(tile&&tile.dim===currentDimension&&!lodRequestSet.has(data.key)){
+                            lodRequestSet.add(data.key);lodRequestQueue.push(data.key);
+                        }
+                        dispatchLodRequest();
+                    };
+                    worker.onerror=event=>{
+                        console.warn(exact?'Distant detail worker stopped:':'Distant preview worker stopped:',event.message||event);
+                        if(url){URL.revokeObjectURL(url);url=null;}
+                        worker.terminate();
+                        if(exact){
+                            const pending=lodExactPendingKey;
+                            lodExactWorker=null;lodExactWorkerReady=false;lodExactPendingKey=null;
+                            if(pending&&!lodRequestSet.has(pending)){lodRequestSet.add(pending);lodRequestQueue.push(pending);}
+                        }else{
+                            const pending=lodPendingKey;
+                            lodWorker=null;lodWorkerReady=false;lodPendingKey=null;
+                            if(pending){
+                                const tile=lodTiles.get(pending);if(tile)tile.previewFailed=true;
+                                if(!lodRequestSet.has(pending)){lodRequestSet.add(pending);lodRequestQueue.push(pending);}
+                            }
+                        }
+                        dispatchLodRequest();
+                    };
+                    worker.postMessage({type:'init',seed:WORLD_SEED});
+                }catch(error){
+                    if(url)URL.revokeObjectURL(url);
+                    console.warn('Could not start distant terrain worker:',error);
+                    if(exact){lodExactWorker=null;lodExactWorkerReady=false;}
+                    else{lodWorker=null;lodWorkerReady=false;}
+                }
+            };
+            if(!lodWorker)create(false);
+            if(!lodExactWorker)create(true);
+        }
+
         function initChunkGenerationWorker() {
             if (lodWorker) { lodWorker.terminate(); lodWorker = null; }
-            lodWorkerReady=false; lodPendingKey=null; lodEpoch++;
+            if (lodExactWorker) { lodExactWorker.terminate(); lodExactWorker = null; }
+            lodWorkerReady=false; lodPendingKey=null;
+            lodExactWorkerReady=false; lodExactPendingKey=null; lodEpoch++;
             clearLodTiles();
             if (chunkGenerationWorker) { chunkGenerationWorker.terminate(); chunkGenerationWorker = null; }
             chunkGenerationPending.clear();
@@ -7282,7 +7571,7 @@ function getBaseBiome(x, z) {
                 posRand, posRand3D, isCave, getMegaCaveCell, deepChamberAt, isMegaCave, getRavineRange, isRavine,
                 storageLootBlock, oreLootBlock, generatorStructureChance, woodFamilyForBiome, getDungeonStructure, getSurfaceStructure,
                 getAltMazeAt, getAltStructure, layoutParent, structureHallMask, mansionLayout, mansionCentralHallAt, mansionHallAt, mansionOrePositions, altMazeLayout, altMazeCentralHallAt, altMazeSpecialRoom, altMazeHallAt, connectedRoomDoor, mansionBlockAt, altMazeBlockAt, stairStepAt, compactOreVeinAt, getOreType, getStoneVariant, randomCabinBed, getPlainsTreeSpot,
-                isWaterBlock, isLavaBlock, isLiquidBlock, decorateChunkColumn, generateDecorationChunk, generateChunk, generateLodTile
+                isWaterBlock, isLavaBlock, isLiquidBlock, decorateChunkColumn, generateDecorationChunk, generateChunk, appendLodPreviewFeatures, generateLodPreview, generateLodTile
             ];
             const workerSource = [
                 `const BLOCKS=${JSON.stringify(BLOCKS)};`,
@@ -7292,13 +7581,13 @@ function getBaseBiome(x, z) {
                 `const ALT_BIOMES=${JSON.stringify(ALT_BIOMES)};`,
                 `const CUSTOM_BIOME_DEFS=${JSON.stringify(CUSTOM_BIOME_DEFS)};`,
                 `let worldGenSettings=${JSON.stringify(normalizeWorldGenSettings(worldGenSettings))};`,
-                `const CHUNK_SIZE=${CHUNK_SIZE},WORLD_HEIGHT=${WORLD_HEIGHT},ALT_WORLD_HEIGHT=${ALT_WORLD_HEIGHT},WATER_LEVEL=${WATER_LEVEL};`,
+                `const CHUNK_SIZE=${CHUNK_SIZE},WORLD_HEIGHT=${WORLD_HEIGHT},ALT_WORLD_HEIGHT=${ALT_WORLD_HEIGHT},WATER_LEVEL=${WATER_LEVEL},LOD_GROUP_CHUNKS=${LOD_GROUP_CHUNKS};`,
                 `const MOUNTAIN_XZ_SCALE=${MOUNTAIN_XZ_SCALE};`,
                 'let currentDimension=0,WORLD_SEED=0,noise,biomeNoise,treeNoise,caveNoise,oreNoise,ravineNoise,structNoise,continentalNoise,lavaNoise;',
                 'const biomeProvinceCache=new Map(),structureHallCache=new Map(),mansionOreCache=new Map(),altMazeRoomCache=new Map(),mountainRegionCache=new Map(),mountainInfoCache=new Map(),megaCaveCache=new Map(),lavaPoolCache=new Map(),plainsTreeSpotCache=new Map(),customBiomeInfoCache=new Map(),knownDungeonSpawners=new Set();',
                 ...workerFunctions.map(fn => fn.toString()),
                 `function setWorkerSeed(seed){WORLD_SEED=seed;noise=new SimplexNoise(seed);biomeNoise=new SimplexNoise(seed+1000);treeNoise=new SimplexNoise(seed+2000);caveNoise=new SimplexNoise(seed+3000);oreNoise=new SimplexNoise(seed+4000);ravineNoise=new SimplexNoise(seed+5000);structNoise=new SimplexNoise(seed+6000);continentalNoise=new SimplexNoise(seed+7000);lavaNoise=new SimplexNoise(seed+8000);biomeProvinceCache.clear();mountainRegionCache.clear();mountainInfoCache.clear();megaCaveCache.clear();lavaPoolCache.clear();structureHallCache.clear();mansionOreCache.clear();altMazeRoomCache.clear();plainsTreeSpotCache.clear();customBiomeInfoCache.clear();knownDungeonSpawners.clear();}`,
-                `self.onmessage=e=>{const d=e.data||{};if(d.type==='init'){setWorkerSeed(Number(d.seed)||0);self.postMessage({type:'ready'});return;}try{if(d.type==='generate'){const chunk=generateChunk(Number(d.cx),Number(d.cz),Number(d.dim));const maxY=Number(chunk.generatedMaxY)||1;self.postMessage({type:'chunk',key:d.key,dim:Number(d.dim),cx:Number(d.cx),cz:Number(d.cz),maxY,buffer:chunk.buffer},[chunk.buffer]);}else if(d.type==='lod'){const tile=generateLodTile(Number(d.gx),Number(d.gz),Number(d.dim),Number(d.step),d.edits||[]);self.postMessage({type:'lod',key:d.key,dim:Number(d.dim),gx:Number(d.gx),gz:Number(d.gz),step:tile.step,revision:d.revision,quads:tile.quads.buffer},[tile.quads.buffer]);}}catch(error){self.postMessage({type:'error',key:d.key,message:String(error&&error.stack||error)});}};`
+                `self.onmessage=e=>{const d=e.data||{};if(d.type==='init'){setWorkerSeed(Number(d.seed)||0);self.postMessage({type:'ready'});return;}try{if(d.type==='generate'){const chunk=generateChunk(Number(d.cx),Number(d.cz),Number(d.dim));const maxY=Number(chunk.generatedMaxY)||1;self.postMessage({type:'chunk',key:d.key,dim:Number(d.dim),cx:Number(d.cx),cz:Number(d.cz),maxY,buffer:chunk.buffer},[chunk.buffer]);}else if(d.type==='lod_preview'){const tile=generateLodPreview(Number(d.gx),Number(d.gz),Number(d.dim),Number(d.step),d.edits||[]);self.postMessage({type:'lod_preview',key:d.key,dim:Number(d.dim),gx:Number(d.gx),gz:Number(d.gz),step:tile.step,revision:d.revision,quads:tile.quads.buffer},[tile.quads.buffer]);}else if(d.type==='lod'){const tile=generateLodTile(Number(d.gx),Number(d.gz),Number(d.dim),Number(d.step),d.edits||[]);self.postMessage({type:'lod',key:d.key,dim:Number(d.dim),gx:Number(d.gx),gz:Number(d.gz),step:tile.step,revision:d.revision,quads:tile.quads.buffer},[tile.quads.buffer]);}}catch(error){self.postMessage({type:'error',key:d.key,message:String(error&&error.stack||error)});}};`
             ].join('\n');
             const url = URL.createObjectURL(new Blob([workerSource], { type: 'application/javascript' }));
             const worker = new Worker(url);
@@ -7346,32 +7635,10 @@ function getBaseBiome(x, z) {
                 for (const key of pendingKeys) queueChunkBuild(key, travelChunkPriority.has(key) || key === pendingPortalArrivalKey);
             };
             worker.postMessage({ type: 'init', seed: WORLD_SEED });
-            // Separate worker: distant height samples cannot queue behind slow cave/ore generation.
-            try {
-                const distantWorker = new Worker(url);
-                lodWorker = distantWorker;
-                distantWorker.onmessage = event => {
-                    const data=event.data||{};
-                    if(data.type==='ready'){lodWorkerReady=true;dispatchLodRequest();return;}
-                    if(data.type==='error'){console.warn('Distant terrain worker:',data.message);lodPendingKey=null;dispatchLodRequest();return;}
-                    if(data.type!=='lod')return;
-                    lodPendingKey=null;
-                    const tile=lodTiles.get(data.key);
-                    if(tile && tile.step===data.step && (tile.revision||0)===(data.revision||0) && tile.dim===data.dim && data.dim===currentDimension){
-                        tile.quads=new Uint16Array(data.quads);tile.appliedRevision=data.revision||0;
-                        lodDirtyTiles.add(data.key);
-                    }else if(tile && tile.dim===currentDimension){
-                        // Ignore outdated in-flight tiles without leaving a missing mesh.
-                        if(!lodRequestSet.has(data.key)){lodRequestSet.add(data.key);lodRequestQueue.push(data.key);}
-                    }
-                    dispatchLodRequest();
-                };
-                distantWorker.onerror = event => {
-                    console.warn('Distant terrain worker disabled:',event.message||event);
-                    distantWorker.terminate();lodWorker=null;lodWorkerReady=false;lodPendingKey=null;
-                };
-                distantWorker.postMessage({type:'init',seed:WORLD_SEED});
-            } catch(error) { console.warn('Could not start distant terrain worker:',error); lodWorker=null; }
+            // When Extended Render Distance is off, the full-resolution worker
+            // is the only worker needed. Start the second worker on demand.
+            lodWorkerSource=workerSource;
+            if(EXTENDED_ENABLED)ensureLodWorker();
         }
 
         function getBlock(x, y, z, dim = currentDimension) {
@@ -7900,44 +8167,89 @@ function getBaseBiome(x, z) {
         function clearLodTiles(){
             for(const tile of lodTiles.values())if(tile.gpu)disposeChunkMesh(tile.gpu);
             lodTiles.clear();lodRequestQueue.length=0;lodRequestSet.clear();lodDirtyTiles.clear();
+            lodPreviewStreak=0;
             // In-flight results have no matching tile and will be ignored.
         }
         function lodTileDistance(gx,gz,px,pz){
             const r=LOD_GROUP_CHUNKS, dx=Math.max(gx*r-px,0,px-(gx*r+r-1));
             const dz=Math.max(gz*r-pz,0,pz-(gz*r+r-1));return dx*dx+dz*dz;
         }
-        function dispatchLodRequest(){
-            if(!lodWorker||!lodWorkerReady||lodPendingKey)return;
-            const px=Math.floor(player.x/CHUNK_SIZE),pz=Math.floor(player.z/CHUNK_SIZE);
-            let index=-1,best=Infinity;
-            for(let i=0;i<lodRequestQueue.length;i++){
-                const key=lodRequestQueue[i];
-                if(!lodRequestSet.has(key))continue;
-                const tile=lodTiles.get(key);
-                if(!tile||tile.dim!==currentDimension||(tile.quads&&tile.appliedRevision===(tile.revision||0)))continue;
-                const score=lodTileDistance(tile.gx,tile.gz,px,pz);
-                if(score<best){best=score;index=i;}
+        let lodPreviewStreak=0;
+        function lodTileNeedsCoverage(tile){
+            for(let dz=0;dz<LOD_GROUP_CHUNKS;dz++)for(let dx=0;dx<LOD_GROUP_CHUNKS;dx++){
+                const key=chunkKey(tile.dim,tile.gx*LOD_GROUP_CHUNKS+dx,tile.gz*LOD_GROUP_CHUNKS+dz);
+                if(!chunkMeshes.has(key))return true;
             }
-            if(index<0){lodRequestQueue.length=0;lodRequestSet.clear();return;}
-            const key=lodRequestQueue.splice(index,1)[0];lodRequestSet.delete(key);
-            const tile=lodTiles.get(key);if(!tile)return;
-            lodPendingKey=key;
+            return false;
+        }
+        function lodEditsForTile(tile){
             const edits=[];
             for(let dz=0;dz<LOD_GROUP_CHUNKS;dz++)for(let dx=0;dx<LOD_GROUP_CHUNKS;dx++){
                 const map=sharedChunkEdits.get(chunkKey(tile.dim,tile.gx*LOD_GROUP_CHUNKS+dx,tile.gz*LOD_GROUP_CHUNKS+dz));
                 if(!map)continue;
-                for(const [at,id] of map){const z=Math.floor(at/(CHUNK_SIZE*WORLD_HEIGHT));
+                for(const [at,id] of map){
+                    const z=Math.floor(at/(CHUNK_SIZE*WORLD_HEIGHT));
                     const rem=at-z*CHUNK_SIZE*WORLD_HEIGHT;
                     edits.push([dx*CHUNK_SIZE+(rem%CHUNK_SIZE),Math.floor(rem/CHUNK_SIZE),dz*CHUNK_SIZE+z,Number(id)]);
                 }
             }
-            lodWorker.postMessage({type:'lod',key,dim:tile.dim,gx:tile.gx,gz:tile.gz,step:tile.step,
-                revision:tile.revision||0,edits});
+            return edits;
+        }
+        function dispatchLodRequest(){
+            if(!EXTENDED_ENABLED)return;
+            const canPreview=Boolean(lodWorker&&lodWorkerReady&&!lodPendingKey);
+            const canExact=Boolean(lodExactWorker&&lodExactWorkerReady&&!lodExactPendingKey);
+            if(!canPreview&&!canExact)return;
+            const px=Math.floor(player.x/CHUNK_SIZE),pz=Math.floor(player.z/CHUNK_SIZE);
+            let previewKey=null,previewScore=Infinity,exactKey=null,exactScore=Infinity;
+            for(const key of lodRequestQueue){
+                if(!lodRequestSet.has(key))continue;
+                const tile=lodTiles.get(key);
+                if(!tile||tile.dim!==currentDimension||!lodTileNeedsCoverage(tile))continue;
+                const current=tile.appliedRevision===(tile.revision||0);
+                if(tile.quads&&!tile.preview&&current)continue;
+                const distanceScore=lodTileDistance(tile.gx,tile.gz,px,pz);
+                // While moving, prefer tiles in the camera's forward half.
+                // Their previews are more likely to cover visible sky holes;
+                // distance still dominates for the immediate neighborhood.
+                const centerX=(tile.gx+.5)*LOD_GROUP_CHUNKS-px;
+                const centerZ=(tile.gz+.5)*LOD_GROUP_CHUNKS-pz;
+                const yaw=Number(player.yaw)||0;
+                const lookingForward=centerX*(-Math.sin(yaw))+centerZ*(-Math.cos(yaw))>=-LOD_GROUP_CHUNKS;
+                const score=distanceScore*(lookingForward?.72:1.35);
+                // A decorated first-pass tile is always preferred to a slow
+                // exact upgrade. The two tasks use independent workers.
+                if(!tile.quads&&tile.dim===0&&!tile.previewFailed&&lodWorker){
+                    if(score<previewScore){previewScore=score;previewKey=key;}
+                }else if(score<exactScore){exactScore=score;exactKey=key;}
+            }
+            const send=(key,preview)=>{
+                if(!key)return;
+                lodRequestSet.delete(key);
+                const index=lodRequestQueue.indexOf(key);
+                if(index>=0)lodRequestQueue.splice(index,1);
+                const tile=lodTiles.get(key);if(!tile)return;
+                const message={type:preview?'lod_preview':'lod',key,dim:tile.dim,
+                    gx:tile.gx,gz:tile.gz,step:tile.step,revision:tile.revision||0,
+                    edits:lodEditsForTile(tile)};
+                if(preview){lodPendingKey=key;lodWorker.postMessage(message);}
+                else{lodExactPendingKey=key;lodExactWorker.postMessage(message);}
+            };
+            if(canPreview)send(previewKey,true);
+            if(canExact)send(exactKey,false);
+            // Remove stale queue markers occasionally without O(n) work per frame.
+            if(lodRequestQueue.length>3000){
+                const next=lodRequestQueue.filter(key=>lodRequestSet.has(key)&&lodTiles.has(key));
+                lodRequestQueue.length=0;lodRequestQueue.push(...next);
+            }
         }
         function maintainLodTiles(px,pz){
+            // EXTENDED OFF means every visible chunk must use the full-resolution
+            // pipeline. Do not generate, allocate or show distant terrain at all.
+            if (!EXTENDED_ENABLED) return;
             // Keep LOD terrain for currently ungenerated nearby chunks too, so a
             // worker lag or rapid camera movement does not open a hole in the world.
-            if(!lodWorker)return;
+            if(!lodWorker&&!lodExactWorker)return;
             const r=Math.ceil(visibleRenderDistance()/LOD_GROUP_CHUNKS)+1;
             const pgx=Math.floor(px/LOD_GROUP_CHUNKS),pgz=Math.floor(pz/LOD_GROUP_CHUNKS);
             const maxDist=visibleRenderDistance()*visibleRenderDistance();
@@ -7951,9 +8263,15 @@ function getBaseBiome(x, z) {
                 if(tile&&(tile.step!==step||tile.includeDecorations!==includeDecorations)){tile.step=step;tile.includeDecorations=includeDecorations;tile.quads=null;
                     if(!lodRequestSet.has(key)){lodRequestSet.add(key);lodRequestQueue.push(key);}}
                 if(!tile){
-                    tile={key,dim:currentDimension,gx,gz,step,includeDecorations,quads:null,gpu:null,revision:0};
+                    const potential={dim:currentDimension,gx,gz};
+                    if(!lodTileNeedsCoverage(potential))continue;
+                    tile={key,dim:currentDimension,gx,gz,step,includeDecorations,quads:null,gpu:null,revision:0,preview:false};
                     lodTiles.set(key,tile);
-                    if(!lodRequestSet.has(key)){lodRequestSet.add(key);lodRequestQueue.push(key);}
+                }
+                // A previously skipped tile may become visible again after the
+                // player moves and full-resolution chunks unload. Reschedule it.
+                if(lodTileNeedsCoverage(tile) && (!tile.quads||tile.preview||tile.appliedRevision!==(tile.revision||0)) && !lodRequestSet.has(key) && key!==lodPendingKey && key!==lodExactPendingKey && (tile.errorCount||0)<3){
+                    lodRequestSet.add(key);lodRequestQueue.push(key);
                 }
             }
             for(const [key,tile] of lodTiles){
@@ -7976,7 +8294,6 @@ function getBaseBiome(x, z) {
         function buildLodMesh(tile){
             const size=LOD_GROUP_CHUNKS*CHUNK_SIZE;
             const xBase=tile.gx*size,zBase=tile.gz*size;
-            const p=[],c=[],norm=[],uv=[];
             const verts=[
                 [[0,1,0],[0,1,1],[1,1,1],[0,1,0],[1,1,1],[1,1,0]],
                 [[0,0,0],[1,0,0],[1,0,1],[0,0,0],[1,0,1],[0,0,1]],
@@ -7987,35 +8304,46 @@ function getBaseBiome(x, z) {
             ];
             const normals=[[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
             const source=tile.quads;
+            // Two-pass typed allocation avoids building and copying hundreds
+            // of thousands of boxed numbers in JS arrays for each distant tile.
+            const visible=[];
             for(let i=0;i<source.length;i+=8){
+                const x=source[i],z=source[i+2],f=source[i+6];
+                if(chunkMeshes.has(chunkKey(tile.dim,
+                    // Quads now store their originating BLOCK coordinates on
+                    // every face. The old face-dependent subtraction assigned
+                    // some east/south faces to the wrong neighboring chunk.
+                    tile.gx*LOD_GROUP_CHUNKS+Math.floor(x/CHUNK_SIZE),
+                    tile.gz*LOD_GROUP_CHUNKS+Math.floor(z/CHUNK_SIZE))))continue;
+                visible.push(i);
+            }
+            if(!visible.length)return {count:0,empty:true,dim:tile.dim,centerX:xBase+size/2,centerZ:zBase+size/2};
+            const count=visible.length*6;
+            const p=new Float32Array(count*3),c=new Float32Array(count*3),norm=new Float32Array(count*3),uv=new Uint16Array(count*2);
+            let xyz=0,tex=0;
+            for(const i of visible){
                 const x=source[i],y=source[i+1],z=source[i+2];
                 const sx=source[i+3],sy=source[i+4],sz=source[i+5];
                 const f=source[i+6],id=source[i+7];
-                // Every source quad belongs to one 16x16 chunk.
-                // Both coarse and detailed quads stop at those boundaries.
-                if(chunkMeshes.has(chunkKey(tile.dim,
-                    tile.gx*LOD_GROUP_CHUNKS+Math.floor((x-(f===2?0.001:0))/CHUNK_SIZE),
-                    tile.gz*LOD_GROUP_CHUNKS+Math.floor((z-(f===4?0.001:0))/CHUNK_SIZE))))continue;
                 const color=BLOCK_COLORS[id]||BLOCK_COLORS[BLOCKS.STONE];
                 const rgb=f===0?color.top:f===1?color.bottom:color.side;
                 const v=verts[f],normal=normals[f];
-                for(let j=0;j<6;j++){
-                    p.push(xBase+x+v[j][0]*sx,y+v[j][1]*sy,zBase+z+v[j][2]*sz);
-                    c.push(...rgb);norm.push(...normal);
-                }
-                // Store the tile identifier, not stretched UVs. The distant
-                // fragment shader repeats each 4x4/8x8 texel tile per world block
-                // even when adjacent coplanar faces were greedily merged.
                 const atlas=blockTextureTile(id,f),tx=atlas%ATLAS_GRID,ty=Math.floor(atlas/ATLAS_GRID);
                 const u=Math.round((tx+.5)/ATLAS_GRID*65535),vTex=Math.round((ty+.5)/ATLAS_GRID*65535);
-                for(let j=0;j<6;j++)uv.push(u,vTex);
+                for(let j=0;j<6;j++){
+                    const q=v[j];
+                    p[xyz]=xBase+x+q[0]*sx;p[xyz+1]=y+q[1]*sy;p[xyz+2]=zBase+z+q[2]*sz;
+                    c[xyz]=rgb[0];c[xyz+1]=rgb[1];c[xyz+2]=rgb[2];
+                    norm[xyz]=normal[0];norm[xyz+1]=normal[1];norm[xyz+2]=normal[2];
+                    xyz+=3;uv[tex++]=u;uv[tex++]=vTex;
+                }
             }
             const upload=data=>{const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);return b;};
-            if(!p.length)return {count:0,empty:true,dim:tile.dim,centerX:xBase+size/2,centerZ:zBase+size/2};
-            return {pb:upload(new Float32Array(p)),cb:upload(new Float32Array(c)),nb:upload(new Float32Array(norm)),uvb:upload(new Uint16Array(uv)),
-                count:p.length/3,empty:false,dim:tile.dim,centerX:xBase+size/2,centerZ:zBase+size/2};
+            return {pb:upload(p),cb:upload(c),nb:upload(norm),uvb:upload(uv),
+                count,empty:false,dim:tile.dim,centerX:xBase+size/2,centerZ:zBase+size/2};
         }
         function processLodMeshUpdates(){
+            if (!EXTENDED_ENABLED) return;
             const budget=isMobilePlaying?1:3;
             let count=0;
             for(const key of lodDirtyTiles){
@@ -9944,7 +10272,7 @@ function getBaseBiome(x, z) {
             }
             addChatMessage(cmdStr);
             const parts = cmdStr.substring(1).split(' '), cmd = parts[0].toLowerCase(), args = parts.slice(1);
-            if (!['help','rd','edrd'].includes(cmd) && !localIsOperator) {
+            if (!['help','rd','edrd','perf'].includes(cmd) && !localIsOperator) {
                 addChatMessage('You do not have permission to use commands. Ask the server host to use /op for your username.', 'chatError');
                 return;
             }
@@ -9980,6 +10308,7 @@ function getBaseBiome(x, z) {
                     addChatMessage("/time [0-24] - Set time of day", "chatSystem");
                     addChatMessage("/rd <2-64> - High-resolution render distance (local only)", "chatSystem");
                     addChatMessage("/edrd <high-res+1 to 96|off> - Extended render distance (local only)","chatSystem");
+                    addChatMessage("/perf [on|off] - Show frame/render timing, loaded meshes and streaming jobs (local only)","chatSystem");
                     addChatMessage("/place <mansion|outpost|cabin|dungeon|alt_maze|boss_shrine|boss_arena> - Generate structure", "chatSystem");
                     addChatMessage("/locate <structure> - Find the nearest generated structure", "chatSystem");
                     addChatMessage("/killall - Kill loaded mobs", "chatSystem");
@@ -10046,6 +10375,13 @@ function getBaseBiome(x, z) {
                     if (!isNaN(newRd) && newRd >= 2 && newRd <= 64) { setRenderDistance(newRd); addChatMessage(`High-res distance set to ${newRd} chunks`, "chatSuccess"); } 
                     else addChatMessage("Invalid render distance.", "chatError");
                     break;
+                case 'perf': {
+                    const arg=(args[0]||'').toLowerCase();
+                    perfOverlayEnabled=arg==='on'?true:arg==='off'?false:!perfOverlayEnabled;
+                    document.getElementById('perfStats').style.display=perfOverlayEnabled?'block':'none';
+                    addChatMessage(`Performance diagnostics ${perfOverlayEnabled?'enabled':'disabled'}.`,'chatSuccess');
+                    break;
+                }
                 case 'edrd':
                     if(args.length!==1){addChatMessage(`Usage: /edrd <${RENDER_DISTANCE+1}-96|off>`, 'chatError');break;}
                     if(args[0].toLowerCase()==='off'){setExtendedEnabled(false);addChatMessage('Extended distance disabled','chatSuccess');break;}
@@ -10886,7 +11222,7 @@ function getBaseBiome(x, z) {
             refreshCrouchState();
         });
         function syncCoreSettingsUI(){
-            for(const id of ['setLodDetail','menuSetLodDetail']) { const el=document.getElementById(id); if(el) el.value=String(LOD_DETAIL); }
+            for(const id of ['setLodDetail','menuSetLodDetail']) { const el=document.getElementById(id); if(el){el.value=String(LOD_DETAIL);el.disabled=!EXTENDED_ENABLED;} }
             for(const id of ['setExtendedEnabled','menuExtendedEnabled']) {const el=document.getElementById(id);if(el)el.checked=EXTENDED_ENABLED;}
             for(const id of ['setExtendedRd','menuExtendedRd']) {const el=document.getElementById(id);if(el){el.min=String(RENDER_DISTANCE+1);el.max='96';el.value=String(EXTENDED_RENDER_DISTANCE);el.disabled=!EXTENDED_ENABLED;}}
             for(const id of ['extendedVal','menuExtendedVal']) {const el=document.getElementById(id);if(el)el.textContent=String(EXTENDED_RENDER_DISTANCE);} 
@@ -10902,9 +11238,20 @@ function getBaseBiome(x, z) {
             safeStorageSet('mellorcraftExtendedDistance',String(EXTENDED_RENDER_DISTANCE));
             chunkMaintenanceTimer=0;syncCoreSettingsUI();
         }
-        function setExtendedEnabled(value){EXTENDED_ENABLED=Boolean(value);safeStorageSet('mellorcraftExtendedEnabled',EXTENDED_ENABLED?'1':'0');chunkMaintenanceTimer=0;clearLodTiles();syncCoreSettingsUI();}
+        function setExtendedEnabled(value){
+            EXTENDED_ENABLED=Boolean(value);
+            safeStorageSet('mellorcraftExtendedEnabled',EXTENDED_ENABLED?'1':'0');
+            if(EXTENDED_ENABLED)ensureLodWorker();
+            else{
+                if(lodWorker){lodWorker.terminate();lodWorker=null;}
+                if(lodExactWorker){lodExactWorker.terminate();lodExactWorker=null;}
+                lodWorkerReady=false;lodPendingKey=null;
+                lodExactWorkerReady=false;lodExactPendingKey=null;
+            }
+            chunkMaintenanceTimer=0;clearLodTiles();syncCoreSettingsUI();
+        }
         function setExtendedDistance(value){const n=Number(value);if(!Number.isInteger(n)||n<=RENDER_DISTANCE||n>96)return false;
-            EXTENDED_RENDER_DISTANCE=n;EXTENDED_ENABLED=true;safeStorageSet('mellorcraftExtendedDistance',String(n));safeStorageSet('mellorcraftExtendedEnabled','1');chunkMaintenanceTimer=0;syncCoreSettingsUI();return true;
+            EXTENDED_RENDER_DISTANCE=n;EXTENDED_ENABLED=true;safeStorageSet('mellorcraftExtendedDistance',String(n));safeStorageSet('mellorcraftExtendedEnabled','1');ensureLodWorker();chunkMaintenanceTimer=0;syncCoreSettingsUI();return true;
         }
         for(const id of ['setExtendedEnabled','menuExtendedEnabled'])document.getElementById(id).addEventListener('change',e=>setExtendedEnabled(e.target.checked));
         for(const id of ['setExtendedRd','menuExtendedRd'])document.getElementById(id).addEventListener('input',e=>setExtendedDistance(Number(e.target.value)));
@@ -11194,31 +11541,63 @@ function getBaseBiome(x, z) {
         }
 
 
+        // Cached near-to-far chunk offsets: a 64-chunk radius contains 12,853
+        // positions. Resorting that entire disk every 220ms caused substantial
+        // CPU and GC overhead even when the terrain was already loaded.
+        const chunkOffsetOrderCache = new Map();
+        function orderedChunkOffsets(radius){
+            let order=chunkOffsetOrderCache.get(radius);
+            if(order)return order;
+            order=[];
+            for(let dx=-radius;dx<=radius;dx++)for(let dz=-radius;dz<=radius;dz++){
+                const d2=dx*dx+dz*dz;
+                if(d2<=radius*radius)order.push([dx,dz]);
+            }
+            order.sort((a,b)=>(a[0]*a[0]+a[1]*a[1])-(b[0]*b[0]+b[1]*b[1]));
+            chunkOffsetOrderCache.set(radius,order);
+            return order;
+        }
         function maintainVisibleChunks(px, pz) {
-            maintainLodTiles(px,pz);
-            const needed = [];
+            if(EXTENDED_ENABLED)maintainLodTiles(px,pz);
             const fineRadius=fullDetailRadius();
-            for (let dx=-fineRadius;dx<=fineRadius;dx++) for(let dz=-fineRadius;dz<=fineRadius;dz++){
-                const distSq=dx*dx+dz*dz;if(distSq>fineRadius*fineRadius)continue;
-                const cx=px+dx,cz=pz+dz,key=chunkKey(currentDimension,cx,cz);
-                if(chunkRemeshPending.has(key)) {
-                    if(!chunkBuildSet.has(key)) needed.push({key,distSq,remesh:true});
-                } else if(!chunkMeshes.has(key)&&!chunkBuildSet.has(key)) needed.push({key,distSq,remesh:false});
+            // Edited meshes get priority without having to scan the whole disk.
+            for(const key of chunkRemeshPending){
+                if(chunkBuildSet.has(key))continue;
+                const parts=key.split(','),dim=Number(parts[0]),cx=Number(parts[1]),cz=Number(parts[2]);
+                if(dim===currentDimension&&(cx-px)*(cx-px)+(cz-pz)*(cz-pz)<=fineRadius*fineRadius)
+                    scheduleChunkRemesh(key);
             }
-            needed.sort((a,b)=>a.distSq-b.distSq);
-            // Huge chosen radii (up to 64) should stream progressively instead of
-            // flooding generation queues with all ~13,000 possible chunks.
-            let queued=0;
-            const remaining=Math.max(0,(isMobilePlaying?80:384)-chunkBuildSet.size-chunkGenerationQueued.size);
-            for(const entry of needed){
-                if(entry.remesh)scheduleChunkRemesh(entry.key);
-                else if(queued<remaining){queueChunkBuild(entry.key);queued++;}
+            const limit=isMobilePlaying?80:384;
+            let remaining=Math.max(0,limit-chunkBuildSet.size-chunkGenerationQueued.size);
+            if(remaining>0){
+                // Stop as soon as the streaming budget is full; do not iterate
+                // thousands of far chunks whose jobs cannot start yet.
+                for(const [dx,dz] of orderedChunkOffsets(fineRadius)){
+                    const cx=px+dx,cz=pz+dz,key=chunkKey(currentDimension,cx,cz);
+                    if(chunkMeshes.has(key)||chunkBuildSet.has(key)||chunkGenerationPending.has(key)||chunkGenerationQueued.has(key))continue;
+                    queueChunkBuild(key);
+                    if(--remaining<=0)break;
+                }
             }
-            const unloadSq=(fullDetailRadius()+2)*(fullDetailRadius()+2);
+            const unloadSq=(fineRadius+2)*(fineRadius+2);
+            const handoffGraceSq=(fineRadius+6)*(fineRadius+6);
             for(const [key,mesh] of chunkMeshes){
-                if(!mesh||(mesh.dim===currentDimension&&(mesh.cx-px)*(mesh.cx-px)+(mesh.cz-pz)*(mesh.cz-pz)>unloadSq)){
+                const distSq=mesh&&mesh.dim===currentDimension?
+                    (mesh.cx-px)*(mesh.cx-px)+(mesh.cz-pz)*(mesh.cz-pz):Infinity;
+                if(!mesh||(mesh.dim===currentDimension&&distSq>unloadSq)){
+                    // Never throw away the last complete chunk mesh before a
+                    // replacement distant tile exists. This matters most when
+                    // flying: delayed tile workers previously made old terrain
+                    // disappear first, revealing the sky until another full
+                    // chunk was created under the player. Bound the grace ring
+                    // to four extra chunks, so it cannot retain the world forever.
+                    if(mesh&&EXTENDED_ENABLED&&mesh.dim===currentDimension&&distSq<=handoffGraceSq){
+                        const tile=lodTiles.get(lodGroupKey(mesh.dim,
+                            Math.floor(mesh.cx/LOD_GROUP_CHUNKS),Math.floor(mesh.cz/LOD_GROUP_CHUNKS)));
+                        if(!tile||!tile.gpu||lodDirtyTiles.has(tile.key))continue;
+                    }
                     disposeChunkMesh(mesh);chunkMeshes.delete(key);chunks.delete(key);chunkBuildSet.delete(key);chunkRemeshPending.delete(key);chunkMeshRevision++;
-                    if(mesh)markLodTileDirty(mesh.dim,mesh.cx,mesh.cz);
+                    if(mesh&&EXTENDED_ENABLED)markLodTileDirty(mesh.dim,mesh.cx,mesh.cz);
                 } else if(isMobilePlaying&&mesh.dim!==currentDimension){
                     deferChunkDisposal(key);
                 }
@@ -11286,7 +11665,9 @@ function getBaseBiome(x, z) {
                 if(dim!==currentDimension)continue;
                 const dx=cx-px,dz=cz-pz;if(dx*dx+dz*dz>(fullDetailRadius()+1)*(fullDetailRadius()+1))continue;
                 if(!chunks.has(key)&&chunkGenerationWorker){queueChunkBuild(key,travelChunkPriority.has(key));continue;}
+                const meshStart=perfOverlayEnabled?performance.now():0;
                 const replacementMesh=buildChunkMesh(cx,cz,dim);
+                if(perfOverlayEnabled){perfMeshBuildMs+=performance.now()-meshStart;perfMeshBuilds++;}
                 const previousMesh=chunkMeshes.get(key);
                 chunkMeshes.set(key,replacementMesh);
                 chunkRemeshPending.delete(key); chunkMeshRevision++;
@@ -11310,12 +11691,16 @@ function getBaseBiome(x, z) {
         }
 
         let lastTime = 0, frames = 0, fpsTime = 0;
+        let perfOverlayEnabled=false, perfRenderMs=0, perfFrameMs=0, perfFrameSamples=0;
+        let perfRenderMsTotal=0, perfFrameMsTotal=0;
+        let perfMeshBuildMs=0, perfMeshBuilds=0;
         let mainLoopStarted = false;
         let infoUiTimer = 0, overlayUiTimer = 0, healthUiTimer = 0, timeUiTimer = 0, raycastUiTimer = 0;
         let cachedRenderHit = null;
         let mobMaintenanceTimer = 0;
         
         function loop(time) {
+            const frameStart=perfOverlayEnabled?performance.now():0;
             const dt = Math.min((time - lastTime) / 1000, 0.1);
             lastTime = time;
             if(!gameStarted){requestAnimationFrame(loop);return;}
@@ -11410,14 +11795,29 @@ function getBaseBiome(x, z) {
             }
 
             fpsTime += dt; frames++;
-            if (fpsTime >= 1) { document.getElementById('fps').textContent = frames; frames = 0; fpsTime = 0; }
+            if (fpsTime >= 1) {
+                document.getElementById('fps').textContent = frames;
+                if(perfOverlayEnabled){
+                    document.getElementById('perfStats').textContent =
+                        `Frame CPU: ${perfFrameMs.toFixed(1)}ms | Render CPU: ${perfRenderMs.toFixed(1)}ms\n`+
+                        `Full meshes: ${chunkMeshes.size} | LOD tiles: ${EXTENDED_ENABLED?lodTiles.size:0} (preview ${EXTENDED_ENABLED?[...lodTiles.values()].filter(t=>t.preview).length:0})\n`+
+                        `Chunk jobs: ${chunkGenerationQueue.length} + ${chunkBuildQueue.length-chunkBuildHead} build\n`+
+                        `Mesh CPU: ${perfMeshBuilds?(perfMeshBuildMs/perfMeshBuilds).toFixed(1):'–'}ms/build`;
+                    perfMeshBuilds=0;perfMeshBuildMs=0;
+                }
+                frames = 0; fpsTime = 0;
+            }
             updateMobilePerformanceGovernor(dt,time);
             infoUiTimer -= dt; overlayUiTimer -= dt; healthUiTimer -= dt; raycastUiTimer -= dt;
             if (infoUiTimer <= 0) { updateInfo(); infoUiTimer = isMobilePlaying ? (LOW_END_MOBILE?0.34:0.26) : 0.10; }
             if (raycastUiTimer <= 0) { cachedRenderHit = gameStarted ? raycast() : null; raycastUiTimer = isMobilePlaying ? (LOW_END_MOBILE?0.13:0.095) : 0.035; }
             if (gameStarted) processUrgentChunkRemeshes(Math.floor(player.x / CHUNK_SIZE), Math.floor(player.z / CHUNK_SIZE));
-            if (gameStarted) processLodMeshUpdates();
+            if (gameStarted && EXTENDED_ENABLED) processLodMeshUpdates();
+            const renderStart=perfOverlayEnabled?performance.now():0;
             render();
+            if(perfOverlayEnabled){
+                perfRenderMsTotal+=performance.now()-renderStart;
+            }
             processDeferredChunkDisposals();
             if (isMobilePlaying && pendingIOSChunkBuild) {
                 const build = pendingIOSChunkBuild;
@@ -11426,6 +11826,15 @@ function getBaseBiome(x, z) {
             }
             if (healthUiTimer <= 0) { updateMobHealthBars(uProjectionMat, uViewMat); healthUiTimer = isMobilePlaying ? (LOW_END_MOBILE?0.32:0.22) : 0.08; }
             if (overlayUiTimer <= 0) { updatePlayerOverlays(uProjectionMat, uViewMat); overlayUiTimer = isMobilePlaying ? (LOW_END_MOBILE?0.28:0.18) : 0.06; }
+            if(perfOverlayEnabled){
+                perfFrameMsTotal+=performance.now()-frameStart;
+                perfFrameSamples++;
+                if(perfFrameSamples>=30){
+                    perfRenderMs=perfRenderMsTotal/perfFrameSamples;
+                    perfFrameMs=perfFrameMsTotal/perfFrameSamples;
+                    perfFrameSamples=0;perfRenderMsTotal=0;perfFrameMsTotal=0;
+                }
+            }
             requestAnimationFrame(loop);
         }
 
@@ -11514,6 +11923,9 @@ function getBaseBiome(x, z) {
             updateShaderSun(shaderSunState.dir, sunAboveHorizon, cloudTransmission, shaderSunState.strength);
 
             const dirX = Math.sin(player.yaw), dirZ = Math.cos(player.yaw);
+            // Conservative horizontal frustum test. Keep nearby geometry even
+            // when looking away so walls never pop at the screen edges.
+            const horizontalFrustumTan=Math.tan(FOV*Math.PI/360)*cameraAspect;
             const visibleChunkMeshes = [];
             const allPointLights=allLoadedPointLights();
             let hasVisibleGlass = false;
@@ -11526,6 +11938,8 @@ function getBaseBiome(x, z) {
                 const dot = (dx * -dirX) + (dz * -dirZ);
                 const distSq = dx*dx + dz*dz;
                 if (distSq > CHUNK_SIZE * CHUNK_SIZE * 2.25 && dot < -CHUNK_SIZE) continue;
+                const side=dx*dirZ-dz*dirX;
+                if(Math.abs(player.pitch)<0.45 && distSq>CHUNK_SIZE*CHUNK_SIZE*4 && Math.abs(side)>Math.max(0,dot)*horizontalFrustumTan+CHUNK_SIZE*2)continue;
                 visibleChunkMeshes.push(mesh);
                 if (mesh.glassCount > 0) hasVisibleGlass = true;
 
@@ -11548,7 +11962,9 @@ function getBaseBiome(x, z) {
                 }
             }
 
-            // Coarse distant terrain and exact decorations (one draw per 4x4 chunk tile).
+            // Extended LOD must be entirely absent when disabled. In that mode
+            // /rd is the full-resolution radius, including distant chunks.
+            if (EXTENDED_ENABLED) {
             setPointLights([]);
             gl.uniform1f(uDistantAtlasMode,1);
             for(const tile of lodTiles.values()){
@@ -11556,14 +11972,20 @@ function getBaseBiome(x, z) {
                 if(!mesh||mesh.empty||tile.dim!==currentDimension)continue;
                 const dx=mesh.centerX-player.x,dz=mesh.centerZ-player.z;
                 if(dx*dx+dz*dz>(visibleRenderDistance()*CHUNK_SIZE+LOD_GROUP_CHUNKS*CHUNK_SIZE)**2)continue;
-                if(dx*dx+dz*dz>CHUNK_SIZE*CHUNK_SIZE*36 && dx*-dirX+dz*-dirZ<-LOD_GROUP_CHUNKS*CHUNK_SIZE)continue;
+                const forward=dx*-dirX+dz*-dirZ;
+                if(dx*dx+dz*dz>CHUNK_SIZE*CHUNK_SIZE*36 && forward<-LOD_GROUP_CHUNKS*CHUNK_SIZE)continue;
+                const side=dx*dirZ-dz*dirX;
+                if(Math.abs(player.pitch)<0.45 && dx*dx+dz*dz>CHUNK_SIZE*CHUNK_SIZE*64 && Math.abs(side)>Math.max(0,forward)*horizontalFrustumTan+LOD_GROUP_CHUNKS*CHUNK_SIZE*1.5)continue;
                 gl.activeTexture(gl.TEXTURE1);
-                gl.bindTexture(gl.TEXTURE_2D,distantTextureAtlases[tile.step]||distantTextureAtlases[LOD_DETAIL]);
+                const playerChunkX=Math.floor(player.x/CHUNK_SIZE),playerChunkZ=Math.floor(player.z/CHUNK_SIZE);
+                const highResFallback=lodTileDistance(tile.gx,tile.gz,playerChunkX,playerChunkZ)<=RENDER_DISTANCE*RENDER_DISTANCE;
+                gl.bindTexture(gl.TEXTURE_2D,highResFallback?textureAtlas:(distantTextureAtlases[tile.step]||distantTextureAtlases[LOD_DETAIL]));
                 gl.activeTexture(gl.TEXTURE0);
                 drawMesh(mesh,IDENTITY_MODEL_MATRIX,true,0);
             }
             gl.uniform1f(uDistantAtlasMode,0);
             gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,textureAtlas);gl.activeTexture(gl.TEXTURE0);
+            }
             setPointLights(torchLights); // restore player-local lights for mobs/items
             setTexturePass(null,false);
             renderWeatherClouds();

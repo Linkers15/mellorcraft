@@ -1,3 +1,75 @@
+MellorCraft v1.8.4 — latest visibility/decorations fix
+======================================================
+See README_VISIBILITY_FIX.md for the latest changes and tests.
+
+MellorCraft v1.8.4 — Chunk Streaming Gap Hotfix
+================================================
+
+LATEST UPDATE — version remains 1.8.4
+
+- FIX: The extended terrain worker formerly generated sixteen full underground
+  voxel chunks for each 64x64 distant tile before ANY of the tile could appear.
+  Flying could outrun the worker and expose large patches of sky; walking closer
+  triggered the high-resolution worker, making those patches appear suddenly.
+- NEW: Distant Overworld tiles receive a lightweight, block-height-accurate
+  surface preview first. Previews keep all surface columns covered and close
+  exposed vertical tile edges. When the complete LOD tile arrives, it replaces
+  the preview with actual trees, cacti, structures and saved changes.
+- FIX: Preview requests get priority over expensive exact tile upgrades, with
+  regular exact upgrades interleaved to avoid permanently missing decorations.
+- FIX: The LOD worker skips tiles already fully covered by complete high-res
+  chunk meshes, reducing redundant generation. Tiles are requeued if the
+  player moves and full-resolution chunks are later unloaded.
+- FIX: A bounded extra four-chunk handoff ring retains previous full-resolution
+  meshes if their distant replacement tile has not uploaded yet. This prevents
+  loaded ground from disappearing during fast travel and worker backlogs.
+- DIAGNOSTICS: /perf reports the number of provisional terrain tiles.
+
+Notes:
+- The preview is temporary, and does not contain the exact caves/structures.
+  The final distant tile still follows the real chunk-generation rules.
+- If Extended Render Distance is disabled, the entire /rd region remains
+  FULL RESOLUTION; no simplified terrain preview or distant worker is used.
+- Extremely high /rd or /edrd values may still need time to populate initially.
+- Back up important worlds. Save format, networking, climate, other gameplay,
+  and version label are unchanged. No fully interactive WebGL visual/FPS
+  verification was possible in this environment.
+
+Validation: JS syntax, dedicated-server Python syntax, original Node regression
+suite and new preview/priority/coverage tests passed. The automated browser
+smoke test was blocked by the execution environment's navigation policy.
+
+===========================================================================
+
+MellorCraft v1.8.4 — Extended-Rendering OFF Fix + Performance Pass
+===================================================================
+
+LATEST UPDATE (version remains 1.8.4)
+
+- Extended distance disabled now means ALL chunks out to /rd render via the
+  ordinary full-resolution pipeline. No LOD scheduling, processing, rendering,
+  or separate worker occurs when the feature is off.
+- Enabling extended distance starts the distant worker on demand; disabling
+  it terminates that worker and disposes its meshes.
+- Cached near-to-far chunk offsets reduce repeated large-radius sorting.
+- Chunk lighting uses spatial buckets instead of scanning all loaded torches
+  for every mesh, with a short-lived cache and immediate mesh-revision refresh.
+- Distant mesh uploads use pre-sized typed arrays instead of temporary number
+  arrays. Conservative horizontal view culling reduces offscreen drawing.
+- Idle dedicated servers avoid allocating large unneeded world snapshots.
+- /perf, /perf on and /perf off show basic frame/render/mesh/queue diagnostics
+  without requiring operator privileges.
+- High-res render distance still supports 2-64 chunks; extended supports up
+  to 96 chunks and must exceed the high-resolution value.
+
+See PERFORMANCE_PROFILE.md for measured isolated CPU benchmarks, remaining
+bottlenecks, and an actionable WASM port plan. No WASM code is shipped.
+
+Existing saves and protocols remain unchanged. Full interactive FPS testing
+was not possible in this environment. Back up valuable saves before testing.
+
+===========================================================================
+
 MellorCraft v1.8.4 — Distant Seam and Maximum-FOV Wall Hotfix
 ==============================================================
 

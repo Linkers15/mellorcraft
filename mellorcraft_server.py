@@ -2211,16 +2211,19 @@ async def world_broadcast_loop() -> None:
                 world.mob_out_of_range_since.pop(mob_id, None)
                 await remove_mob(mob_id, reason="despawn")
         hosts_changed = world.recompute_mob_hosts()
-        await broadcast({
-            "type": "world_state", "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
-            "gameRules": world.game_rules,
-            "bossDefeated": world.boss_defeated,
-            "players": world.player_snapshot(),
-            "mobs": world.mob_snapshot(), "items": world.item_snapshot(), "furnaces": world.furnaces,
-            "mobHosts": {str(k): v for k, v in world.mob_hosts.items()},
-        })
-        if hosts_changed:
-            await broadcast_mob_hosts()
+        # No clients means there is no reason to build/serialize the large
+        # 10Hz world snapshot. Continue world simulation and autosaves.
+        if world.connections:
+            await broadcast({
+                "type": "world_state", "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
+                "gameRules": world.game_rules,
+                "bossDefeated": world.boss_defeated,
+                "players": world.player_snapshot(),
+                "mobs": world.mob_snapshot(), "items": world.item_snapshot(), "furnaces": world.furnaces,
+                "mobHosts": {str(k): v for k, v in world.mob_hosts.items()},
+            })
+            if hosts_changed:
+                await broadcast_mob_hosts()
 
 
 async def item_loop() -> None:
