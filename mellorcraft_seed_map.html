@@ -287,7 +287,7 @@ function computeHydrology(x,z){
     // Hydrological classification is a deterministic X/Z field: independent of
     // chunk order, view distance, worker count, and the previously loaded chunks.
     const field=getOceanField(x,z);
-    if(field>.205) return {kind:field>.52?'deep_ocean':'ocean',field,wet:true};
+    if(field>.205) return {kind:field>.60?'deep_ocean':'ocean',field,wet:true};
     // A wide ABOVE-WATER shoreline is essential. A 1-3 block biome threshold
     // near high cold terrain previously created giant exposed dirt/stone walls.
     if(field>.055) return {kind:'beach',field,wet:false,bank:Math.max(0,Math.min(1,(.205-field)/.15))};
@@ -618,14 +618,18 @@ function getHeight(x, z, biome = getBiome(x, z)) {
             else if (biome === BIOMES.MOUNTAINS_HIGH) naturalHeight = Math.min(naturalHeight, 190.999);
             const hydro=getHydrology(x,z);
             if(hydro.kind==='ocean'||hydro.kind==='deep_ocean'){
-                if(hydro.field<=.52){
-                    // Shelf: near shore 60 -> offshore 40.
-                    naturalHeight=mix(61.2,40,smoothstep(.205,.52,hydro.field));
+                // Continental shelf and slope: keep a broad shallow margin so
+                // land does not drop into deep ocean within only a few blocks.
+                if(hydro.field<=.42){
+                    naturalHeight=mix(61.3,54,smoothstep(.205,.42,hydro.field));
+                }else if(hydro.field<=.60){
+                    naturalHeight=mix(54,41,smoothstep(.42,.60,hydro.field));
+                }else if(hydro.field<=.78){
+                    naturalHeight=mix(41,24,smoothstep(.60,.78,hydro.field));
                 }else{
-                    // Abyssal deep ocean bed ranges from displayed Y 10 to Y 40.
-                    naturalHeight=mix(40,11,smoothstep(.52,.89,hydro.field));
+                    naturalHeight=mix(24,11,smoothstep(.78,.92,hydro.field));
                 }
-                naturalHeight+=noise.noise2D(x*.011+281,z*.011-631)*.8;
+                naturalHeight+=noise.noise2D(x*.011+281,z*.011-631)*.7;
                 naturalHeight=Math.max(10,Math.min(60,naturalHeight));
             } else if(hydro.kind==='beach') {
                 // Never jump from inland 80+ to a vertical 62-block shoreline.

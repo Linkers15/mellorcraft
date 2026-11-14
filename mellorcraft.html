@@ -860,7 +860,7 @@
                     <div id="flatStructureControls" class="generator-list"></div>
                   </div>
                 </div>
-                <div class="generator-note">The total layer height must be between 1 and 199 blocks. Structures are placed on the top layer.</div>
+                <div class="generator-note">The total layer height must be between 1 and 199 blocks. Ocean and Deep Ocean presets put the sandy seabed below sea level (Y=62), and the water fills above it. You can edit the layers afterward. Beach creates dry sand above Y=62. Structures are placed on the top layer.</div>
               </div>
               <div class="world-rule-row"><label for="ruleDaylightCycle">Daylight Cycle<span class="world-rule-help">Allow time of day to advance.</span></label><input type="checkbox" id="ruleDaylightCycle" checked></div>
               <div class="world-rule-row"><label for="ruleWeatherCycle">Weather Cycle<span class="world-rule-help">Allow pressure systems and storms to move.</span></label><input type="checkbox" id="ruleWeatherCycle" checked></div>
@@ -4154,7 +4154,8 @@
             {key:'PLAINS',name:'Plains',id:BIOMES.PLAINS},{key:'FOREST',name:'Forest',id:BIOMES.FOREST},{key:'FLOWER_FOREST',name:'Flower Forest',id:BIOMES.FLOWER_FOREST},{key:'SAVANNA',name:'Savanna',id:BIOMES.SAVANNA},
             {key:'JUNGLE',name:'Jungle',id:BIOMES.JUNGLE},{key:'TAIGA',name:'Taiga',id:BIOMES.TAIGA},{key:'DESERT_BARREN',name:'Barren Desert',id:BIOMES.DESERT_BARREN},
             {key:'DESERT_CACTUS',name:'Cactus Desert',id:BIOMES.DESERT_CACTUS},{key:'BADLANDS',name:'Badlands',id:BIOMES.BADLANDS},{key:'SNOWY_PLAINS',name:'Snowy Plains',id:BIOMES.SNOWY_PLAINS},
-            {key:'MOUNTAINS_LOW',name:'Low Mountains',id:BIOMES.MOUNTAINS_LOW},{key:'MOUNTAINS_MID',name:'Medium Mountains',id:BIOMES.MOUNTAINS_MID},{key:'MOUNTAINS_HIGH',name:'High Mountains',id:BIOMES.MOUNTAINS_HIGH}
+            {key:'MOUNTAINS_LOW',name:'Low Mountains',id:BIOMES.MOUNTAINS_LOW},{key:'MOUNTAINS_MID',name:'Medium Mountains',id:BIOMES.MOUNTAINS_MID},{key:'MOUNTAINS_HIGH',name:'High Mountains',id:BIOMES.MOUNTAINS_HIGH},
+            {key:'OCEAN',name:'Ocean',id:BIOMES.OCEAN},{key:'DEEP_OCEAN',name:'Deep Ocean',id:BIOMES.DEEP_OCEAN},{key:'BEACH',name:'Beach',id:BIOMES.BEACH}
         ];
         const WORLD_STRUCTURE_DEFS = [
             {key:'mansion',name:'Mansions',chance:5},{key:'outpost',name:'Outposts',chance:5},{key:'cabin',name:'Cabins',chance:7.5},{key:'dungeon',name:'Dungeons',chance:20}
@@ -4162,8 +4163,13 @@
         const DEFAULT_FLAT_LAYERS = [
             {blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:50},{blockId:BLOCKS.DIRT,count:3},{blockId:BLOCKS.GRASS,count:1}
         ];
+        const FLAT_MARINE_LAYER_PRESETS={
+            OCEAN:[{blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:49},{blockId:BLOCKS.SAND,count:1}],
+            DEEP_OCEAN:[{blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:24},{blockId:BLOCKS.SAND,count:1}],
+            BEACH:[{blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:62},{blockId:BLOCKS.SAND,count:1}]
+        };
         function defaultWorldGenSettings(type='normal') {
-            const biomes={}; for(const b of CUSTOM_BIOME_DEFS)biomes[b.key]={enabled:true,concentration:100};
+            const biomes={}; for(const b of CUSTOM_BIOME_DEFS)biomes[b.key]={enabled:!['OCEAN','DEEP_OCEAN','BEACH'].includes(b.key),concentration:100};
             const structures={}; for(const st of WORLD_STRUCTURE_DEFS)structures[st.key]=st.chance;
             return {type:['normal','custom','flat'].includes(type)?type:'normal',features:{caves:true,ravines:true,mineshafts:50},biomes,structures,flatBiome:'PLAINS',flatLayers:DEFAULT_FLAT_LAYERS.map(v=>({...v}))};
         }
@@ -4193,6 +4199,13 @@
             biomeBox.dataset.ready='1';
             for(const b of CUSTOM_BIOME_DEFS){const row=document.createElement('div');row.className='generator-row three';row.innerHTML=`<input type="checkbox" id="customBiome_${b.key}_enabled" checked><label for="customBiome_${b.key}_enabled">${b.name}</label><input type="number" id="customBiome_${b.key}_weight" min="0" max="500" step="10" value="100" aria-label="${b.name} concentration">`;biomeBox.appendChild(row);}
             const flatBiome=document.getElementById('flatBiomeSelect'); flatBiome.innerHTML=CUSTOM_BIOME_DEFS.map(b=>`<option value="${b.key}">${b.name}</option>`).join('');
+            flatBiome.addEventListener('change',()=>{
+                const rows=[...document.querySelectorAll('#flatLayerControls .flat-layer-row')].map(row=>({blockId:Number(row.querySelector('.flat-layer-block').value),count:Number(row.querySelector('.flat-layer-count').value)}));
+                const matches=template=>template&&JSON.stringify(rows)===JSON.stringify(template);
+                if(matches(DEFAULT_FLAT_LAYERS)||Object.values(FLAT_MARINE_LAYER_PRESETS).some(matches)){
+                    setFlatLayerRows(FLAT_MARINE_LAYER_PRESETS[flatBiome.value]||DEFAULT_FLAT_LAYERS);
+                }
+            });
             for(const prefix of ['custom','flat']){const box=document.getElementById(`${prefix}StructureControls`);for(const st of WORLD_STRUCTURE_DEFS){const row=document.createElement('div');row.className='generator-row three';row.innerHTML=`<input type="checkbox" id="${prefix}Structure_${st.key}_enabled" ${prefix==='custom'?'checked':''}><label for="${prefix}Structure_${st.key}_enabled">${st.name}</label><input type="number" id="${prefix}Structure_${st.key}" min="0" max="100" value="${prefix==='custom'?st.chance:st.chance}" aria-label="${st.name} chance percent">`;box.appendChild(row);}}
             document.getElementById('addFlatLayerBtn').addEventListener('click',()=>addFlatLayerRow(BLOCKS.DIRT,1));
             document.getElementById('worldTypeSelect').addEventListener('change',updateWorldGeneratorPanels);
@@ -5614,7 +5627,9 @@
                 if (dim !== currentDimension) continue;
                 const dx = cx - px, dz = cz - pz, distSq = dx * dx + dz * dz;
                 if (distSq > maxDistSq && !travelChunkPriority.has(key) && key !== pendingPortalArrivalKey) continue;
-                const score = (travelChunkPriority.has(key) || key === pendingPortalArrivalKey ? -1000000 : 0) + distSq;
+                const ahead=dx*(-Math.sin(player.yaw))+dz*(-Math.cos(player.yaw));
+                const direction=Math.max(0,ahead/Math.max(1,Math.sqrt(distSq)));
+                const score=(travelChunkPriority.has(key)||key===pendingPortalArrivalKey?-1000000:0)+distSq*(1-.28*direction);
                 if (score < bestScore) { bestScore = score; bestIndex = i; }
             }
             if (bestIndex < 0) {
@@ -5812,7 +5827,7 @@ function computeHydrology(x,z){
     // Hydrological classification is a deterministic X/Z field: independent of
     // chunk order, view distance, worker count, and the previously loaded chunks.
     const field=getOceanField(x,z);
-    if(field>.205) return {kind:field>.52?'deep_ocean':'ocean',field,wet:true};
+    if(field>.205) return {kind:field>.60?'deep_ocean':'ocean',field,wet:true};
     // A wide ABOVE-WATER shoreline is essential. A 1-3 block biome threshold
     // near high cold terrain previously created giant exposed dirt/stone walls.
     if(field>.055) return {kind:'beach',field,wet:false,bank:Math.max(0,Math.min(1,(.205-field)/.15))};
@@ -6093,6 +6108,9 @@ function getBaseBiome(x, z) {
         function biomeTerrainHeight(biome,x,z,broad,detail,ridge){
             const rough=detail*3+(ridge-.5)*5;
             switch(biome){
+                case BIOMES.OCEAN:return 48+broad*4+detail*1.3;
+                case BIOMES.DEEP_OCEAN:return 26+broad*4+detail*1.3;
+                case BIOMES.BEACH:return 64+broad*2+detail*.6;
                 case BIOMES.FOREST:case BIOMES.FLOWER_FOREST:return 62+broad*9+detail*3;
                 case BIOMES.SAVANNA:return 64+broad*10+detail*3;
                 case BIOMES.JUNGLE:return 67+broad*11+detail*4;
@@ -6137,7 +6155,16 @@ function getBaseBiome(x, z) {
         function getBiome(x, z) {
             const cfg=activeWorldGen();
             if(cfg.type==='flat'){const found=CUSTOM_BIOME_DEFS.find(b=>b.key===cfg.flatBiome);return found?found.id:BIOMES.PLAINS;}
-            if(cfg.type==='custom')return getCustomBiomeInfo(x,z).biome;
+            if(cfg.type==='custom'){
+                const marine=getCustomBiomeInfo(x,z).biome;
+                if(marine===BIOMES.OCEAN||marine===BIOMES.DEEP_OCEAN){
+                    const broad=noise.octave(x*.006,z*.006,4,.52);
+                    const detail=noise.octave(x*.022+400,z*.022-400,3,.48);
+                    const ridge=1-Math.abs(noise.octave(x*.0022+1200,z*.0022+1200,4,.55));
+                    if(customTerrainHeight(x,z,broad,detail,ridge)>=WATER_LEVEL)return BIOMES.BEACH;
+                }
+                return marine;
+            }
             const mountain = getMountainInfo(x, z);
             if (mountain) {
                 if (mountain.targetHeight >= 161) return BIOMES.MOUNTAINS_HIGH;
@@ -6231,14 +6258,22 @@ function getBaseBiome(x, z) {
             // never clamp a biome to a different height across a threshold.
             const hydro=getHydrology(x,z);
             if(hydro.kind==='ocean'||hydro.kind==='deep_ocean'){
-                if(hydro.field<=.52){
-                    // Shelf: near shore 60 -> offshore 40.
-                    naturalHeight=mix(61.2,40,smoothstep(.205,.52,hydro.field));
+                // Continental shelf and slope: keep a broad shallow margin so
+                // land does not drop into deep ocean within only a few blocks.
+                if(hydro.field<=.42){
+                    // Inner shelf: 61 -> 54 over a wide band just offshore.
+                    naturalHeight=mix(61.3,54,smoothstep(.205,.42,hydro.field));
+                }else if(hydro.field<=.60){
+                    // Outer shelf: 54 -> 41 before the true deep-ocean slope.
+                    naturalHeight=mix(54,41,smoothstep(.42,.60,hydro.field));
+                }else if(hydro.field<=.78){
+                    // Continental slope: 41 -> 24.
+                    naturalHeight=mix(41,24,smoothstep(.60,.78,hydro.field));
                 }else{
-                    // Abyssal deep ocean bed ranges from displayed Y 10 to Y 40.
-                    naturalHeight=mix(40,11,smoothstep(.52,.89,hydro.field));
+                    // Abyssal deep ocean bed ranges from displayed Y 10 to Y 24.
+                    naturalHeight=mix(24,11,smoothstep(.78,.92,hydro.field));
                 }
-                naturalHeight+=noise.noise2D(x*.011+281,z*.011-631)*.8;
+                naturalHeight+=noise.noise2D(x*.011+281,z*.011-631)*.7;
                 naturalHeight=Math.max(10,Math.min(60,naturalHeight));
             } else if(hydro.kind==='beach') {
                 // Never jump from inland 80+ to a vertical 62-block shoreline.
@@ -6262,6 +6297,17 @@ function getBaseBiome(x, z) {
             return clamp(Math.floor(naturalHeight), 8, 190)+WORLD_Y_ORIGIN;
         }
 
+
+        function getAquaticPlantTop(x,z,dimension=0){
+            const floorY=getHeight(Math.floor(x),Math.floor(z),getBiome(Math.floor(x),Math.floor(z)));
+            let top=floorY;
+            for(let y=floorY+1;y<=Math.min(WATER_SURFACE_Y-1,floorY+10);y++){
+                const block=peekLoadedBlock(Math.floor(x),y,Math.floor(z),dimension);
+                if(isAquaticPlant(block)) top=y;
+                else if(!isWaterBlock(block)) break;
+            }
+            return top;
+        }
 
         function posRand(x, z, off = 0) { return (treeNoise.noise2D(x * 0.1 + off, z * 0.1 + off) + 1) * 0.5; }
         function posRand3D(x, y, z, off=0) { return (structNoise.noise3D(x*0.1+off, y*0.1+off, z*0.1+off) + 1) * 0.5; }
@@ -7415,8 +7461,10 @@ function getBaseBiome(x, z) {
                     const wx = cx * CHUNK_SIZE + x, wz = cz * CHUNK_SIZE + z;
                     const biome = getBiome(wx, wz);
                     const height = getHeight(wx, wz, biome);
-                    const columnHydro=(dim===0 && activeWorldGen().type==='normal')?getHydrology(wx,wz):null;
-                    const waterway=columnHydro && columnHydro.kind!=='land';
+                    const columnHydro=(dim===0 && genCfg.type==='normal')?getHydrology(wx,wz):null;
+                    const marineBiome=biome===BIOMES.OCEAN||biome===BIOMES.DEEP_OCEAN;
+                    const wetColumn=Boolean(columnHydro?.wet)||(dim===0&&genCfg.type!=='normal'&&marineBiome&&height<WATER_SURFACE_Y);
+                    const waterway=wetColumn||Boolean(columnHydro && columnHydro.kind!=='land');
                     // Prevent ravine-carved rock walls and floating submerged beds.
                     const ravineRange = waterway?null:getRavineRange(wx, wz, height);
                     const struct = getSurfaceStructure(wx, wz);
@@ -7577,18 +7625,15 @@ function getBaseBiome(x, z) {
 
                     // Every wet column receives water, even above an underground dungeon
                     // or at a structure footprint: skipping entire columns created square dry holes.
-                    if (dim===0 && activeWorldGen().type==='normal') {
-                        const hydro=columnHydro;
-                        if (hydro && hydro.wet) {
-                            for(let fy=height+1;fy<=WATER_SURFACE_Y&&fy<WORLD_HEIGHT;fy++) {
-                                const fi=indexOf(x,fy,z);
-                                if(chunk[fi]===BLOCKS.AIR)chunk[fi]=BLOCKS.WATER_SOURCE;
-                            }
-                            generatedMaxY=Math.max(generatedMaxY,WATER_SURFACE_Y+1);
+                    if (dim===0 && wetColumn) {
+                        for(let fy=height+1;fy<=WATER_SURFACE_Y&&fy<WORLD_HEIGHT;fy++) {
+                            const fi=indexOf(x,fy,z);
+                            if(chunk[fi]===BLOCKS.AIR)chunk[fi]=BLOCKS.WATER_SOURCE;
                         }
+                        generatedMaxY=Math.max(generatedMaxY,WATER_SURFACE_Y+1);
                     }
                     // Physical plants occupy water voxels so mining can target them.
-                    if(dim===0 && columnHydro?.wet && height+3<WATER_SURFACE_Y){
+                    if(dim===0 && wetColumn && height+3<WATER_SURFACE_Y){
                         const roll=coordHash(wx,wz,73511,WORLD_SEED);
                         if(roll<.155){
                             const isKelp=roll<.044&&height+6<WATER_SURFACE_Y;
@@ -8203,7 +8248,7 @@ function getBaseBiome(x, z) {
             const url = URL.createObjectURL(new Blob([workerSource], { type: 'application/javascript' }));
             // Cap parallel workers: generating too many 16x16x248 chunks at once
             // can overwhelm low-memory phones. Desktop cores can stream in pairs.
-            const poolSize=isMobilePlaying?1:Math.min(3,Math.max(2,Math.floor((navigator.hardwareConcurrency||4)/3)));
+            const poolSize=isMobilePlaying?1:Math.min(4,Math.max(2,Math.floor((navigator.hardwareConcurrency||4)/2)));
             for(let wi=0;wi<poolSize;wi++){
             const worker = new Worker(url);
             worker.mellorReady=false;worker.mellorBusy=false;worker.mellorKey=null;
@@ -8221,6 +8266,7 @@ function getBaseBiome(x, z) {
                     chunkGenerationQueued.delete(data.key);
                     chunkGenerationFallBack.add(data.key);
                     queueChunkBuild(data.key, travelChunkPriority.has(data.key) || data.key === pendingPortalArrivalKey);
+                    dispatchNextChunkGeneration();
                     return;
                 }
                 if (data.type !== 'chunk') return;
@@ -8743,12 +8789,18 @@ function getBaseBiome(x, z) {
                             // Decoration never replaces the physical source-water voxel.
                             if(isAquaticPlant(block)){
                                 const kelp=block===BLOCKS.KELP;
-                                const weedColor=kelp?[.08,.35,.21]:[.16,.48,.27];
+                                const weedColor=kelp?[.10,.44,.24]:[.24,.66,.33];
                                 const weed={top:weedColor,side:weedColor,bottom:weedColor};
                                 const wave=(coordHash(wx,wz,73512+y,WORLD_SEED)-.5)*.2;
-                                emitCuboid(pos,col,nor,uv,wx+.475+wave,y+.02,wz+.46,wx+.53+wave,y+.92,wz+.55,weed,BLOCKS.LEAVES);
-                                emitCuboid(pos,col,nor,uv,wx+.23,y+.28,wz+.465,wx+.77,y+.39,wz+.535,weed,BLOCKS.LEAVES);
-                                emitCuboid(pos,col,nor,uv,wx+.465,y+.4,wz+.23,wx+.535,y+.50,wz+.77,weed,BLOCKS.LEAVES);
+                                if(kelp){
+                                    emitCuboid(pos,col,nor,uv,wx+.46+wave*.35,y+.02,wz+.46,wx+.54+wave*.35,y+.98,wz+.54,weed,BLOCKS.LEAVES);
+                                    emitCuboid(pos,col,nor,uv,wx+.30,y+.33,wz+.47,wx+.70,y+.43,wz+.53,weed,BLOCKS.LEAVES);
+                                    emitCuboid(pos,col,nor,uv,wx+.47,y+.56,wz+.30,wx+.53,y+.66,wz+.70,weed,BLOCKS.LEAVES);
+                                }else{
+                                    emitCuboid(pos,col,nor,uv,wx+.33+wave*.18,y+.02,wz+.47,wx+.41+wave*.18,y+.84,wz+.53,weed,BLOCKS.LEAVES);
+                                    emitCuboid(pos,col,nor,uv,wx+.49-wave*.12,y+.02,wz+.45,wx+.57-wave*.12,y+.78,wz+.55,weed,BLOCKS.LEAVES);
+                                    emitCuboid(pos,col,nor,uv,wx+.60+wave*.12,y+.02,wz+.47,wx+.68+wave*.12,y+.72,wz+.53,weed,BLOCKS.LEAVES);
+                                }
                             }
                             const topY=liquidHeight(block);
                             for(let f=0;f<6;f++){
@@ -9761,12 +9813,14 @@ function getBaseBiome(x, z) {
                     // Look AHEAD of the entire animal rather than steering from
                     // its center. Sharks otherwise nose into rising seafloor /
                     // vegetation beds and spin while trying to swim through them.
-                    const clearance=this.type.model==='shark'?2.0:.75;
+                    const clearance=this.type.model==='shark'?2.35:.95;
                     const aheadX=this.x+Math.cos(angle)*clearance;
                     const aheadZ=this.z+Math.sin(angle)*clearance;
                     const aheadFloor=getHeight(Math.floor(aheadX),Math.floor(aheadZ),getBiome(Math.floor(aheadX),Math.floor(aheadZ)));
-                    const desiredBottom=Math.max(bottom,aheadFloor)+.65;
-                    if(this.y<desiredBottom)lift=Math.max(.65,lift);
+                    const plantTopHere=getAquaticPlantTop(this.x,this.z,this.dimension);
+                    const plantTopAhead=getAquaticPlantTop(aheadX,aheadZ,this.dimension);
+                    const desiredBottom=Math.max(bottom,aheadFloor,plantTopHere,plantTopAhead)+(this.type.model==='shark'?1.15:.82);
+                    if(this.y<desiredBottom)lift=Math.max(.88,lift);
                     if(this.y>WATER_SURFACE_Y-this.type.height-1.5)lift=Math.min(-.4,lift);
                     const speed=this.type.speed*(this.type.hostile?.70:.54);
                     const vx=Math.cos(angle)*speed,vz=Math.sin(angle)*speed,vy=lift*speed*.48;
@@ -9787,12 +9841,12 @@ function getBaseBiome(x, z) {
                     const ox=this.x,oy=this.y,oz=this.z;
                     const nx=this.x+vx*dt,nz=this.z+vz*dt,ny=this.y+vy*dt;
                     if(trial(nx,this.y,nz)){this.x=nx;this.z=nz;}
-                    else if(trial(nx,this.y+.45,nz)){this.x=nx;this.z=nz;this.y+=.45;this.swimLift=.65;}
+                    else if(trial(nx,this.y+.75,nz)){this.x=nx;this.z=nz;this.y+=.75;this.swimLift=.82;}
                     else {
                         // Pick a new heading away from the obstacle, not another
                         // nearly identical heading toward the same bank.
-                        this.swimHeading=angle+Math.PI*(Math.random()>.5?.60:-.60);
-                        this.swimLift=.70;this.moveTimer=.15;
+                        this.swimHeading=angle+Math.PI*(Math.random()>.5?.66:-.66);
+                        this.swimLift=.86;this.moveTimer=.12;
                     }
                     if(trial(this.x,ny,this.z))this.y=ny;
                     else{this.swimLift=lift>=0?-.70:.70;this.moveTimer=Math.min(this.moveTimer,.3);}
@@ -12675,8 +12729,12 @@ function getBaseBiome(x, z) {
                 if(dim===currentDimension&&(cx-px)*(cx-px)+(cz-pz)*(cz-pz)<=fineRadius*fineRadius)
                     scheduleChunkRemesh(key);
             }
-            const limit=isMobilePlaying?80:384;
-            let remaining=Math.max(0,limit-chunkBuildSet.size-chunkGenerationQueued.size);
+            // Continue filling the *entire* requested full-resolution radius while stationary.
+            // The old 80/384-job ceiling could spend ages on near work, leaving
+            // far chunks empty until walking promoted them to the front.
+            const limit=isMobilePlaying?Math.min(256,Math.max(100,fineRadius*fineRadius)):
+                Math.min(2048,Math.max(512,fineRadius*fineRadius*3));
+            let remaining=Math.max(0,limit-chunkBuildSet.size-chunkGenerationQueued.size-chunkGenerationPending.size);
             if(remaining>0){
                 // Stop as soon as the streaming budget is full; do not iterate
                 // thousands of far chunks whose jobs cannot start yet.
@@ -12729,9 +12787,12 @@ function getBaseBiome(x, z) {
                 const ap=travelChunkPriority.has(a)?0:1,bp=travelChunkPriority.has(b)?0:1;
                 if(ap!==bp)return ap-bp;
                 const aa=a.split(',').map(Number),bb=b.split(',').map(Number);
-                const ad=(aa[1]-px)*(aa[1]-px)+(aa[2]-pz)*(aa[2]-pz);
-                const bd=(bb[1]-px)*(bb[1]-px)+(bb[2]-pz)*(bb[2]-pz);
-                return ad-bd;
+                const adx=aa[1]-px,adz=aa[2]-pz,bdx=bb[1]-px,bdz=bb[2]-pz;
+                const ad=adx*adx+adz*adz,bd=bdx*bdx+bdz*bdz;
+                const forwardX=-Math.sin(player.yaw),forwardZ=-Math.cos(player.yaw);
+                const as=ad*(1-.28*Math.max(0,(adx*forwardX+adz*forwardZ)/Math.max(1,Math.sqrt(ad))));
+                const bs=bd*(1-.28*Math.max(0,(bdx*forwardX+bdz*forwardZ)/Math.max(1,Math.sqrt(bd))));
+                return as-bs;
             });
             chunkBuildQueue=active;chunkBuildHead=0;
         }
@@ -12764,8 +12825,9 @@ function getBaseBiome(x, z) {
         function processChunkBuildQueue(px,pz,timeMs=performance.now()){
             if(isMobilePlaying && timeMs-lastChunkBuildAt<(LOW_END_MOBILE?70:50))return;
             const start=performance.now();let built=0;
-            const budgetMs=isMobilePlaying?(LOW_END_MOBILE?1.5:2.0):(RENDER_DISTANCE>=12?4.0:5.0);
-            const maxBuilds=isMobilePlaying?1:(RENDER_DISTANCE>=12?2:3);
+            const coldStart=chunkMeshes.size<64;
+            const budgetMs=isMobilePlaying?(LOW_END_MOBILE?1.5:2.5):(coldStart?7.0:(RENDER_DISTANCE>=12?4.5:5.5));
+            const maxBuilds=isMobilePlaying?1:(coldStart?5:(RENDER_DISTANCE>=12?3:4));
             while(chunkBuildHead<chunkBuildQueue.length&&built<maxBuilds&&performance.now()-start<budgetMs){
                 const key=chunkBuildQueue[chunkBuildHead++];chunkBuildSet.delete(key);
                 if(chunkMeshes.has(key) && !chunkRemeshPending.has(key)) continue; // stale entry already handled by urgent path
