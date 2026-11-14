@@ -555,7 +555,16 @@ const hydro=getHydrology(x,z);
             if(hydro.kind==='beach'||(hydro.kind.endsWith('_bank')&&hydro.bank<.55))return BIOMES.BEACH;
             if(hydro.kind==='river')return BIOMES.RIVER;
             if(hydro.kind==='lake')return BIOMES.LAKE;
-            return getBaseBiome(x, z);
+            const fallback=getBaseBiome(x,z);
+            // Marine macroclimate is not enough to make an ocean. The actual
+            // hydrology column must be wet below sea level or it is dry land.
+            if(fallback===BIOMES.OCEAN||fallback===BIOMES.DEEP_OCEAN){
+                const climate=getClimateZone(x,z),heat=climate.temp-climate.moist*.16;
+                if(heat<-.34)return climate.moist>.02?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS;
+                if(heat>.41)return climate.moist<.02?BIOMES.DESERT_BARREN:BIOMES.SAVANNA;
+                return climate.moist>.04?BIOMES.FOREST:BIOMES.PLAINS;
+            }
+            return fallback;
         }
 
         

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -41,8 +42,8 @@ except ImportError:  # websockets 10/11 compatibility
 HTTP_PORT = 8000
 WEBSOCKET_PORT = 8765
 DAY_LENGTH_SECONDS = 600.0
-PROTOCOL_VERSION = 17
-SUPPORTED_PROTOCOLS = (17,)
+PROTOCOL_VERSION = 18
+SUPPORTED_PROTOCOLS = (18, 17)
 WORLD_HEIGHT = 248
 PORTAL_BLOCK = 31
 RESPAWN_BLOCK = 48
@@ -92,6 +93,28 @@ DEFAULT_AQUATIC_CAP = 16
 MAX_INVENTORY_SLOTS = 30
 MAX_STACK_SIZE = 100
 ALLOWED_SKINS = {"steve", "alex", "mellorite", "ember", "frost", "forest"}
+
+def sanitize_skin_png(value: Any) -> str:
+    """Only accept real 64x64 PNG data URIs, with a strict network/storage cap."""
+    if not isinstance(value, str) or not 30 < len(value) <= 110000:
+        return ""
+    prefix = "data:image/png;base64,"
+    if not value.startswith(prefix):
+        return ""
+    raw = value[len(prefix):]
+    if not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", raw):
+        return ""
+    try:
+        png = base64.b64decode(raw, validate=True)
+    except (ValueError, base64.binascii.Error):
+        return ""
+    # PNG magic, IHDR chunk and dimensions. Never decode user images on the server.
+    if len(png) < 45 or png[:8] != b"\x89PNG\r\n\x1a\n" or png[12:16] != b"IHDR":
+        return ""
+    if int.from_bytes(png[16:20], "big") != 64 or int.from_bytes(png[20:24], "big") != 64:
+        return ""
+    return value
+
 SWORD_DAMAGE = {202: 4.0, 212: 5.0, 222: 6.0, 232: 5.0, 242: 8.0, 252: 10.0}
 MOB_DEFINITIONS: dict[str, dict[str, Any]] = {
     "PIG": {"health": 10.0, "damage": 0.0, "hostile": False},
@@ -286,6 +309,7 @@ class PlayerState:
     id: str
     username: str
     skin: str
+    skinData: str = ""
     x: float = 0.5
     y: float = 50.0
     z: float = 0.5
@@ -425,9 +449,10 @@ class MellorCraftWorld:
         return inventory
 
     @staticmethod
-    def public_player_state(player: PlayerState) -> dict[str, Any]:
+    def public_player_state(player: PlayerState, with_skin: bool = False) -> dict[str, Any]:
         return {
             "id": player.id, "username": player.username, "skin": player.skin,
+            **({"skinData": player.skinData} if with_skin else {}),
             "x": player.x, "y": player.y, "z": player.z,
             "yaw": player.yaw, "pitch": player.pitch, "dimension": player.dimension,
             "health": player.health, "hunger": player.hunger, "gamemode": player.gamemode,
@@ -437,7 +462,7 @@ class MellorCraftWorld:
     @staticmethod
     def player_profile(player: PlayerState) -> dict[str, Any]:
         return {
-            "username": player.username, "skin": player.skin,
+            "username": player.username, "skin": player.skin, "skinData": player.skinData,
             "x": player.x, "y": player.y, "z": player.z,
             "yaw": player.yaw, "pitch": player.pitch, "dimension": player.dimension,
             "health": player.health, "hunger": player.hunger, "gamemode": player.gamemode,
@@ -456,6 +481,7 @@ class MellorCraftWorld:
         player = PlayerState(id=player_id, username=username, skin=skin, isOperator=is_operator)
         if not isinstance(profile, dict):
             return player, False
+        player.skinData = sanitize_skin_png(profile.get("skinData"))
         player.x = max(-2_000_000.0, min(2_000_000.0, finite_number(profile.get("x"), player.x)))
         player.y = max(-100.0, min(1000.0, finite_number(profile.get("y"), player.y)))
         player.z = max(-2_000_000.0, min(2_000_000.0, finite_number(profile.get("z"), player.z)))
@@ -681,8 +707,8 @@ class MellorCraftWorld:
             for d, x, y, z in [self.parse_block_key(key)]
         ]
 
-    def player_snapshot(self) -> list[dict[str, Any]]:
-        return [self.public_player_state(player) for player in self.players.values()]
+    def player_snapshot(self, with_skin: bool = False) -> list[dict[str, Any]]:
+        return [self.public_player_state(player, with_skin) for player in self.players.values()]
 
     def mob_snapshot(self) -> list[dict[str, Any]]:
         return [asdict(mob) for mob in self.mobs.values()]
@@ -938,6 +964,7 @@ class ServerAccountStore:
                 skin = str(entry.get("skin", "steve"))
                 self.accounts[self.key(username)] = {
                     "username": username, "skin": skin if skin in ALLOWED_SKINS else "steve",
+                    "skinData": sanitize_skin_png(entry.get("skinData")),
                     "salt": salt, "verifier": verifier,
                     "iterations": max(100_000, int(entry.get("iterations", PBKDF2_ITERATIONS))),
                 }
@@ -1928,6 +1955,20 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
     if player is None:
         return
 
+    if message_type == "skin_update" and world.client_protocols.get(player_id, 1) >= 18:
+        player.skinData = sanitize_skin_png(data.get("skinData"))
+        new_color = str(data.get("skin", ""))
+        if new_color in ALLOWED_SKINS:
+            player.skin = new_color
+        account = account_store.accounts.get(account_store.key(player.username))
+        if account is not None:
+            account["skinData"] = player.skinData
+            account["skin"] = player.skin
+            account_store.save()
+        world.remember_player(player)
+        await broadcast({"type": "skin_update", "playerId": player.id, "skin": player.skin, "skinData": player.skinData}, exclude_id=player.id, minimum_protocol=18)
+        return
+
     if message_type == "player_update":
         world.client_last_updates[player_id] = time.monotonic()
         teleport_locked = time.monotonic() < world.teleport_locks.get(player.id, 0.0)
@@ -2120,6 +2161,15 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
             await send_json(websocket, {"type": "error", "message": auth_error or "Authentication failed."})
             return
         username = str(account["username"])
+        # A v1.8.5+ client selects its palette/custom PNG in main menu. Preserve
+        # account skins for clients that do not send this new field.
+        if client_protocol >= 18 and "skinData" in join:
+            updated_png = sanitize_skin_png(join.get("skinData"))
+            requested_color = requested_skin if requested_skin in ALLOWED_SKINS else str(account.get("skin", "steve"))
+            if account.get("skinData", "") != updated_png or account.get("skin") != requested_color:
+                account["skinData"] = updated_png
+                account["skin"] = requested_color
+                account_store.save()
         skin = str(account.get("skin", "steve"))
         key = world.profile_key(username)
         if any(existing.username.casefold() == key for existing in world.players.values()):
@@ -2138,6 +2188,7 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
         player, restored = world.restored_player(
             player_id, username, skin, key in world.operators
         )
+        player.skinData = sanitize_skin_png(account.get("skinData")) if client_protocol >= 18 else player.skinData
         world.players[player_id] = player
         world.connections[player_id] = websocket
         world.client_protocols[player_id] = client_protocol
@@ -2149,13 +2200,13 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
         total_blocks = len(world.blocks)
         await send_json(websocket, {
             "type": "welcome", "protocol": PROTOCOL_VERSION, "negotiatedProtocol": client_protocol,
-            "clientId": player_id, "username": username, "skin": skin, "accountAuthenticated": True, "seed": world.seed, "worldName": world.world_name,
+            "clientId": player_id, "username": username, "skin": skin, "skinData": player.skinData, "accountAuthenticated": True, "seed": world.seed, "worldName": world.world_name,
             "worldTime": world.world_time, "weatherSeed": world.weather_seed, "weatherPhase": world.weather_phase,
             "dayLength": world.game_rules["dayLength"], "gameRules": world.game_rules, "worldGen": world.world_gen,
             "bossDefeated": world.boss_defeated, "streamedWorld": True, "blockCount": total_blocks,
             "isOperator": player.isOperator, "blocks": [],
             "playerState": world.player_profile(player) if restored and client_protocol >= 4 else None,
-            "players": world.player_snapshot(),
+            "players": world.player_snapshot(True),
             "mobs": world.mob_snapshot() if client_protocol >= 3 else [],
             "items": world.item_snapshot() if client_protocol >= 3 else [],
             "furnaces": world.furnaces if client_protocol >= 6 else {},
@@ -2185,7 +2236,7 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
             loaded += len(batch)
             await send_json(websocket, {"type": "world_block_batch", "blocks": batch, "loaded": loaded, "total": total_blocks})
         await send_json(websocket, {"type": "world_ready", "blockCount": loaded})
-        await broadcast({"type": "player_joined", "player": world.public_player_state(player)}, exclude_id=player_id)
+        await broadcast({"type": "player_joined", "player": world.public_player_state(player, True)}, exclude_id=player_id)
         await broadcast_mob_hosts()
         console_log(f"WebSocket joined: {username} ({player_id[:8]}) protocol={client_protocol}")
 

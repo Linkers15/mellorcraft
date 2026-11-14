@@ -758,6 +758,29 @@
             border-radius: 50%; pointer-events: none; top: 30px; left: 30px;
         }
 
+
+/* Minecraft PNG skin editor: pixel-accurate faces, with visible body-part controls. */
+#skinEditorPage {max-width:1000px;}
+.skin-panel {background:rgba(15,23,31,.96);border:2px solid #5c7381;border-radius:12px;padding:16px;color:#f1f8ff;max-height:calc(100dvh - 135px);overflow-y:auto;}
+.skin-grid {display:grid;grid-template-columns:minmax(210px,1fr) minmax(250px,1.2fr) minmax(190px,.85fr);gap:16px;align-items:start;}
+.skin-panel h3{font-size:16px;margin:0 0 10px;color:#99dbba;}
+.skin-panel label{font-size:12px;color:#d3e4f0;display:block;margin:6px 0;}
+.skin-panel select,.skin-panel input[type=color]{width:100%;background:#202d3a;color:white;border:1px solid #66818f;border-radius:5px;padding:8px;}
+.skin-panel input[type=color]{height:42px;padding:3px;}
+.skin-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.skin-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.skin-actions button{flex:1 1 120px;padding:10px 12px;border-radius:5px;border:1px solid #768f99;background:#243b50;color:#fff;cursor:pointer;font:inherit;}
+.skin-actions .skin-save{background:#267344;}
+#skinPaintCanvas{width:min(100%,320px);height:auto;aspect-ratio:1;display:block;margin:0 auto;border:2px solid #e7f5ff;image-rendering:pixelated;touch-action:none;cursor:crosshair;background:#3d4350;}
+.skin-preview-row{display:flex;justify-content:space-evenly;gap:10px;}
+.skin-preview-row canvas{width:46%;height:auto;aspect-ratio:1/2;max-width:160px;image-rendering:pixelated;border:1px solid #708ca0;background:repeating-conic-gradient(#29343e 0% 25%,#1a242e 0% 50%) 50% / 16px 16px;}
+.skin-body-toggle{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.skin-body-toggle label{display:flex;align-items:center;gap:6px;margin:2px;}
+.skin-note{font-size:11px;line-height:1.4;color:#bacad5;margin-top:8px;}
+#skinStatus{min-height:16px;color:#a4e6b4;font-size:12px;margin-top:9px;}
+@media(max-width:780px){.skin-grid{grid-template-columns:1fr 1fr}.skin-preview-panel{grid-column:1 / -1}.skin-preview-row canvas{max-width:110px}}
+@media(max-width:480px){.skin-grid{grid-template-columns:1fr}.skin-preview-panel{grid-column:auto}}
+
     </style>
 </head>
 <body>
@@ -913,6 +936,48 @@
           <button class="menuBtn blueBtn backBtn" id="serverAuthBack" type="button">Back</button>
         </div>
 
+        <div id="skinEditorPage" class="start-page">
+          <h2 class="start-page-title">Skin Studio</h2>
+          <section class="skin-panel">
+            <div class="skin-grid">
+              <div>
+                <h3>Colors &amp; body parts</h3>
+                <label>Starting color preset
+                  <select id="skinPresetSelect"><option value="steve">Blue</option><option value="alex">Green</option><option value="mellorite">Purple</option><option value="ember">Red</option><option value="frost">Light Blue</option><option value="forest">Dark Green</option></select>
+                </label>
+                <div class="skin-actions"><button type="button" id="skinApplyPreset">Apply preset</button></div>
+                <label>Body part <select id="skinPartSelect"><option value="head">Head</option><option value="body">Torso</option><option value="rightArm">Right arm</option><option value="leftArm">Left arm</option><option value="rightLeg">Right leg</option><option value="leftLeg">Left leg</option></select></label>
+                <label>Layer <select id="skinLayerSelect"><option value="base">Base layer</option><option value="overlay">Outer layer (hat, jacket, sleeves)</option></select></label>
+                <label>Face <select id="skinFaceSelect"><option value="front">Front</option><option value="back">Back</option><option value="right">Right</option><option value="left">Left</option><option value="top">Top</option><option value="bottom">Bottom</option></select></label>
+                <label>Paint color <input type="color" id="skinPaintColor" value="#4fbcdf"></label>
+                <label><input type="checkbox" id="skinEraser"> Eraser (transparent pixels)</label>
+                <p class="skin-note">Paint pixels in the selected face. The outer layer supports transparency. Select any arm, leg, torso, or head to draw on its six sides.</p>
+              </div>
+              <div>
+                <h3 id="skinPaintLabel">Head — Front</h3>
+                <canvas id="skinPaintCanvas" width="256" height="256" aria-label="Paint individual skin pixels" role="img"></canvas>
+                <p class="skin-note">Drag or tap to paint. This editor uses Minecraft's standard 64×64 skin layout. Import also accepts classic 64×32 skins.</p>
+              </div>
+              <div class="skin-preview-panel">
+                <h3>Visible preview</h3>
+                <div class="skin-preview-row"><canvas id="skinFrontPreview" width="80" height="160" title="Front preview"></canvas><canvas id="skinBackPreview" width="80" height="160" title="Back preview"></canvas></div>
+                <p class="skin-note">Toggle body parts while editing or inspecting the skin:</p>
+                <div class="skin-body-toggle" id="skinPartToggles"></div>
+                <label><input type="checkbox" id="skinShowOverlay" checked> Show outer layer</label>
+              </div>
+            </div>
+            <div class="skin-actions">
+              <button type="button" id="skinImportBtn">Import Minecraft PNG</button>
+              <button type="button" id="skinExportBtn">Export 64×64 PNG</button>
+              <button type="button" id="skinResetBtn">Reset to preset</button>
+              <button type="button" id="skinSaveBtn" class="skin-save">Save &amp; use on servers</button>
+            </div>
+            <input type="file" id="skinImportFile" accept="image/png,.png" hidden>
+            <div id="skinStatus" aria-live="polite"></div>
+          </section>
+          <button type="button" class="menuBtn blueBtn backBtn" data-start-page="clientSettingsPage">Back to Settings</button>
+        </div>
+
         <div id="clientSettingsPage" class="start-page"><h2 class="start-page-title">Settings</h2>
           <section class="menu-section">
             <div class="seedLabel">Username and skin</div>
@@ -923,7 +988,8 @@
                 <option value="ember">Red</option><option value="frost">Light Blue</option><option value="forest">Dark Green</option>
               </select>
             </div>
-            <p>Choose one of the original MellorCraft player colors.</p>
+            <p>Choose a built-in color or create your own Minecraft-compatible player skin.</p>
+            <button type="button" class="menuBtn greenBtn" data-start-page="skinEditorPage">Edit Skin / Import Minecraft PNG</button>
             <div class="setting-group"><label>Render Distance: <span id="menuRdVal">6</span> chunks</label><input type="range" id="menuSetRd" min="2" max="64" value="6"></div>
             <div class="setting-group"><label class="shader-toggle-row"><span>Extended Render Distance</span><input type="checkbox" id="menuExtendedEnabled"></label><div class="setting-help">Optional reduced-geometry terrain beyond the high-resolution limit, with actual trees and structures.</div></div>
             <div class="setting-group"><label>Extended Distance: <span id="menuExtendedVal">32</span> chunks</label><input type="range" id="menuExtendedRd" min="3" max="96" value="32"></div>
@@ -1485,8 +1551,8 @@
         // Multiplayer networking. The Python host owns the seed, clock, shared block edits,
         // connected-player list, usernames, skins, and multiplayer chat.
         const MULTIPLAYER_PROTOCOL = 6; // browser-hosted relay protocol
-        const DEDICATED_SERVER_PROTOCOL = 17; // authenticated streamed-world servers with authoritative teleport + graceful shutdown
-        const SUPPORTED_DEDICATED_PROTOCOLS = [17];
+        const DEDICATED_SERVER_PROTOCOL = 18; // authenticated streamed-world servers with authoritative teleport + graceful shutdown
+        const SUPPORTED_DEDICATED_PROTOCOLS = [18];
         const PLAYER_SKINS = {
             steve:     { body: [0.10, 0.55, 0.78], head: [0.72, 0.49, 0.33] },
             alex:      { body: [0.25, 0.68, 0.38], head: [0.93, 0.68, 0.48] },
@@ -1495,6 +1561,181 @@
             frost:     { body: [0.35, 0.72, 0.95], head: [0.80, 0.92, 1.00] },
             forest:    { body: [0.12, 0.45, 0.18], head: [0.48, 0.72, 0.38] }
         };
+        // Skin Studio uses the official Minecraft 64x64 layout. Skin PNG bytes are
+        // exported unchanged by the editor, rather than encoding a proprietary format.
+        const SKIN_STORAGE_KEY='mellorcraft_v185_custom_skin_png';
+        const skinParts=['head','body','rightArm','leftArm','rightLeg','leftLeg'];
+        const skinLabels={head:'Head',body:'Torso',rightArm:'Right arm',leftArm:'Left arm',rightLeg:'Right leg',leftLeg:'Left leg'};
+        const skinCoords={
+            head:    {base:[0,0,8,8,8],    overlay:[32,0,8,8,8]},
+            body:    {base:[16,16,8,12,4], overlay:[16,32,8,12,4]},
+            rightArm:{base:[40,16,4,12,4], overlay:[40,32,4,12,4]},
+            leftArm: {base:[32,48,4,12,4], overlay:[48,48,4,12,4]},
+            rightLeg:{base:[0,16,4,12,4],  overlay:[0,32,4,12,4]},
+            leftLeg: {base:[16,48,4,12,4], overlay:[0,48,4,12,4]}
+        };
+        function skinFaceRect(part,layer,face){
+            const coords=skinCoords[part]?.[layer];if(!coords)return null;
+            const [x,y,w,h,d]=coords;
+            if(face==='top')return {x:x+d,y,w,h:d};
+            if(face==='bottom')return {x:x+d+w,y,w,h:d};
+            const sx={right:x,front:x+d,left:x+d+w,back:x+d+w+d}[face];
+            return sx===undefined?null:{x:sx,y:y+d,w:face==='right'||face==='left'?d:w,h};
+        }
+        function validSkinPNG(data){return typeof data==='string'&&data.length<=110000&&/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(data);}
+        let localSkinData=validSkinPNG(safeStorageGet(SKIN_STORAGE_KEY))?safeStorageGet(SKIN_STORAGE_KEY):'';
+        const skinBitmap=document.createElement('canvas');skinBitmap.width=skinBitmap.height=64;
+        const skinBitmapCtx=skinBitmap.getContext('2d',{willReadFrequently:true});
+        let skinEditorPainting=false,skinEditorChanged=false;
+        const skinPartVisible=Object.fromEntries(skinParts.map(part=>[part,true]));
+        function makePresetSkin(name){
+            name=PLAYER_SKINS[name]?name:'steve';
+            const c=PLAYER_SKINS[name],face=c.head.map(v=>Math.round(v*255)),coat=c.body.map(v=>Math.round(v*255));
+            skinBitmapCtx.clearRect(0,0,64,64);
+            for(const part of skinParts)for(const side of ['front','back','left','right','top','bottom']){
+                const r=skinFaceRect(part,'base',side);let rgb=part==='head'?face:coat;
+                if(part.includes('Leg'))rgb=coat.map(v=>Math.round(v*.60));
+                if(part.includes('Arm'))rgb=coat.map(v=>Math.round(v*.88));
+                if(side==='top')rgb=rgb.map(v=>Math.min(255,Math.round(v*1.08)));
+                if(side==='bottom')rgb=rgb.map(v=>Math.round(v*.70));
+                skinBitmapCtx.fillStyle=`rgb(${rgb.join(',')})`;skinBitmapCtx.fillRect(r.x,r.y,r.w,r.h);
+            }
+            // Eyes / simple face so color presets remain recognizable after saving.
+            const head=skinFaceRect('head','base','front');
+            skinBitmapCtx.fillStyle='#f6f7ed';skinBitmapCtx.fillRect(head.x+1,head.y+3,2,2);skinBitmapCtx.fillRect(head.x+5,head.y+3,2,2);
+            skinBitmapCtx.fillStyle='#24344d';skinBitmapCtx.fillRect(head.x+2,head.y+3,1,2);skinBitmapCtx.fillRect(head.x+5,head.y+3,1,2);
+            skinEditorChanged=true;drawSkinEditor();
+        }
+        function skinImportLegacy(image){
+            skinBitmapCtx.clearRect(0,0,64,64);skinBitmapCtx.drawImage(image,0,0);
+            // Classic 64x32 skins have no separate left arm / leg UVs. Mirror each
+            // original limb into the modern 64x64 UV rectangles before editing.
+            const snapshot=document.createElement('canvas');snapshot.width=64;snapshot.height=64;
+            snapshot.getContext('2d').drawImage(skinBitmap,0,0);
+            for(const [destPart,sourcePart] of [['leftArm','rightArm'],['leftLeg','rightLeg']]){
+                for(const side of ['front','back','left','right','top','bottom']){
+                    const from=skinFaceRect(sourcePart,'base',side==='left'?'right':side==='right'?'left':side);
+                    const to=skinFaceRect(destPart,'base',side);
+                    skinBitmapCtx.save();skinBitmapCtx.translate(to.x+to.w,to.y);skinBitmapCtx.scale(-1,1);
+                    skinBitmapCtx.drawImage(snapshot,from.x,from.y,from.w,from.h,0,0,to.w,to.h);skinBitmapCtx.restore();
+                }
+            }
+        }
+        function skinEditorFace(){
+            return skinFaceRect(document.getElementById('skinPartSelect').value,document.getElementById('skinLayerSelect').value,document.getElementById('skinFaceSelect').value);
+        }
+        function skinPreviewFace(ctx,part,face,position){
+            if(!skinPartVisible[part])return;
+            const [x,y,w,h]=position;
+            const base=skinFaceRect(part,'base',face),overlay=skinFaceRect(part,'overlay',face);
+            ctx.drawImage(skinBitmap,base.x,base.y,base.w,base.h,x,y,w,h);
+            if(document.getElementById('skinShowOverlay').checked)ctx.drawImage(skinBitmap,overlay.x,overlay.y,overlay.w,overlay.h,x,y,w,h);
+        }
+        function drawSkinEditor(){
+            const paint=document.getElementById('skinPaintCanvas');if(!paint)return;
+            const ctx=paint.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=false;
+            ctx.fillStyle='#222c37';ctx.fillRect(0,0,paint.width,paint.height);
+            const r=skinEditorFace();if(!r)return;
+            const scale=Math.floor(Math.min(paint.width/r.w,paint.height/r.h)),w=r.w*scale,h=r.h*scale,x0=Math.floor((paint.width-w)/2),y0=Math.floor((paint.height-h)/2);
+            for(let y=0;y<r.h;y++)for(let x=0;x<r.w;x++){
+                ctx.fillStyle=(x+y)%2?'#7b8490':'#aab4bc';ctx.fillRect(x0+x*scale,y0+y*scale,scale,scale);
+            }
+            const part=document.getElementById('skinPartSelect').value,layer=document.getElementById('skinLayerSelect').value,face=document.getElementById('skinFaceSelect').value;
+            if(layer==='overlay'){
+                const b=skinFaceRect(part,'base',face);
+                ctx.globalAlpha=.47;ctx.drawImage(skinBitmap,b.x,b.y,b.w,b.h,x0,y0,w,h);ctx.globalAlpha=1;
+            }
+            ctx.drawImage(skinBitmap,r.x,r.y,r.w,r.h,x0,y0,w,h);
+            ctx.strokeStyle='rgba(16,24,30,.38)';ctx.lineWidth=1;
+            for(let x=0;x<=r.w;x++){ctx.beginPath();ctx.moveTo(x0+x*scale+.5,y0);ctx.lineTo(x0+x*scale+.5,y0+h);ctx.stroke();}
+            for(let y=0;y<=r.h;y++){ctx.beginPath();ctx.moveTo(x0,y0+y*scale+.5);ctx.lineTo(x0+w,y0+y*scale+.5);ctx.stroke();}
+            paint.dataset.rect=JSON.stringify([x0,y0,scale]);
+            document.getElementById('skinPaintLabel').textContent=`${skinLabels[part]} — ${face[0].toUpperCase()+face.slice(1)} (${r.w}×${r.h})`;
+            for(const side of ['front','back']){
+                const preview=document.getElementById(side==='front'?'skinFrontPreview':'skinBackPreview');const pc=preview.getContext('2d');
+                pc.imageSmoothingEnabled=false;pc.clearRect(0,0,80,160);
+                skinPreviewFace(pc,'head',side,[24,2,32,32]);
+                skinPreviewFace(pc,'body',side,[24,34,32,48]);
+                skinPreviewFace(pc,'rightArm',side,[8,34,16,48]);
+                skinPreviewFace(pc,'leftArm',side,[56,34,16,48]);
+                skinPreviewFace(pc,'rightLeg',side,[24,82,16,48]);
+                skinPreviewFace(pc,'leftLeg',side,[40,82,16,48]);
+            }
+        }
+        function skinPaintAt(e){
+            const canvas=document.getElementById('skinPaintCanvas');const rect=canvas.getBoundingClientRect();
+            const [x0,y0,scale]=JSON.parse(canvas.dataset.rect||'[0,0,32]');const face=skinEditorFace();
+            const px=((e.clientX-rect.left)*canvas.width/rect.width-x0)/scale;
+            const py=((e.clientY-rect.top)*canvas.height/rect.height-y0)/scale;
+            const x=Math.floor(px),y=Math.floor(py);
+            if(x<0||y<0||x>=face.w||y>=face.h)return;
+            if(document.getElementById('skinEraser').checked){
+                skinBitmapCtx.clearRect(face.x+x,face.y+y,1,1);
+            }else{
+                skinBitmapCtx.fillStyle=document.getElementById('skinPaintColor').value;
+                skinBitmapCtx.fillRect(face.x+x,face.y+y,1,1);
+            }
+            skinEditorChanged=true;drawSkinEditor();
+        }
+        function skinStatus(message,error=false){
+            const el=document.getElementById('skinStatus');el.textContent=message;el.style.color=error?'#ffc2ba':'#a4e6b4';
+        }
+        async function skinOpenEditor(){
+            const current=localSkinData;
+            if(current){
+                const img=new Image();
+                img.onload=()=>{skinBitmapCtx.clearRect(0,0,64,64);skinBitmapCtx.drawImage(img,0,0,64,64);skinEditorChanged=false;drawSkinEditor();};
+                img.onerror=()=>{makePresetSkin(document.getElementById('singleplayerSkinInput').value);skinStatus('Saved skin could not be decoded; started from preset.',true);};
+                img.src=current;
+            }else{makePresetSkin(document.getElementById('singleplayerSkinInput').value);skinEditorChanged=false;}
+            document.getElementById('skinPresetSelect').value=document.getElementById('singleplayerSkinInput').value;
+            drawSkinEditor();
+        }
+        function skinUseAndSave(){
+            const png=skinBitmap.toDataURL('image/png');
+            if(!validSkinPNG(png))return skinStatus('The edited PNG exceeds the supported limit.',true);
+            localSkinData=png;
+            safeStorageSet(SKIN_STORAGE_KEY,png);
+            const preset=document.getElementById('skinPresetSelect').value;
+            document.getElementById('singleplayerSkinInput').value=preset;
+            rememberSelectedSingleplayerIdentity();
+            // Updating a character while connected broadcasts a new skin once.
+            if(gameStarted)sendNetwork({type:'skin_update',skin:preset,skinData:localSkinData});
+            skinEditorChanged=false;
+            skinStatus('Skin saved locally. It will appear in singleplayer, LAN and updated dedicated servers.');
+        }
+        function initializeSkinEditor(){
+            const toggles=document.getElementById('skinPartToggles');
+            for(const part of skinParts){
+                const label=document.createElement('label'),box=document.createElement('input');
+                box.type='checkbox';box.checked=true;box.addEventListener('change',()=>{skinPartVisible[part]=box.checked;drawSkinEditor();});
+                label.append(box,document.createTextNode(skinLabels[part]));toggles.appendChild(label);
+            }
+            for(const id of ['skinPartSelect','skinLayerSelect','skinFaceSelect','skinShowOverlay'])document.getElementById(id).addEventListener('change',drawSkinEditor);
+            document.getElementById('skinApplyPreset').addEventListener('click',()=>{makePresetSkin(document.getElementById('skinPresetSelect').value);skinStatus('Preset loaded. Select Save to use it.');});
+            document.getElementById('skinResetBtn').addEventListener('click',()=>{makePresetSkin(document.getElementById('skinPresetSelect').value);skinStatus('Reset editor to this color preset.');});
+            const canvas=document.getElementById('skinPaintCanvas');
+            canvas.addEventListener('pointerdown',e=>{e.preventDefault();skinEditorPainting=true;canvas.setPointerCapture(e.pointerId);skinPaintAt(e);});
+            canvas.addEventListener('pointermove',e=>{if(skinEditorPainting){e.preventDefault();skinPaintAt(e);}});
+            for(const ev of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(ev,()=>{skinEditorPainting=false;});
+            document.getElementById('skinImportBtn').addEventListener('click',()=>document.getElementById('skinImportFile').click());
+            document.getElementById('skinImportFile').addEventListener('change',ev=>{
+                const file=ev.target.files?.[0];ev.target.value='';if(!file)return;
+                if(file.size>2*1024*1024||(!file.name.toLowerCase().endsWith('.png')&&file.type!=='image/png'))return skinStatus('Choose a Minecraft PNG file (up to 2 MB).',true);
+                const url=URL.createObjectURL(file),img=new Image();
+                img.onload=()=>{URL.revokeObjectURL(url);if(img.width!==64||![32,64].includes(img.height))return skinStatus('Minecraft skins must be 64×64 or classic 64×32 pixels.',true);
+                    if(img.height===32)skinImportLegacy(img);else{skinBitmapCtx.clearRect(0,0,64,64);skinBitmapCtx.drawImage(img,0,0);}
+                    skinEditorChanged=true;drawSkinEditor();skinStatus(`Imported ${img.width}×${img.height} skin. Save it to use it on servers.`);
+                };
+                img.onerror=()=>{URL.revokeObjectURL(url);skinStatus('Could not decode that PNG.',true);};img.src=url;
+            });
+            document.getElementById('skinExportBtn').addEventListener('click',()=>{
+                const link=document.createElement('a');link.download='MellorCraft-skin-64x64.png';link.href=skinBitmap.toDataURL('image/png');document.body.appendChild(link);link.click();link.remove();skinStatus('Exported a Minecraft-compatible 64×64 PNG.');
+            });
+            document.getElementById('skinSaveBtn').addEventListener('click',skinUseAndSave);
+            drawSkinEditor();
+        }
+
         let socket = null;
         let multiplayerConnected = false;
         let localClientId = null;
@@ -1725,8 +1966,8 @@
             return true;
         }
 
-        function integratedPublicPlayer(state) {
-            return { id:state.id, username:state.username, skin:state.skin, x:state.x, y:state.y, z:state.z,
+        function integratedPublicPlayer(state,withSkin=false) {
+            return { id:state.id, username:state.username, skin:state.skin, ...(withSkin?{skinData:validSkinPNG(state.skinData)?state.skinData:''}:{}), x:state.x, y:state.y, z:state.z,
                 yaw:state.yaw, pitch:state.pitch, dimension:state.dimension, health:state.health, hunger:Number.isFinite(Number(state.hunger))?Number(state.hunger):20,
                 gamemode:state.gamemode, heldItem:state.heldItem, armorId:Number(state.armorId)||0, crouching:Boolean(state.crouching), renderDistance:Math.max(2,Math.min(64,Number(state.renderDistance)||6)), isOperator:Boolean(state.isOperator) };
         }
@@ -1734,7 +1975,7 @@
         function integratedLocalState() {
             const slot = player && player.inventory ? player.inventory[player.selectedSlot] : null;
             return {
-                id:localClientId || 'singleplayer', username:localUsername || 'Player', skin:localSkin || 'steve',
+                id:localClientId || 'singleplayer', username:localUsername || 'Player', skin:localSkin || 'steve', skinData:localSkinData||'',
                 x:Number(player?.x)||0.5, y:Number(player?.y)||50, z:Number(player?.z)||0.5,
                 yaw:Number(player?.yaw)||0, pitch:Number(player?.pitch)||0, dimension:currentDimension,
                 health:Number.isFinite(Number(player?.health))?Number(player.health):10, hunger:Number.isFinite(Number(player?.hunger))?Number(player.hunger):20, gamemode:player?.gamemode||'survival', heldItem:slot?Number(slot.id)||0:0,
@@ -1751,7 +1992,7 @@
             if (!state || state.id === localClientId || !state.username) return;
             if(!/^[0-9a-f]{64}$/.test(String(state.profileToken||'')))return;
             singleplayerLanProfiles[`token:${state.profileToken}`] = {
-                username:state.username, skin:state.skin, x:state.x, y:state.y, z:state.z, yaw:state.yaw, pitch:state.pitch,
+                username:state.username, skin:state.skin, skinData:validSkinPNG(state.skinData)?state.skinData:'', x:state.x, y:state.y, z:state.z, yaw:state.yaw, pitch:state.pitch,
                 dimension:state.dimension, health:state.health, hunger:Number.isFinite(Number(state.hunger))?Number(state.hunger):20, gamemode:state.gamemode, heldItem:state.heldItem,
                 selectedSlot:state.selectedSlot, armorId:Number(state.armorId)||0, inventory:Array.isArray(state.inventory)?state.inventory.map(v=>({...v})):[],
                 originalSpawn:state.originalSpawn?{...state.originalSpawn}:null,
@@ -2063,6 +2304,12 @@
             if (!actor) return false;
             const now=performance.now()/1000;
 
+            if(type==='skin_update'){
+                actor.skinData=validSkinPNG(payload.skinData)?payload.skinData:'';
+                if(PLAYER_SKINS[payload.skin])actor.skin=payload.skin;
+                integratedBroadcast({type:'skin_update',playerId:actor.id,skin:actor.skin,skinData:actor.skinData},actor.id);
+                return true;
+            }
             if (type==='player_update') {
                 const state=actor;
                 state.x=Math.max(-2000000,Math.min(2000000,Number(payload.x)||0));
@@ -2278,16 +2525,16 @@
                 relaySend({type:'host_disconnect',guestId:info.guestId,reason:'Character already connected'});return;
             }
             const isOp=false;
-            const state={id:info.guestId,username,skin:PLAYER_SKINS[info.skin]?info.skin:'steve',x:0.5,y:50,z:0.5,yaw:0,pitch:0,dimension:0,health:10,hunger:20,gamemode:'survival',heldItem:0,selectedSlot:0,armorId:0,inventory:Array.from({length:30},()=>({id:0,count:0})),originalSpawn:null,respawnPoint:null,isOperator:isOp,deviceClass:info.deviceClass==='mobile'?'mobile':'desktop',profileToken:token};
-            if(profile)Object.assign(state,JSON.parse(JSON.stringify(profile)),{id:info.guestId,username,isOperator:isOp,profileToken:token,skin:state.skin,deviceClass:state.deviceClass,gamemode:'survival'});
+            const state={id:info.guestId,username,skin:PLAYER_SKINS[info.skin]?info.skin:'steve',skinData:validSkinPNG(info.skinData)?info.skinData:'',x:0.5,y:50,z:0.5,yaw:0,pitch:0,dimension:0,health:10,hunger:20,gamemode:'survival',heldItem:0,selectedSlot:0,armorId:0,inventory:Array.from({length:30},()=>({id:0,count:0})),originalSpawn:null,respawnPoint:null,isOperator:isOp,deviceClass:info.deviceClass==='mobile'?'mobile':'desktop',profileToken:token};
+            if(profile)Object.assign(state,JSON.parse(JSON.stringify(profile)),{id:info.guestId,username,isOperator:isOp,profileToken:token,skin:state.skin,skinData:state.skinData,deviceClass:state.deviceClass,gamemode:'survival'});
             if(state.health<=0&&gameRules.difficulty==='hardcore'){
                 integratedSend(info.guestId,{type:'banned',message:'This character has died in Hardcore.'});
                 relaySend({type:'host_disconnect',guestId:info.guestId,reason:'Hardcore death'});return;
             }
             integratedPlayers.set(info.guestId,state); integratedRecomputeMobHosts();
             const blocks=snapshotFromChunkEdits(serializeChunkEdits());
-            integratedSend(info.guestId,{type:'welcome',protocol:6,negotiatedProtocol:6,clientId:info.guestId,username,seed:WORLD_SEED,worldName:singleplayerWorldName,worldTime,weatherSeed,weatherPhase,dayLength:currentDayLength(),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),bossDefeated:Boolean(bossDefeated),isOperator:isOp,blocks,playerState:profile?{...profile}:null,players:[...integratedPlayers.values()].map(integratedPublicPlayer),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
-            integratedBroadcast({type:'player_joined',player:integratedPublicPlayer(state)},info.guestId);
+            integratedSend(info.guestId,{type:'welcome',protocol:6,negotiatedProtocol:6,clientId:info.guestId,username,seed:WORLD_SEED,worldName:singleplayerWorldName,worldTime,weatherSeed,weatherPhase,dayLength:currentDayLength(),gameRules:{...gameRules},worldGen:normalizeWorldGenSettings(worldGenSettings),bossDefeated:Boolean(bossDefeated),isOperator:isOp,blocks,playerState:profile?{...profile}:null,players:[...integratedPlayers.values()].map(st=>integratedPublicPlayer(st,true)),mobs:mobs.filter(m=>m.health>0).map(m=>({id:m.id,typeKey:m.typeKey,x:m.x,y:m.y,z:m.z,dimension:m.dimension,health:m.health,maxHealth:m.type?.maxHealth||m.type?.health||m.health,bodyRotation:m.bodyRotation,headRotation:m.headRotation,vx:m.vx||0,vy:m.vy||0,vz:m.vz||0})),items:[...droppedItems.values()].map(i=>({...i})),furnaces:Object.fromEntries([...furnaceStates].map(([k,v])=>[k,{...v}])),mobHosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
+            integratedBroadcast({type:'player_joined',player:integratedPublicPlayer(state,true)},info.guestId);
             integratedBroadcast({type:'mob_hosts',hosts:{'0':mobHosts[0],'1':mobHosts[1],'2':mobHosts[2]}});
         }
 
@@ -2451,7 +2698,7 @@
                 identityToken=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
                 safeStorageSet(identityKey,identityToken);
             }
-            relaySend({type:'join_world',worldId,username:localUsername,skin:localSkin,identityToken,deviceClass:isMobilePlaying?'mobile':'desktop'});
+            relaySend({type:'join_world',worldId,username:localUsername,skin:localSkin,identityToken,skinData:localSkinData||'',deviceClass:isMobilePlaying?'mobile':'desktop'});
             relayStatus('relayJoinStatus','Joining selected world...');
         }
 
@@ -2480,6 +2727,7 @@
                     id: data.id,
                     username: data.username || 'Player',
                     skin: PLAYER_SKINS[data.skin] ? data.skin : 'steve',
+                    skinData: validSkinPNG(data.skinData)?data.skinData:'',
                     x: Number(data.x) || 0, y: Number(data.y) || 0, z: Number(data.z) || 0,
                     targetX: Number(data.x) || 0, targetY: Number(data.y) || 0, targetZ: Number(data.z) || 0,
                     yaw: Number(data.yaw) || 0, targetYaw: Number(data.yaw) || 0,
@@ -2493,6 +2741,7 @@
             } else {
                 rp.username = data.username || rp.username;
                 rp.skin = PLAYER_SKINS[data.skin] ? data.skin : rp.skin;
+                if(Object.prototype.hasOwnProperty.call(data,'skinData'))rp.skinData=validSkinPNG(data.skinData)?data.skinData:'';
                 rp.targetX = Number(data.x) || 0;
                 rp.targetY = Number(data.y) || 0;
                 rp.targetZ = Number(data.z) || 0;
@@ -2711,6 +2960,11 @@
                 if(data.message)addChatMessage(String(data.message),'chatSystem');
                 return;
             }
+            if(data.type==='skin_update'){
+                const rp=remotePlayers.get(String(data.playerId||''));
+                if(rp){rp.skinData=validSkinPNG(data.skinData)?data.skinData:'';rp.skin=PLAYER_SKINS[data.skin]?data.skin:rp.skin;}
+                return;
+            }
             if (data.type === 'player_joined') {
                 upsertRemotePlayer(data.player);
                 addChatMessage(`${data.player.username} joined the game`, 'chatSystem');
@@ -2912,7 +3166,7 @@
             joinTimeoutId=setTimeout(()=>{if(socket&&socket.readyState!==WebSocket.OPEN){lastJoinError=`Timed out reaching ${serverAddress}`;try{socket.close();}catch(_){}}},8000);
             socket.addEventListener('open',()=>{
                 if(joinTimeoutId)clearTimeout(joinTimeoutId);joinTimeoutId=null;
-                sendNetwork({type:'join',protocol:DEDICATED_SERVER_PROTOCOL,authAction:mode,username,password,skin,deviceClass:isMobilePlaying?'mobile':'desktop',iosDevice:isIOSDevice});
+                sendNetwork({type:'join',protocol:DEDICATED_SERVER_PROTOCOL,authAction:mode,username,password,skin,skinData:localSkinData||'',deviceClass:isMobilePlaying?'mobile':'desktop',iosDevice:isIOSDevice});
                 setServerAuthStatus(mode==='signup'?'Creating account and loading world...':'Signing in and loading world...');
                 joinTimeoutId=setTimeout(()=>{
                     if(!gameStarted&&socket&&socket.readyState===WebSocket.OPEN){
@@ -3329,10 +3583,14 @@
 
         listSingleplayerWorlds();
         loadSavedSingleplayerIdentity();
+        initializeSkinEditor();
         document.getElementById('singleplayerUsernameInput').addEventListener('change',rememberSelectedSingleplayerIdentity);
         document.getElementById('singleplayerUsernameInput').addEventListener('blur',rememberSelectedSingleplayerIdentity);
-        document.getElementById('singleplayerSkinInput').addEventListener('change',rememberSelectedSingleplayerIdentity);
-        document.querySelectorAll('[data-start-page]').forEach(button=>button.addEventListener('click',()=>showStartPage(button.dataset.startPage)));
+        document.getElementById('singleplayerSkinInput').addEventListener('change',()=>{
+            localSkinData='';safeStorageRemove(SKIN_STORAGE_KEY);
+            rememberSelectedSingleplayerIdentity();
+        });
+        document.querySelectorAll('[data-start-page]').forEach(button=>button.addEventListener('click',()=>{showStartPage(button.dataset.startPage);if(button.dataset.startPage==='skinEditorPage')skinOpenEditor();}));
         const lanExitNotice=safeStorageGet('mellorcraftLanExitNotice');if(lanExitNotice){safeStorageRemove('mellorcraftLanExitNotice');setJoinStatus(lanExitNotice,true);}
         const serverExitNotice=safeStorageGet('mellorcraftServerExitNotice');if(serverExitNotice){safeStorageRemove('mellorcraftServerExitNotice');setJoinStatus(serverExitNotice,true);}
         document.getElementById('createWorldBtn').addEventListener('click',openCreateWorldSettings);
@@ -4409,18 +4667,22 @@
             const px=(id,color,x,y)=>fill(id,color,x,y,1,1);
             const hex=(value,fallback='#aaa')=>typeof value==='string'?value:fallback;
             // Placeable cube blocks use side-face art in UI so hotbar/inventory previews read like the in-world side of the block.
-            for(let id=1;id<=ATLAS_BLOCK_MAX_ID;id++){
+            for(let id=1;id<=187;id++){
                 const [dx,dy]=cell(id);
                 if(isPlantBlock(id)){
                     const color=BLOCK_COLORS[id]?.top||[.35,.7,.25];
                     const css=`rgb(${Math.round(color[0]*255)},${Math.round(color[1]*255)},${Math.round(color[2]*255)})`;
                     ctx.clearRect(dx,dy,16,16);
+                    if(isAquaticPlant(id)){ctx.fillStyle='#163e67';ctx.fillRect(dx+1,dy+1,14,14);}
                     ctx.fillStyle='#34752b';ctx.fillRect(dx+7,dy+6,2,9);
                     if(isFlowerBlock(id)){ctx.fillStyle=css;ctx.fillRect(dx+5,dy+2,6,5);ctx.fillRect(dx+3,dy+3,3,3);ctx.fillRect(dx+10,dy+3,3,3);ctx.fillStyle='#e7c64d';ctx.fillRect(dx+7,dy+4,2,2);}
+                    else if(isAquaticPlant(id)){ctx.fillStyle=css;for(let j=2;j<14;j+=3){ctx.fillRect(dx+7+(j%2),dy+j,2,2);ctx.fillRect(dx+3+(j%4),dy+j-1,4,2);}ctx.fillRect(dx+8,dy+4,2,11);}
                     else {ctx.fillStyle=css;ctx.fillRect(dx+4,dy+3,8,3);ctx.fillRect(dx+3,dy+6,10,3);ctx.fillRect(dx+5,dy+9,6,3);}
                 } else {
                     const tile=blockTextureTile(id,2),sx=(tile%ATLAS_GRID)*ATLAS_TILE_SIZE,sy=Math.floor(tile/ATLAS_GRID)*ATLAS_TILE_SIZE;
                     ctx.drawImage(blockCanvas,sx,sy,ATLAS_TILE_SIZE,ATLAS_TILE_SIZE,dx,dy,16,16);
+                    if(isStairBlock(id)){ctx.clearRect(dx,dy,16,6);ctx.clearRect(dx,dy+6,5,5);ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(dx+7,dy+5,9,2);}
+                    if(isBedBlock(id)){const bed=bedDefinition(id);const wool=BLOCK_COLORS[bed?bed[2]:BLOCKS.RED_WOOL_BLOCK]?.top||[.65,.18,.2];ctx.clearRect(dx,dy,16,16);ctx.fillStyle='#53381f';ctx.fillRect(dx+2,dy+4,12,10);ctx.fillStyle=`rgb(${wool.map(v=>Math.round(v*255)).join(',')})`;ctx.fillRect(dx+2,dy+3,12,8);ctx.fillStyle='#e9e4d7';ctx.fillRect(dx+2,dy+3,12,3);ctx.fillStyle='#251b14';ctx.fillRect(dx+2,dy+13,3,2);ctx.fillRect(dx+11,dy+13,3,2);}
                 }
             }
             const woolIds=new Set([ITEMS.WHITE_WOOL,ITEMS.BLACK_WOOL,ITEMS.GRAY_WOOL,ITEMS.LIGHT_GRAY_WOOL,ITEMS.BROWN_WOOL,ITEMS.PINK_WOOL,ITEMS.RED_WOOL,ITEMS.ORANGE_WOOL,ITEMS.YELLOW_WOOL,ITEMS.BLUE_WOOL,ITEMS.PURPLE_WOOL]);
@@ -4490,6 +4752,7 @@
             uniform sampler2D uTextureAtlas;
             uniform float uTextureEnabled;
             uniform float uTextureTintMode;
+            uniform float uSkinTexture;
             uniform float uDistantAtlasMode;
             uniform vec3 uLightDir;
             uniform vec3 uFogColor;
@@ -4616,7 +4879,7 @@
                     // an unused transparent tile, fall back to its normal vertex color instead
                     // of rendering a black face. Mob/item tiles remain neutral detail maps so
                     // species/skin/sheep color can still tint them.
-                    if (texel.a < 0.5) surfaceColor = vColor;
+                    if (texel.a < 0.5) {if(uSkinTexture>0.5) discard;surfaceColor=vColor;}
                     else if (uTextureTintMode > 0.5) surfaceColor = vColor * clamp(texel.rgb * 1.34, vec3(0.32), vec3(1.58));
                     else surfaceColor = texel.rgb;
                 }
@@ -4713,6 +4976,7 @@
         const uTextureAtlas = gl.getUniformLocation(program, 'uTextureAtlas');
         const uTextureEnabled = gl.getUniformLocation(program, 'uTextureEnabled');
         const uTextureTintMode = gl.getUniformLocation(program, 'uTextureTintMode');
+        const uSkinTexture = gl.getUniformLocation(program, 'uSkinTexture');
         const uDistantAtlasMode = gl.getUniformLocation(program,'uDistantAtlasMode');
         const uView = gl.getUniformLocation(program, 'uView');
         const uModel = gl.getUniformLocation(program, 'uModel');
@@ -5886,7 +6150,16 @@ function getBaseBiome(x, z) {
             if(hydro.kind==='beach'||(hydro.kind.endsWith('_bank')&&hydro.bank<.55))return BIOMES.BEACH;
             if(hydro.kind==='river')return BIOMES.RIVER;
             if(hydro.kind==='lake')return BIOMES.LAKE;
-            return getBaseBiome(x, z);
+            const fallback=getBaseBiome(x,z);
+            // Marine macroclimate is not enough to make an ocean. The actual
+            // hydrology column must be wet below sea level or it is dry land.
+            if(fallback===BIOMES.OCEAN||fallback===BIOMES.DEEP_OCEAN){
+                const climate=getClimateZone(x,z),heat=climate.temp-climate.moist*.16;
+                if(heat<-.34)return climate.moist>.02?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS;
+                if(heat>.41)return climate.moist<.02?BIOMES.DESERT_BARREN:BIOMES.SAVANNA;
+                return climate.moist>.04?BIOMES.FOREST:BIOMES.PLAINS;
+            }
+            return fallback;
         }
 
         
@@ -8905,7 +9178,7 @@ function getBaseBiome(x, z) {
         }
 
         function getItemName(id) { return BLOCK_NAMES[id] || ITEM_NAMES[id] || 'Unknown'; }
-        function isBlock(id) { return (id > 0 && id < 100) || BED_BLOCKS.has(id) || id===BLOCKS.DEEPSLATE || isStairBlock(id); }
+        function isBlock(id) { return (id > 0 && id < 100) || BED_BLOCKS.has(id) || id===BLOCKS.DEEPSLATE || isStairBlock(id) || isAquaticPlant(id); }
 
         function playMusicTrack(trackIndex, isLoop = false) {
             if (trackIndex < 0 || trackIndex >= MUSIC_TRACK_FILES.length) return;
@@ -9894,6 +10167,81 @@ function getBaseBiome(x, z) {
             const key=type.name+'|'+type.headColor.join(',');if(!mobHeadMeshCache.has(key))mobHeadMeshCache.set(key,createMobHeadMesh(type));return mobHeadMeshCache.get(key);
         }
 
+        // True Minecraft UV-mapped player meshes. The PNG is sampled on six
+        // sides of each part; alpha-cutout outer layers stay transparent.
+        let customSkinBodyMesh=null,customSkinHeadMesh=null;
+        const remoteSkinTextures=new Map();
+        function createSkinPlayerMesh(headOnly=false){
+            const pos=[],col=[],nor=[],uv=[];
+            const addFace=(part,layer,face,corners,normal)=>{
+                const r=skinFaceRect(part,layer,face);if(!r)return;
+                const u0=r.x/64,u1=(r.x+r.w)/64,v0=r.y/64,v1=(r.y+r.h)/64;
+                const verts=[0,3,2,0,2,1],st=[[u0,v0],[u1,v0],[u1,v1],[u0,v1]];
+                for(const i of verts){pos.push(...corners[i]);col.push(1,1,1);nor.push(...normal);uv.push(Math.round(st[i][0]*65535),Math.round(st[i][1]*65535));}
+            };
+            const addPart=(part,cx,cy,cz,sx,sy,sz,head=false)=>{
+                for(const layer of ['base','overlay']){
+                    const pad=layer==='overlay'?.025:0;
+                    const x0=cx-sx/2-pad,x1=cx+sx/2+pad,y0=cy-sy/2-pad,y1=cy+sy/2+pad,z0=cz-sz/2-pad,z1=cz+sz/2+pad;
+                    addFace(part,layer,'front',[[x1,y1,z0],[x0,y1,z0],[x0,y0,z0],[x1,y0,z0]],[0,0,-1]);
+                    addFace(part,layer,'back',[[x0,y1,z1],[x1,y1,z1],[x1,y0,z1],[x0,y0,z1]],[0,0,1]);
+                    addFace(part,layer,'right',[[x0,y1,z0],[x0,y1,z1],[x0,y0,z1],[x0,y0,z0]],[-1,0,0]);
+                    addFace(part,layer,'left',[[x1,y1,z1],[x1,y1,z0],[x1,y0,z0],[x1,y0,z1]],[1,0,0]);
+                    addFace(part,layer,'top',[[x1,y1,z1],[x0,y1,z1],[x0,y1,z0],[x1,y1,z0]],[0,1,0]);
+                    addFace(part,layer,'bottom',[[x1,y0,z0],[x0,y0,z0],[x0,y0,z1],[x1,y0,z1]],[0,-1,0]);
+                }
+            };
+            if(headOnly)addPart('head',0,.24,0,.50,.50,.50);
+            else{
+                addPart('body',0,1.095,0,.50,.73,.25);
+                addPart('rightArm',.375,1.095,0,.25,.73,.25);
+                addPart('leftArm',-.375,1.095,0,.25,.73,.25);
+                addPart('rightLeg',.125,.365,0,.25,.73,.25);
+                addPart('leftLeg',-.125,.365,0,.25,.73,.25);
+            }
+            const buffer=(type,array)=>{const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,array,gl.STATIC_DRAW);return b;};
+            return {pb:buffer(0,new Float32Array(pos)),cb:buffer(0,new Float32Array(col)),nb:buffer(0,new Float32Array(nor)),uvb:buffer(0,new Uint16Array(uv)),count:pos.length/3};
+        }
+        function remoteSkinTexture(rp){
+            const data=rp.skinData;
+            if(!validSkinPNG(data))return null;
+            let entry=remoteSkinTextures.get(rp.id);
+            if(entry&&entry.data===data)return entry.texture;
+            if(entry?.texture)gl.deleteTexture(entry.texture);
+            entry={data,texture:null};remoteSkinTextures.set(rp.id,entry);
+            const picture=new Image();
+            picture.onload=()=>{
+                // Ignore obsolete image loads after a player updates their skin.
+                if(remoteSkinTextures.get(rp.id)!==entry)return;
+                if(picture.width!==64||picture.height!==64)return;
+                const tex=gl.createTexture();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,tex);
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+                gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,picture);
+                gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+                gl.bindTexture(gl.TEXTURE_2D,textureAtlas);gl.activeTexture(gl.TEXTURE0);
+                entry.texture=tex;
+            };
+            picture.onerror=()=>{if(remoteSkinTextures.get(rp.id)===entry)remoteSkinTextures.delete(rp.id);};
+            picture.src=data;
+            if(remoteSkinTextures.size>70){const first=remoteSkinTextures.keys().next().value;if(first!==rp.id){const old=remoteSkinTextures.get(first);if(old?.texture)gl.deleteTexture(old.texture);remoteSkinTextures.delete(first);}}
+            return null;
+        }
+        function drawCustomRemotePlayer(rp,modelYaw,walk){
+            const skinTexture=remoteSkinTexture(rp);if(!skinTexture)return false;
+            if(!customSkinBodyMesh){customSkinBodyMesh=createSkinPlayerMesh(false);customSkinHeadMesh=createSkinPlayerMesh(true);}
+            gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,skinTexture);gl.activeTexture(gl.TEXTURE0);
+            gl.uniform1f(uSkinTexture,1);
+            gl.uniform1f(uDistantAtlasMode,0);
+            drawMesh(customSkinBodyMesh,modelMatrixPitch(rp.x,rp.y+Math.abs(walk)*.35,rp.z,modelYaw,walk),true,0);
+            drawMesh(customSkinHeadMesh,modelMatrixPitch(rp.x,rp.y+1.46+Math.abs(walk)*.35,rp.z,modelYaw,Math.max(-.75,Math.min(.75,rp.pitch))),true,0);
+            gl.uniform1f(uSkinTexture,0);
+            gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,textureAtlas);gl.activeTexture(gl.TEXTURE0);
+            return true;
+        }
+
         const remotePlayerBodyMeshes = new Map();
         const remotePlayerHeadMeshes = new Map();
         function getRemotePlayerType(skinName) {
@@ -10132,8 +10480,10 @@ function getBaseBiome(x, z) {
                 // positive pitch looks upward and negative pitch looks downward.
                 const modelYaw = rp.yaw;
                 const walk=rp.crouching?0:Math.sin(rp.walkPhase||0)*Math.min(.10,(rp.moveSpeed||0)*.025);
-                drawMesh(getRemotePlayerBodyMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+Math.abs(walk)*.35, rp.z, modelYaw, walk), true, 1);
-                drawMesh(getRemotePlayerHeadMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+1.4+Math.abs(walk)*.35, rp.z, modelYaw, Math.max(-0.75,Math.min(0.75,rp.pitch))), true, 1);
+                if(!drawCustomRemotePlayer(rp,modelYaw,walk)){
+                    drawMesh(getRemotePlayerBodyMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+Math.abs(walk)*.35, rp.z, modelYaw, walk), true, 1);
+                    drawMesh(getRemotePlayerHeadMesh(rp.skin), modelMatrixPitch(rp.x, rp.y+1.4+Math.abs(walk)*.35, rp.z, modelYaw, Math.max(-0.75,Math.min(0.75,rp.pitch))), true, 1);
+                }
             }
         }
 
@@ -10792,6 +11142,17 @@ function getBaseBiome(x, z) {
 
             const px=hit.x+hit.n[0], py=hit.y+hit.n[1], pz=hit.z+hit.n[2];
             const placeId = isStairBlock(slot.id)?stairFacingFromYaw(player.yaw,stairItemId(slot.id)):(WOOL_ITEM_TO_BLOCK.get(slot.id) ?? (slot.id === ITEMS.MELLORITE ? BLOCKS.MELLORITE_CRYSTAL : slot.id));
+            if(isAquaticPlant(placeId)){
+                // Underwater plants displace a *water* block, not an air block.
+                // Support kelp on an existing kelp stalk, or both species on solid seabeds.
+                const replace=getBlock(px,py,pz),foundation=getBlock(px,py-1,pz);
+                const waterHere=isWaterBlock(replace) && !isAquaticPlant(replace);
+                const supported=foundation===BLOCKS.SAND||foundation===BLOCKS.GRAVEL||foundation===BLOCKS.DIRT||foundation===BLOCKS.CLAY||foundation===BLOCKS.STONE||foundation===BLOCKS.KELP||foundation===BLOCKS.SEAGRASS||foundation===BLOCKS.DEEPSLATE;
+                if(!waterHere||!supported)return;
+                setBlock(px,py,pz,placeId);
+                if(player.gamemode==='survival'){slot.count--;if(!slot.count)slot.id=0;}
+                updateInventoryUI();updateFullInventoryUI();return;
+            }
             if (isBlock(placeId) && !isLiquidBlock(placeId)) {
                 if (!(px+1>player.x-0.3 && px<player.x+0.3 && py+1>player.y && py<player.y+1.8 && pz+1>player.z-0.3 && pz<player.z+0.3)) {
                     // Flowers may only be planted on grass/dirt-like ground with an empty target space.
@@ -11790,7 +12151,7 @@ function getBaseBiome(x, z) {
 
         function updateCreativeInventoryUI() {
             const container = document.getElementById('creativeItems'); container.innerHTML = '';
-            const allBlocks = [BLOCKS.OAK_STAIRS_N,BLOCKS.SPRUCE_STAIRS_N,BLOCKS.ACACIA_STAIRS_N,BLOCKS.JUNGLE_STAIRS_N,BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.GRANITE, BLOCKS.DIORITE, BLOCKS.ANDESITE, BLOCKS.LIMESTONE, BLOCKS.SLATE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.OAK_SAPLING, BLOCKS.ACACIA_WOOD, BLOCKS.ACACIA_LEAVES, BLOCKS.ACACIA_PLANKS, BLOCKS.ACACIA_SAPLING, BLOCKS.SPRUCE_WOOD, BLOCKS.SPRUCE_LEAVES, BLOCKS.SPRUCE_PLANKS, BLOCKS.SPRUCE_SAPLING, BLOCKS.JUNGLE_WOOD, BLOCKS.JUNGLE_LEAVES, BLOCKS.JUNGLE_PLANKS, BLOCKS.JUNGLE_SAPLING, BLOCKS.SAND, BLOCKS.RED_SAND, BLOCKS.SNOW, BLOCKS.PACKED_ICE, BLOCKS.CACTUS, BLOCKS.PLANKS, BLOCKS.COBBLESTONE, BLOCKS.CRAFTING_TABLE, BLOCKS.FURNACE, BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK, BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX, BLOCKS.ZOMBIE_SPAWNER, ...BED_BLOCKS, BLOCKS.DEEPSLATE, BLOCKS.RED_FLOWER, BLOCKS.ORANGE_FLOWER, BLOCKS.YELLOW_FLOWER, BLOCKS.BLUE_FLOWER, BLOCKS.WHITE_FLOWER, BLOCKS.PINK_FLOWER, BLOCKS.PURPLE_FLOWER, BLOCKS.LIGHT_GRAY_FLOWER, BLOCKS.GRAY_FLOWER, BLOCKS.BLACK_FLOWER, BLOCKS.BROWN_FLOWER];
+            const allBlocks = [BLOCKS.OAK_STAIRS_N,BLOCKS.SPRUCE_STAIRS_N,BLOCKS.ACACIA_STAIRS_N,BLOCKS.JUNGLE_STAIRS_N,BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.GRANITE, BLOCKS.DIORITE, BLOCKS.ANDESITE, BLOCKS.LIMESTONE, BLOCKS.SLATE, BLOCKS.WOOD, BLOCKS.LEAVES, BLOCKS.OAK_SAPLING, BLOCKS.ACACIA_WOOD, BLOCKS.ACACIA_LEAVES, BLOCKS.ACACIA_PLANKS, BLOCKS.ACACIA_SAPLING, BLOCKS.SPRUCE_WOOD, BLOCKS.SPRUCE_LEAVES, BLOCKS.SPRUCE_PLANKS, BLOCKS.SPRUCE_SAPLING, BLOCKS.JUNGLE_WOOD, BLOCKS.JUNGLE_LEAVES, BLOCKS.JUNGLE_PLANKS, BLOCKS.JUNGLE_SAPLING, BLOCKS.SAND, BLOCKS.RED_SAND, BLOCKS.SNOW, BLOCKS.PACKED_ICE, BLOCKS.CACTUS, BLOCKS.PLANKS, BLOCKS.COBBLESTONE, BLOCKS.CRAFTING_TABLE, BLOCKS.FURNACE, BLOCKS.TERRACOTTA, BLOCKS.TORCH, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE, BLOCKS.GOLD_ORE, BLOCKS.DIAMOND_ORE, BLOCKS.MELLORITE_ORE, BLOCKS.COAL_BLOCK, BLOCKS.IRON_BLOCK, BLOCKS.GOLD_BLOCK, BLOCKS.DIAMOND_BLOCK, BLOCKS.MELLORITE_BLOCK, BLOCKS.GLASS, BLOCKS.BRICK, BLOCKS.PORTAL, BLOCKS.RED_STONE, BLOCKS.BEDROCK, BLOCKS.BLUE_STONE, BLOCKS.BOSS_PORTAL_FRAME, BLOCKS.JUKEBOX, BLOCKS.ZOMBIE_SPAWNER, ...BED_BLOCKS, BLOCKS.DEEPSLATE, BLOCKS.KELP, BLOCKS.SEAGRASS, BLOCKS.RED_FLOWER, BLOCKS.ORANGE_FLOWER, BLOCKS.YELLOW_FLOWER, BLOCKS.BLUE_FLOWER, BLOCKS.WHITE_FLOWER, BLOCKS.PINK_FLOWER, BLOCKS.PURPLE_FLOWER, BLOCKS.LIGHT_GRAY_FLOWER, BLOCKS.GRAY_FLOWER, BLOCKS.BLACK_FLOWER, BLOCKS.BROWN_FLOWER];
             const allMats = [ITEMS.COAL, ITEMS.IRON_INGOT, ITEMS.GOLD_INGOT, ITEMS.DIAMOND, ITEMS.MELLORITE,ITEMS.STICK,ITEMS.RAW_MEAT,ITEMS.RAW_PORKCHOP,ITEMS.COOKED_PORKCHOP,ITEMS.RAW_BEEF,ITEMS.COOKED_BEEF,ITEMS.RAW_MUTTON,ITEMS.COOKED_MUTTON,ITEMS.RAW_RABBIT,ITEMS.COOKED_RABBIT,ITEMS.RAW_FOX,ITEMS.COOKED_FOX,ITEMS.RAW_CAMEL,ITEMS.COOKED_CAMEL,ITEMS.RAW_GOAT,ITEMS.COOKED_GOAT,ITEMS.WHITE_WOOL,ITEMS.BLACK_WOOL,ITEMS.GRAY_WOOL,ITEMS.LIGHT_GRAY_WOOL,ITEMS.BROWN_WOOL,ITEMS.PINK_WOOL,ITEMS.RED_WOOL,ITEMS.ORANGE_WOOL,ITEMS.YELLOW_WOOL,ITEMS.BLUE_WOOL,ITEMS.PURPLE_WOOL,ITEMS.RAW_SALMON,ITEMS.COOKED_SALMON,ITEMS.RAW_COD,ITEMS.COOKED_COD,ITEMS.RED_DYE,ITEMS.ORANGE_DYE,ITEMS.YELLOW_DYE,ITEMS.BLUE_DYE,ITEMS.WHITE_DYE,ITEMS.PINK_DYE,ITEMS.PURPLE_DYE,ITEMS.LIGHT_GRAY_DYE,ITEMS.GRAY_DYE,ITEMS.BLACK_DYE,ITEMS.BROWN_DYE,ITEMS.APPLE, ITEMS.PINEWOOD_SPRINT_DISC, ITEMS.LAST_CAMP_STANDING_DISC];
             const allArmor=[ITEMS.IRON_ARMOR,ITEMS.GOLD_ARMOR,ITEMS.DIAMOND_ARMOR,ITEMS.MELLORITE_ARMOR];
             const allWatercraft=[ITEMS.BUCKET,ITEMS.WATER_BUCKET,ITEMS.BOAT,ITEMS.SPRUCE_BOAT,ITEMS.ACACIA_BOAT,ITEMS.JUNGLE_BOAT];
@@ -12667,7 +13028,7 @@ function getBaseBiome(x, z) {
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, shadowHeightTexture);
             gl.uniform1i(uShadowHeightMap, 0);
-            gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,textureAtlas);gl.uniform1i(uTextureAtlas,1);gl.activeTexture(gl.TEXTURE0);gl.uniform1f(uTextureEnabled,0);gl.uniform1f(uTextureTintMode,1);
+            gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,textureAtlas);gl.uniform1i(uTextureAtlas,1);gl.activeTexture(gl.TEXTURE0);gl.uniform1f(uTextureEnabled,0);gl.uniform1f(uTextureTintMode,1);gl.uniform1f(uSkinTexture,0);
             gl.uniform2f(uShadowMapOrigin, shadowMapOriginX, shadowMapOriginZ);
             gl.uniform1f(uShadowMapSize, SHADOW_MAP_SIZE);
             const torchLights = nearestTorchLights(liteShaderEnabled ? (isMobilePlaying ? 3 : 4) : 2);

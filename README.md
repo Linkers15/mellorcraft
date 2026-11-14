@@ -1,3 +1,50 @@
+# MellorCraft v1.8.5 — Skin Studio, Inventory & Aquatic Placement Hotfix
+
+This update is based on the v1.8.5 coastline/swimming hotfix. It contains the
+complete HTML client, dedicated multiplayer server, browser-world relay and seed map.
+
+## Fixed gameplay and world generation
+
+- **Missing inventory icons:** Stairs (including every wood variant), beds (all
+  colors), kelp, and seagrass receive icons in the hotbar and inventory. The
+  icon-only atlas now handles newer block IDs without increasing the 3D texture
+  atlas or changing the old world-block IDs.
+- **Placeable underwater vegetation:** Kelp and seagrass are available in the
+  Creative inventory. Place a plant in water over a suitable solid seabed or
+  on compatible existing underwater vegetation. Placement in air is rejected.
+- **Dry marine biomes:** A coastal temperature region no longer labels an
+  exposed, dry sandy column as Ocean or Deep Ocean unless the actual hydrology
+  indicates ocean water. The client and seed map share this classification.
+
+## New Skin Studio (main-menu Settings)
+
+- Open **Settings > Edit Skin** from the main menu. Choose individual body
+  parts, faces and the *base* or *transparent outer* layer, then paint pixels
+  with a color picker or eraser. Use the visibility checkboxes to isolate body
+  parts in the preview. The default color presets generate an editable skin.
+- **Import:** Standard Minecraft 64x64 PNG skins, plus classic 64x32 skins
+  (converted to the modern 64x64 layout).
+- **Export:** Save your artwork as a standard 64x64 Minecraft skin PNG.
+- **Save & use:** Stores the edited skin in this browser and sends it to other
+  players when you join an updated server or host/visit an updated LAN world.
+  Dedicated servers validate the PNG, store it with the player account/profile,
+  and transmit it on join or explicit skin update. Position updates do **not**
+  re-send the PNG. Existing preset skins still work without using the editor.
+
+## Compatibility and notes
+
+- The **dedicated server protocol is now 18**; use the bundled server and relay
+  with this client to ensure complete painted-skin sync. Previously saved worlds
+  retain their data. Previously generated land is not automatically regenerated.
+- PNG skins must ultimately be 64x64 and meet the server's size limit. PNGs
+  imported in legacy 64x32 format are converted automatically.
+- UI and import/export behavior, JavaScript syntax, Python compilation, and
+  sampled biome classifications were tested. This test environment does not
+  provide a usable interactive WebGL context, so final appearance on physical
+  GPU hardware and fully live multiplayer gameplay remain to be verified.
+
+---
+
 # MellorCraft v1.8.5 — Coastline & Underwater Movement Hotfix
 
 This is a replacement for the previous v1.8.5 ecology/crafting hotfix.

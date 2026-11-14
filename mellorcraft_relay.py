@@ -157,6 +157,7 @@ async def handler(ws: Any, *_args: Any) -> None:
                     "username": username,
                     "identityToken": identity_token,
                     "skin": skin,
+                    "skinData": str(data.get("skinData", ""))[:110000] if str(data.get("skinData", "")).startswith("data:image/png;base64,") else "",
                     "deviceClass": "mobile" if str(data.get("deviceClass", "desktop")).lower() == "mobile" else "desktop",
                 })
                 print(f"Guest {guest_id[:8]} joined {room_id}")
