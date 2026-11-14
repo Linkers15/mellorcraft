@@ -41,8 +41,8 @@ except ImportError:  # websockets 10/11 compatibility
 HTTP_PORT = 8000
 WEBSOCKET_PORT = 8765
 DAY_LENGTH_SECONDS = 600.0
-PROTOCOL_VERSION = 16
-SUPPORTED_PROTOCOLS = (16,)
+PROTOCOL_VERSION = 17
+SUPPORTED_PROTOCOLS = (17,)
 WORLD_HEIGHT = 248
 PORTAL_BLOCK = 31
 RESPAWN_BLOCK = 48
@@ -88,6 +88,7 @@ BLUE_WOOL_ITEM = 143
 PURPLE_WOOL_ITEM = 144
 DEFAULT_DOCILE_CAP = 18
 DEFAULT_HOSTILE_CAP = 12
+DEFAULT_AQUATIC_CAP = 16
 MAX_INVENTORY_SLOTS = 30
 MAX_STACK_SIZE = 100
 ALLOWED_SKINS = {"steve", "alex", "mellorite", "ember", "frost", "forest"}
@@ -114,10 +115,15 @@ MOB_DEFINITIONS: dict[str, dict[str, Any]] = {
     "SPIDER": {"health": 16.0, "damage": 1.5, "hostile": True},
     "ZOMBIE": {"health": 20.0, "damage": 1.0, "hostile": True},
     "SKELETON": {"health": 20.0, "damage": 1.0, "hostile": True},
+    "SALMON":{"health":5.0,"damage":0.0,"hostile":False,"aquatic":True},
+    "COD":{"health":5.0,"damage":0.0,"hostile":False,"aquatic":True},
+    "ANGLER_FISH":{"health":12.0,"damage":0.0,"hostile":False,"aquatic":True},
+    "SHARK":{"health":30.0,"damage":4.0,"hostile":True,"aquatic":True},
     "RED_ALT_ZOMBIE": {"health": 40.0, "damage": 3.0, "hostile": True},
     "MELLOR_BOSS": {"health": 200.0, "damage": 5.0, "hostile": True},
 }
 MOB_LOOT: dict[str, list[tuple[int, int, int]]] = {
+    "SALMON":[(169,1,2)],"COD":[(171,1,2)],"ANGLER_FISH":[(171,1,1)],"SHARK":[(171,1,3)],
     "PIG": [(RAW_PORKCHOP_ITEM, 1, 3)], "COW": [(RAW_BEEF_ITEM, 1, 3)],
     "CAMEL": [(RAW_CAMEL_ITEM, 1, 2)], "GOAT": [(RAW_GOAT_ITEM, 1, 2)],
     "RABBIT": [(RAW_RABBIT_ITEM, 1, 2)], "FOX": [(RAW_FOX_ITEM, 1, 2)],
@@ -134,7 +140,7 @@ MOB_LOOT: dict[str, list[tuple[int, int, int]]] = {
     "SHEEP_BLUE": [(RAW_MUTTON_ITEM, 1, 2), (BLUE_WOOL_ITEM, 1, 1)],
     "SHEEP_PURPLE": [(RAW_MUTTON_ITEM, 1, 2), (PURPLE_WOOL_ITEM, 1, 1)],
 }
-FURNACE_RECIPES = {15: 101, 16: 102, 6: 24, 2: 25, 112: 113, 114: 115, 116: 117, 118: 119, 120: 121, 122: 123, 128: 129}
+FURNACE_RECIPES = {169: 170, 171: 172, 15: 101, 16: 102, 6: 24, 2: 25, 112: 113, 114: 115, 116: 117, 118: 119, 120: 121, 122: 123, 128: 129}
 FURNACE_FUEL_SECONDS = {100: 80.0, 18: 800.0, 4: 15.0, 10: 15.0, 104: 5.0}
 DIFFICULTY_DAMAGE_SCALE = {"peaceful": 0.0, "easy": 0.5, "normal": 1.0, "hard": 1.5, "hardcore": 1.5}
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
@@ -147,7 +153,7 @@ WORLDS_DIRNAME = "worlds"
 DEFAULT_WORLD_NAME = "World"
 ACCOUNTS_FILENAME = "server_accounts.json"
 PBKDF2_ITERATIONS = 210_000
-RETIRED_ITEM_IDS = {109, 110, 111}  # legacy bucket, water bucket, lava bucket
+RETIRED_ITEM_IDS = {111}  # legacy bucket, water bucket, lava bucket
 PASSWORD_MIN_LENGTH = 6
 PASSWORD_MAX_LENGTH = 128
 WORLD_NAME_PATTERN = re.compile(r"^[A-Za-z0-9 _.-]{1,48}$")
@@ -160,6 +166,7 @@ DEFAULT_GAME_RULES: dict[str, bool | int | str] = {
     "difficulty": "normal",
     "docileCap": DEFAULT_DOCILE_CAP,
     "hostileCap": DEFAULT_HOSTILE_CAP,
+    "aquaticCap": DEFAULT_AQUATIC_CAP,
     "dayLength": int(DAY_LENGTH_SECONDS),
 }
 GAME_RULE_ORDER = tuple(DEFAULT_GAME_RULES)
@@ -168,7 +175,7 @@ GAME_RULE_ALIASES = {
     "daylightcycle": "doDaylightCycle", "dodaylightcycle": "doDaylightCycle",
     "weathercycle": "doWeatherCycle", "doweathercycle": "doWeatherCycle",
     "keepinventory": "keepInventory", "mobspawning": "doMobSpawning", "domobspawning": "doMobSpawning",
-    "pvp": "pvp", "difficulty": "difficulty", "docilecap": "docileCap", "passivecap": "docileCap", "hostilecap": "hostileCap", "daylength": "dayLength",
+    "pvp": "pvp", "difficulty": "difficulty", "docilecap": "docileCap", "passivecap": "docileCap", "hostilecap": "hostileCap", "aquaticcap":"aquaticCap", "fishcap":"aquaticCap", "daylength": "dayLength",
 }
 
 
@@ -196,7 +203,7 @@ def normalize_game_rules(value: Any) -> dict[str, bool | int | str]:
             if "hostileCap" not in raw: normalized["hostileCap"] = legacy_cap - round(legacy_cap * .6)
         except (TypeError, ValueError):
             pass
-    for name, minimum, maximum in (("docileCap", 0, 200), ("hostileCap", 0, 200), ("dayLength", 60, 3600)):
+    for name, minimum, maximum in (("docileCap", 0, 200), ("hostileCap", 0, 200), ("aquaticCap", 0, 200), ("dayLength", 60, 3600)):
         try:
             normalized[name] = max(minimum, min(maximum, round(float(raw.get(name, normalized[name])))))
         except (TypeError, ValueError):
@@ -333,6 +340,7 @@ class DroppedItemState:
     vz: float = 0.0
     age: float = 0.0
     floorY: float | None = None
+    boatEntity: bool = False
 
 
 class MellorCraftWorld:
@@ -628,6 +636,7 @@ class MellorCraftWorld:
                         dimension=bounded_int(entry.get("dimension"), 0, 2), vx=finite_number(entry.get("vx")), vy=finite_number(entry.get("vy")),
                         vz=finite_number(entry.get("vz")), age=max(0.0, finite_number(entry.get("age"))),
                         floorY=(finite_number(entry.get("floorY")) if entry.get("floorY") is not None else None),
+                        boatEntity=bool(entry.get("boatEntity", False)),
                     )
                     self.items[item.id] = item
                 except (KeyError, TypeError, ValueError):
@@ -647,7 +656,7 @@ class MellorCraftWorld:
         for player in self.players.values():
             profiles[self.profile_key(player.username)] = self.player_profile(player)
         payload = {
-            "format": "MellorCraftWorld", "formatVersion": 12, "version": "1.8.4", "name": self.world_name,
+            "format": "MellorCraftWorld", "formatVersion": 12, "version": "1.8.5", "name": self.world_name,
             "seed": self.seed, "worldTime": self.world_time, "weatherSeed": self.weather_seed, "weatherPhase": self.weather_phase,
             "bossDefeated": self.boss_defeated, "gameRules": self.game_rules, "worldGen": self.world_gen,
             "blocks": self.blocks, "operators": sorted(self.operators), "bannedPlayers": sorted(self.banned_players), "playerProfiles": profiles,
@@ -1301,16 +1310,17 @@ def portal_link_point(raw: Any, expected_dim: int) -> str | None:
     return world.block_key(dimension,x,y,z)
 
 
-def save_portal_link(data: dict[str, Any]) -> None:
+def save_portal_link(data: dict[str, Any]) -> bool:
     a=portal_link_point(data.get('overworld'),0)
     b=portal_link_point(data.get('alternate'),1)
     if not a or not b or world.blocks.get(a)!=PORTAL_BLOCK or world.blocks.get(b)!=PORTAL_BLOCK:
-        return
+        return False
     for key in (a,b):
         old=world.portal_links.pop(key,None)
         if old:world.portal_links.pop(old,None)
     world.portal_links[a]=b;world.portal_links[b]=a
     world.dirty=True
+    return True
 
 
 async def remove_linked_portal(key: str, block_type: int, previous_type: int, player_id: str) -> None:
@@ -1601,10 +1611,12 @@ async def handle_mob_spawn(player_id: str, data: dict[str, Any]) -> None:
     definition = MOB_DEFINITIONS[type_key]
     if type_key != "MELLOR_BOSS":
         hostile = bool(definition["hostile"])
-        category = "hostileCap" if hostile else "docileCap"
+        aquatic = bool(definition.get("aquatic"))
+        category = "aquaticCap" if aquatic else ("hostileCap" if hostile else "docileCap")
         current = sum(1 for mob in world.mobs.values() if mob.dimension == dimension
                       and mob.health > 0 and mob.typeKey != "MELLOR_BOSS"
-                      and bool(MOB_DEFINITIONS.get(mob.typeKey, {}).get("hostile")) == hostile)
+                      and bool(MOB_DEFINITIONS.get(mob.typeKey, {}).get("aquatic")) == aquatic
+                      and (aquatic or bool(MOB_DEFINITIONS.get(mob.typeKey, {}).get("hostile")) == hostile))
         if current >= int(world.game_rules[category]):
             return
     requested_id = str(data.get("id", ""))
@@ -1877,6 +1889,39 @@ async def handle_block_drop(player_id: str, data: dict[str, Any]) -> None:
     )
 
 
+BOAT_ITEM_IDS = {162, 165, 166, 167}
+
+
+async def handle_boat_event(player_id: str, data: dict[str, Any]) -> None:
+    player=world.players.get(player_id)
+    if player is None or player.gamemode=='spectator' or player.health<=0:
+        return
+    kind=str(data.get('type',''))
+    if kind=='boat_place':
+        item_id=bounded_int(data.get('itemId'),0,255)
+        dimension=bounded_int(data.get('dimension'),0,2)
+        x,y,z=(finite_number(data.get(t)) for t in ('x','y','z'))
+        if item_id not in BOAT_ITEM_IDS or dimension!=player.dimension or math.dist((x,y,z),(player.x,player.y,player.z))>5:
+            return
+        item=DroppedItemState(uuid.uuid4().hex,item_id,1,x,y,z,dimension,boatEntity=True)
+        world.items[item.id]=item;world.dirty=True
+        await broadcast({'type':'item_spawned','item':asdict(item)},minimum_protocol=3)
+        return
+    item=world.items.get(str(data.get('itemId','')))
+    if item is None or not item.boatEntity or item.dimension!=player.dimension or math.dist((item.x,item.y,item.z),(player.x,player.y,player.z))>5:
+        return
+    if kind not in ('boat_board','boat_break'):
+        return
+    world.items.pop(item.id,None);world.dirty=True
+    await broadcast({'type':'item_removed','itemId':item.id},minimum_protocol=3)
+    if kind=='boat_board':
+        ws=world.connections.get(player_id)
+        if ws is not None:
+            await send_json(ws,{'type':'boat_boarded','itemId':item.itemId,'x':item.x,'y':item.y+.3,'z':item.z})
+    elif player.gamemode!='creative':
+        await spawn_dropped_item(item.itemId,1,item.x,item.y+.3,item.z,item.dimension,0,1,0,max(.18,item.y))
+
+
 async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
     message_type = data.get("type")
     player = world.players.get(player_id)
@@ -1946,6 +1991,8 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         await handle_mob_projectile_hit(player_id, data)
     elif message_type == "furnace_update" and world.client_protocols.get(player_id, 1) >= 6:
         await handle_furnace_update(player_id, data)
+    elif message_type in ('boat_place','boat_board','boat_break'):
+        await handle_boat_event(player_id,data)
     elif message_type == "drop_item" and world.client_protocols.get(player_id, 1) >= 3:
         await handle_drop_item(player_id, data)
     elif message_type == "block_drop" and world.client_protocols.get(player_id, 1) >= 10:
@@ -1989,11 +2036,12 @@ async def handle_client_message(player_id: str, data: dict[str, Any]) -> None:
         if not player.isOperator:
             await send_json(world.connections[player_id], {"type": "error", "message": "Only server operators can run server-management commands."})
         else:
-            result = await process_console_command(command)
+            result = await process_console_command(command, requester=player)
             if result:
                 await send_json(world.connections[player_id], {"type": "system", "message": result})
     elif message_type == "portal_link":
-        save_portal_link(data)
+        if save_portal_link(data):
+            await broadcast({"type":"portal_link","overworld":data.get("overworld"),"alternate":data.get("alternate")})
     elif message_type == "chat":
         message = str(data.get("message", "")).strip()[:200]
         if message:
@@ -2111,6 +2159,10 @@ async def websocket_handler(websocket: Any, *_args: Any) -> None:
             "mobs": world.mob_snapshot() if client_protocol >= 3 else [],
             "items": world.item_snapshot() if client_protocol >= 3 else [],
             "furnaces": world.furnaces if client_protocol >= 6 else {},
+            "portalLinks": [[dict(zip(("dimension","x","y","z"),world.parse_block_key(a))),
+                             dict(zip(("dimension","x","y","z"),world.parse_block_key(b)))]
+                            for a,b in world.portal_links.items()
+                            if a.startswith("0,") and b.startswith("1,")],
             "mobHosts": {str(k): v for k, v in world.mob_hosts.items()} if client_protocol >= 3 else {},
         })
         # Stream edits directly from the world dictionary. This avoids constructing a second
@@ -2235,6 +2287,8 @@ async def item_loop() -> None:
         previous = now
         removed: list[str] = []
         for item in list(world.items.values()):
+            if item.boatEntity:
+                continue  # placed boats survive saves and never auto-pickup/despawn
             item.age += dt
             if item.floorY is not None:
                 floor_y = float(item.floorY)
@@ -2473,6 +2527,7 @@ COMMAND_HELP: tuple[tuple[str, str], ...] = (
     ("/ban <username>", "Ban a username from the current world/server."),
     ("/kill <username>", "Kill a connected player using normal death rules."),
     ("/mobs", "Show mob counts by dimension."),
+    ("/summon <mob> [x y z dimension]", "Summon a mob; aquatic types require Overworld water."),
     ("/gamerule", "List all game rules and current values."),
     ("/gamerule <rule> [value]", "Read or change a game rule."),
     ("/gamemode <player> <survival|creative|spectator>", "Change a connected player's gamemode."),
@@ -2486,6 +2541,7 @@ COMMAND_HELP: tuple[tuple[str, str], ...] = (
 )
 
 COMMAND_USAGE = {
+    "/summon": "Usage: /summon <mob> [x y z dimension]",
     "/ban": "Usage: /ban <username>",
     "/kill": "Usage: /kill <username>",
     "/op": "Usage: /op <username>",
@@ -2532,7 +2588,7 @@ async def process_account_command(args: list[str]) -> str:
     return COMMAND_USAGE["/account"]
 
 
-async def process_console_command(line: str) -> str:
+async def process_console_command(line: str, requester: Any = None) -> str:
     command = line.strip()
     if not command:
         return ""
@@ -2560,6 +2616,48 @@ async def process_console_command(line: str) -> str:
     if name == "/list":
         names = [p.username + (" [OP]" if p.isOperator else "") for p in world.players.values()]
         return f"Players ({len(names)}): " + (", ".join(names) if names else "none")
+    if name == "/summon":
+        if not args:
+            return "Usage: /summon <salmon|cod|angler_fish|shark|other mob> [x y z dimension]"
+        aliases = {"ANGLER": "ANGLER_FISH", "ANGLERFISH": "ANGLER_FISH", "FISH": "COD", "SHEEP": "SHEEP_WHITE"}
+        species = re.sub(r"[^A-Z0-9]+", "_", args[0].upper())
+        species = aliases.get(species, species)
+        if species not in MOB_DEFINITIONS:
+            return f"Unknown mob: {args[0]}"
+        if len(args) not in (1, 5):
+            return "Usage: /summon <mob> [x y z dimension]"
+        if len(args) == 5:
+            try:
+                sx, sy, sz = (float(v) for v in args[1:4])
+                dim = int(args[4]) - 1
+            except (ValueError, TypeError):
+                return "Coordinates must be numeric; dimension is 1 (Overworld), 2 (Void), or 3 (Boss)."
+            if dim not in (0, 1, 2):
+                return "Dimension must be 1, 2, or 3."
+            sy += WORLD_Y_ORIGIN if dim == 0 else 0
+        elif requester is not None:
+            sx, sy, sz, dim = requester.x, requester.y, requester.z, requester.dimension
+        else:
+            return "Console usage: /summon <mob> <x> <displayed-y> <z> <dimension 1|2|3>"
+        aquatic = bool(MOB_DEFINITIONS[species].get("aquatic"))
+        if aquatic and dim != 0:
+            return "Aquatic mobs can only be summoned in the Overworld."
+        if aquatic and len(args) == 1:
+            # Clients don't upload natural water voxels to the dedicated server.
+            # Search for a water-level candidate below the operator; deep-ocean
+            # anglers spawn at Y=20 and require ocean depth at that location.
+            sy = (WORLD_Y_ORIGIN + 20) if species == "ANGLER_FISH" else min(sy, WORLD_Y_ORIGIN + 60)
+        definition = MOB_DEFINITIONS[species]
+        if not all(math.isfinite(v) for v in (sx, sy, sz)):
+            return "Invalid summon coordinates."
+        mob = MobState(
+            uuid.uuid4().hex, species, float(sx), float(sy), float(sz), dim,
+            float(definition["health"]), float(definition["health"]),
+        )
+        world.mobs[mob.id] = mob
+        world.dirty = True
+        await broadcast({"type": "mob_spawned", "mob": asdict(mob)}, minimum_protocol=3)
+        return f"Summoned {species} at {round(sx, 1)}, {round(sy-(WORLD_Y_ORIGIN if dim == 0 else 0), 1)}, {round(sz, 1)}."
     if name == "/mobs":
         counts = {dim: sum(1 for mob in world.mobs.values() if mob.dimension == dim) for dim in (0, 1, 2)}
         return f"Mobs: overworld={counts[0]}, timeless_void={counts[1]}, boss={counts[2]}"
@@ -2641,7 +2739,7 @@ def available_worlds(worlds_dir: Path) -> list[tuple[str, Path]]:
 
 def choose_world_interactively(worlds_dir: Path) -> tuple[str, Path, int | None, bool]:
     worlds = available_worlds(worlds_dir)
-    print("\nMellorCraft v1.8.4 World Selection")
+    print("\nMellorCraft v1.8.5 World Selection")
     if worlds:
         print("Existing worlds:")
         for index, (name, path) in enumerate(worlds, 1):
@@ -2732,7 +2830,7 @@ def resolve_world(args: argparse.Namespace) -> tuple[str, Path, int | None, bool
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.8.4 multiplayer world.")
+    parser = argparse.ArgumentParser(description="Host a MellorCraft v1.8.5 multiplayer world.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--world", help="Load a named world, creating it if it does not exist.")
     group.add_argument("--create-world", metavar="NAME", help="Create a new named world.")
@@ -2762,7 +2860,7 @@ def main() -> None:
     http_server = start_http_server()
     ip = local_ip_address()
 
-    print("\nMellorCraft v1.8.4 multiplayer server is running")
+    print("\nMellorCraft v1.8.5 multiplayer server is running")
     print(f"  World:         {world.world_name}")
     print(f"  Host PC:       http://127.0.0.1:{HTTP_PORT}")
     print(f"  Other devices: http://{ip}:{HTTP_PORT}")

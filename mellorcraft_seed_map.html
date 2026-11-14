@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MellorCraft v1.8.4 Seed Map</title>
+<title>MellorCraft v1.8.5 Seed Map</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#15171b;color:#eee;font-family:Arial,sans-serif}
@@ -159,11 +159,11 @@ const BIOMES={
     PLAINS:0,DESERT_BARREN:1,DESERT_CACTUS:2,FOREST:3,
     MOUNTAINS_LOW:4,MOUNTAINS_MID:5,MOUNTAINS_HIGH:6,
     TAIGA:7,SNOWY_PLAINS:8,BADLANDS:9,OCEAN:10,SWAMP:11,
-    JUNGLE:12,SAVANNA:13,BEACH:14,FLOWER_FOREST:15
+    JUNGLE:12,SAVANNA:13,BEACH:14,FLOWER_FOREST:15,DEEP_OCEAN:16,RIVER:17,LAKE:18
 };
 const ALT_BIOMES={RED:0,BLUE:1,GREEN:2};
-const BIOME_NAMES=['Plains','Barren Desert','Cactus Desert','Forest','Low Mountains','Medium Mountains','High Mountains','Taiga','Snowy Plains','Badlands','Ocean','Swamp','Jungle','Savanna','Beach','Flower Forest'];
-const BIOME_COLORS=['#78a84b','#d7b968','#d9c36d','#2f7b39','#859271','#7b8177','#e8edf0','#477d55','#eaf2fa','#b65c34','#2f69a8','#4c7658','#176d31','#a8aa49','#e5d394','#4f934f'];
+const BIOME_NAMES=['Plains','Barren Desert','Cactus Desert','Forest','Low Mountains','Medium Mountains','High Mountains','Taiga','Snowy Plains','Badlands','Ocean','Swamp','Jungle','Savanna','Beach','Flower Forest','Deep Ocean','River','Lake'];
+const BIOME_COLORS=['#78a84b','#d7b968','#d9c36d','#2f7b39','#859271','#7b8177','#e8edf0','#477d55','#eaf2fa','#b65c34','#2f69a8','#4c7658','#176d31','#a8aa49','#e5d394','#4f934f','#17467b','#2a83ac','#3d8baf'];
 const ALT_NAMES=['Red Wastes','Blue Caverns','Green Depths'];
 const MOUNTAIN_XZ_SCALE=Math.SQRT1_2; // v1.4.1: half mountain land area, unchanged outline
 const ALT_COLORS=['#9a3434','#344f9a','#397a47'];
@@ -171,7 +171,7 @@ const STRUCTURE_TYPES=['Mansion','Outpost','Cabin','Dungeon','Alt Maze','Boss Sh
 const enabledBiomes=new Set([...Array(BIOME_NAMES.length).keys()].map(n=>`0:${n}`).concat(ALT_NAMES.map((_,i)=>`1:${i}`),['2:0','2:1']));
 const enabledStructures=new Set(STRUCTURE_TYPES.filter(t=>t!=='Dungeon'));
 let filterRevision=0;
-const WATER_LEVEL=32;
+const WATER_LEVEL=62;
 let WORLD_SEED=12345;
 let weatherSeed=1,weatherPhase=0,weatherPlaying=false,weatherAnimationLast=0,weatherLastRender=0;
 const weatherCloudFade=new Map();
@@ -188,7 +188,7 @@ function setSeed(value){
   treeNoise=new SimplexNoise(WORLD_SEED+2000);caveNoise=new SimplexNoise(WORLD_SEED+3000);
   oreNoise=new SimplexNoise(WORLD_SEED+4000);ravineNoise=new SimplexNoise(WORLD_SEED+5000);
   structNoise=new SimplexNoise(WORLD_SEED+6000);continentalNoise=new SimplexNoise(WORLD_SEED+7000);
-  lavaNoise=new SimplexNoise(WORLD_SEED+8000);biomeProvinceCache.clear();mountainRegionCache.clear();mountainInfoCache.clear();weatherSeed=weatherSeedForWorldSeed(WORLD_SEED);weatherPhase=0;weatherCloudFade.clear();
+  lavaNoise=new SimplexNoise(WORLD_SEED+8000);biomeProvinceCache.clear();mountainRegionCache.clear();mountainInfoCache.clear();hydrologyCache.clear();lakeSiteCache.clear();weatherSeed=weatherSeedForWorldSeed(WORLD_SEED);weatherPhase=0;weatherCloudFade.clear();
 }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
@@ -230,19 +230,106 @@ function getClimate(x, z) {
             return continent + coastDetail;
         }
 
+
+const hydrologyCache=new Map();
+const lakeSiteCache=new Map();
+// v1.8.5: coherent oceans and waterways on a shared seeded world field.
+// v1.8.5 coast hotfix: broad ocean basins without long gate-generated
+// sand stripes or narrow, river-like inlets. A lower-detail continental
+// contour rounds off thin water arms; the ocean province switch is local
+// instead of the old hundreds-of-block-wide fade through the beach band.
+function getRawOceanField(x,z){
+    const natural=continentalNoise.octave(x*.00083+481,z*.00083-719,2,.53)*.955 +
+                  continentalNoise.octave(x*.0019-1704,z*.0019+2201,2,.52)*.045;
+    const marineProvince=continentalNoise.octave(x*.00024+9167,z*.00024-7421,2,.57);
+    const shorelineWarp=continentalNoise.noise2D(x*.00123-1405,z*.00123+1702)*.04;
+    const oceanGate=smoothstep(-.16,-.07,marineProvince+shorelineWarp);
+    return Math.min(natural, -.24+1.25*oceanGate);
+}
+function getOceanField(x,z){return getRawOceanField(x,z);}
+function naturalLakeGroundEstimate(x,z){
+    // Dry-land approximation of the same broad terrain profile used by
+    // getHeight(). Do NOT call getHeight() from computeHydrology(): it calls
+    // computeHydrology() again and would recurse.
+    const broad=noise.octave(x*.006,z*.006,4,.52);
+    const detail=noise.octave(x*.022+400,z*.022-400,3,.48);
+    const ridge=1-Math.abs(noise.octave(x*.0022+1200,z*.0022+1200,4,.55));
+    const {temp,moist}=getClimateZone(x,z);
+    const cold=smoothstep(.02,.34,-temp),hot=smoothstep(.16,.52,temp);
+    let height=58+broad*10+detail*3+hot*(2+broad*3)+smoothstep(.55,.82,-moist)*5;
+    height=mix(height,80+broad*9+detail*2.2+(ridge-.5)*6,cold);
+    return height+hot*smoothstep(.22,.68,moist)*3;
+}
+function lakeSiteViable(cx,cz,siteX,siteZ,radius){
+    const key=`${cx},${cz}`,saved=lakeSiteCache.get(key);
+    if(saved!==undefined)return saved;
+    // Prevent a high, level lake basin from being cut into terrain that is
+    // naturally BELOW Y=62 (the old abrupt lake-bank cliffs/waterfalls).
+    let valid=true;
+    for(let i=0;i<9;i++){
+        const a=i*Math.PI/4;
+        const x=siteX+(i===8?0:Math.cos(a)*(radius+74));
+        const z=siteZ+(i===8?0:Math.sin(a)*(radius+74));
+        if(naturalLakeGroundEstimate(x,z)<65||getOceanField(x,z)>-.18||
+           (getMountainInfo(x,z)?.targetHeight||0)>94){valid=false;break;}
+    }
+    if(lakeSiteCache.size>6000)lakeSiteCache.clear();
+    lakeSiteCache.set(key,valid);return valid;
+}
+function getHydrology(x,z){
+    const key=`${Math.floor(x)},${Math.floor(z)}`;
+    const cached=hydrologyCache.get(key);if(cached)return cached;
+    const result=computeHydrology(x,z);
+    if(hydrologyCache.size>45000)hydrologyCache.clear();
+    hydrologyCache.set(key,result);return result;
+}
+function computeHydrology(x,z){
+    // Hydrological classification is a deterministic X/Z field: independent of
+    // chunk order, view distance, worker count, and the previously loaded chunks.
+    const field=getOceanField(x,z);
+    if(field>.205) return {kind:field>.52?'deep_ocean':'ocean',field,wet:true};
+    // A wide ABOVE-WATER shoreline is essential. A 1-3 block biome threshold
+    // near high cold terrain previously created giant exposed dirt/stone walls.
+    if(field>.055) return {kind:'beach',field,wet:false,bank:Math.max(0,Math.min(1,(.205-field)/.15))};
+    // Lakes are excluded from mountains and their approaches.
+    // No lake is permitted to carve into a mountain face.
+    const m=getMountainInfo(x,z);
+    // Smooth suppression instead of a binary mountain test. A hard >84 cutoff
+    // caused abrupt canyon walls where a river crossed the last mountain pixel.
+    const mountainPenalty=smoothstep(69,103,m?m.targetHeight:0);
+    const coastalPenalty=smoothstep(-.20,-.055,field);
+    // Small, finite lakes: each lake plus its entire shoreline fits in one tile.
+    // This prevents abrupt chunk-independent cliffs at hydrology cell borders.
+    // Unlike a broad thresholded octave, this cannot make continental-sized lakes.
+    const cellSize=270, cx=Math.floor(x/cellSize),cz=Math.floor(z/cellSize);
+    if(coordHash(cx,cz,9017,WORLD_SEED)<.30 && field<-.11){
+        const centerX=(cx+.5+(coordHash(cx,cz,9018,WORLD_SEED)-.5)*.025)*cellSize;
+        const centerZ=(cz+.5+(coordHash(cx,cz,9019,WORLD_SEED)-.5)*.025)*cellSize;
+        const radius=25+coordHash(cx,cz,9020,WORLD_SEED)*34;
+        if(!lakeSiteViable(cx,cz,centerX,centerZ,radius))return {kind:'land',field};
+        const warp=biomeNoise.noise2D(x*.018+37,z*.018-43)*5;
+        const dist=Math.hypot(x-centerX,z-centerZ)+warp+mountainPenalty*120+coastalPenalty*100;
+        if(dist<radius) return {kind:'lake',field,wet:true,bank:0,depth:smoothstep(0,20,radius-dist)};
+        if(dist<radius+72) return {kind:'lake_bank',field,wet:false,bank:(dist-radius)/72};
+    }
+    // Rivers are disabled in this build. Natural lakes remain enabled; former
+    // river mask locations now use normal biome terrain rather than sand trenches.
+    return {kind:'land',field};
+}
+
 function getClimateZone(x,z) {
     // Climate zones follow broad, warped temperature/moisture contours. Adjacent
     // zones are ordered cold -> temperate -> warm -> arid, with wet hot land
     // remaining warm instead of turning into desert. The underlying wavelengths
     // are ~1,000+ blocks; 88-block biome provinces subdivide each broad zone.
-    const wx = biomeNoise.octave(x*.00025+1813,z*.00025-2341,2,.55)*175;
-    const wz = biomeNoise.octave(x*.00025-3411,z*.00025+4187,2,.55)*175;
+    const wx = biomeNoise.octave(x*.0003333333+1813,z*.0003333333-2341,2,.55)*131.25;
+    const wz = biomeNoise.octave(x*.0003333333-3411,z*.0003333333+4187,2,.55)*131.25;
     const sx=x+wx,sz=z+wz;
-    const temp=biomeNoise.octave(sx*.00018+1307,sz*.00018-2417,3,.55)*1.55;
-    const moist=biomeNoise.octave(sx*.00022-3893,sz*.00022+5819,3,.55)*1.3;
+    const temp=biomeNoise.octave(sx*.00024+1307,sz*.00024-2417,3,.55)*1.55;
+    const moist=biomeNoise.octave(sx*.0002933333-3893,sz*.0002933333+5819,3,.55)*1.3;
     // Four stable climate families with ecotones, not independently scattered IDs.
     const heat=temp-moist*.16;
-    const zone=heat<-.34?'cold':heat<.03?'temperate':heat<.41?'warm':'arid';
+    const zone=getOceanField(x,z)>.205?'marine':(heat<-.34?'cold':heat<.03?'temperate':heat<.41?'warm':'arid');
     return {zone,temp,moist};
 }
 function climateTouchesZone(x,z,zone,radius=135) {
@@ -258,13 +345,15 @@ function getBiomeProvince(cellX,cellZ) {
     const key=`${cellX},${cellZ}`;
     const existing=biomeProvinceCache.get(key);if(existing)return existing;
     if(biomeProvinceCache.size>20000)biomeProvinceCache.clear();
-    const size=88;
+    const size=176;
     const px=(cellX+.5+(coordHash(cellX,cellZ,9101,WORLD_SEED)-.5)*.54)*size;
     const pz=(cellZ+.5+(coordHash(cellX,cellZ,9102,WORLD_SEED)-.5)*.54)*size;
     const climate=getClimateZone(px,pz),{zone,temp,moist}=climate;
     const rand=coordHash(cellX,cellZ,9372,WORLD_SEED);
     let biome;
-    if(zone==='cold') {
+    if(zone==='marine') {
+        biome=BIOMES.OCEAN;
+    } else if(zone==='cold') {
         // Moist wooded cold borders adjoin forests; open icy fields adjoin plains.
         biome=moist>.02?(rand<.72?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS):
             (rand<.28?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS);
@@ -296,9 +385,9 @@ function getBaseBiome(x, z) {
     // Seeded, jittered two-dimensional climate provinces. The closest center
     // gives each biome a substantial rounded footprint instead of a thin strip
     // formed where several climate thresholds almost coincide.
-    const warpX = biomeNoise.octave(x*.0046+1741,z*.0046-1927,2,.55)*18;
-    const warpZ = biomeNoise.octave(x*.0046-2881,z*.0046+3653,2,.55)*18;
-    const px=x+warpX,pz=z+warpZ,grid=88;
+    const warpX = biomeNoise.octave(x*.0023+1741,z*.0023-1927,2,.55)*36;
+    const warpZ = biomeNoise.octave(x*.0023-2881,z*.0023+3653,2,.55)*36;
+    const px=x+warpX,pz=z+warpZ,grid=176;
     const cx=Math.floor(px/grid),cz=Math.floor(pz/grid);
     let nearest=null,best=Infinity;
     for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
@@ -460,7 +549,13 @@ if (mountain) {
     if (mountain.targetHeight >= 130) return BIOMES.MOUNTAINS_MID;
     if (mountain.targetHeight >= 100) return BIOMES.MOUNTAINS_LOW;
 }
-return getBaseBiome(x, z);
+const hydro=getHydrology(x,z);
+            if(hydro.kind==='deep_ocean')return BIOMES.DEEP_OCEAN;
+            if(hydro.kind==='ocean')return BIOMES.OCEAN;
+            if(hydro.kind==='beach'||(hydro.kind.endsWith('_bank')&&hydro.bank<.55))return BIOMES.BEACH;
+            if(hydro.kind==='river')return BIOMES.RIVER;
+            if(hydro.kind==='lake')return BIOMES.LAKE;
+            return getBaseBiome(x, z);
         }
 
         
@@ -512,7 +607,37 @@ function getHeight(x, z, biome = getBiome(x, z)) {
             if (biome === BIOMES.MOUNTAINS_LOW) naturalHeight = Math.min(naturalHeight, 130.999);
             else if (biome === BIOMES.MOUNTAINS_MID) naturalHeight = Math.min(naturalHeight, 160.999);
             else if (biome === BIOMES.MOUNTAINS_HIGH) naturalHeight = Math.min(naturalHeight, 190.999);
-            return clamp(Math.floor(naturalHeight), 8, 190);
+            const hydro=getHydrology(x,z);
+            if(hydro.kind==='ocean'||hydro.kind==='deep_ocean'){
+                if(hydro.field<=.52){
+                    // Shelf: near shore 60 -> offshore 40.
+                    naturalHeight=mix(61.2,40,smoothstep(.205,.52,hydro.field));
+                }else{
+                    // Abyssal deep ocean bed ranges from displayed Y 10 to Y 40.
+                    naturalHeight=mix(40,11,smoothstep(.52,.89,hydro.field));
+                }
+                naturalHeight+=noise.noise2D(x*.011+281,z*.011-631)*.8;
+                naturalHeight=Math.max(10,Math.min(60,naturalHeight));
+            } else if(hydro.kind==='beach') {
+                // Never jump from inland 80+ to a vertical 62-block shoreline.
+                const targetLand=Math.max(64,Math.min(69,naturalHeight));
+                // Dry beaches must begin ABOVE the source-water top (Y=62),
+                // otherwise adjacent ocean sources flood the beach forever.
+                naturalHeight=mix(62.25,targetLand,1-smoothstep(.055,.205,hydro.field));
+            } else if(hydro.kind==='river'||hydro.kind==='lake') {
+                // A lake begins with a shallow shelf rather than a five-block
+                // drop exactly at its source-water boundary.
+                naturalHeight=hydro.kind==='river'?59:mix(61.35,57,hydro.depth??1);
+            } else if(hydro.kind==='river_bank'||hydro.kind==='lake_bank') {
+                // Banks start above the waterline, not submerged below it.
+                // This prevents water spilling sideways over every dry bank.
+                naturalHeight=mix(62.25,naturalHeight,smoothstep(0,1,hydro.bank));
+            } else if(hydro.field>-.13) {
+                // The inland coast begins flattening before the sand beach starts.
+                const t=smoothstep(-.13,-.045,hydro.field);
+                naturalHeight=mix(naturalHeight,Math.max(64,Math.min(69,naturalHeight)),t);
+            }
+            return clamp(Math.floor(naturalHeight),8,190);
         }
 
 function posRand(x, z, off = 0) { return (treeNoise.noise2D(x * 0.1 + off, z * 0.1 + off) + 1) * 0.5; }

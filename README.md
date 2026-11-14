@@ -1,3 +1,247 @@
+# MellorCraft v1.8.5 — Coastline & Underwater Movement Hotfix
+
+This is a replacement for the previous v1.8.5 ecology/crafting hotfix.
+
+## Updates in this hotfix
+
+- **Sand strips:** Replaced the overly broad ocean-province transition that
+  generated long diagonal beach ribbons. Beach classification now occupies a
+  narrower portion of the actual shoreline; inland areas retain their normal
+  biome instead of being forced into large, flat belts of sand.
+- **Rivers disguised as oceans:** Removed much of the high-frequency contour
+  variation in the ocean-basin field, reducing narrow ocean fingers while
+  preserving naturally broad ocean basins and the existing lakes. Procedural
+  rivers remain disabled.
+- **Seafloor:** Bathymetry uses a gentler depth ramp across the ocean-to-deep-
+  ocean boundary, reducing abrupt undersea drop-offs after coastline updates.
+- **Sharks and kelp:** Aquatic pathing samples the water across the animal's
+  full hull, looks ahead for a rising sea floor, swims upward to clear a bank
+  when possible, and turns more decisively when blocked. Kelp/seagrass remain
+  water-passable; they are not added as solid collision blocks.
+- **Swimming:** Normal players have slight negative water buoyancy. Without
+  pressing Space or Shift, they gradually sink; Space still swims upward and
+  Shift descends more quickly. Creative and spectator flight are unchanged.
+- **Seed map:** Clears cached hydrology when changing world seeds, preventing
+  stale coastlines from being shown for the next seed.
+
+## Testing and compatibility
+
+- Client and seed-map JavaScript passed Node syntax validation; included server
+  and relay passed Python compilation; ZIP passed integrity checks.
+- Tested two seeded coastline samples, with lakes retained and no rivers. The
+  number of sampled beach cells fell substantially compared with the prior
+  build; ocean area stayed comparable in the larger randomized samples.
+- Narrow-inlet counts improved in the targeted sample, but rare narrow
+  channels can still exist. Underwater slopes remain naturally variable.
+- Interactive WebGL gameplay and live shark/player swimming have **not** been
+  fully verified in this environment. Please test with a new world or new
+  unexplored terrain, and back up saved worlds before upgrading.
+- This changes deterministic terrain for unexplored chunks. Previously saved
+  player edits, river remnants, and shoreline anomalies are not retroactively
+  rewritten. No server protocol or save-format changes are intended.
+
+---
+
+# Previous v1.8.5 release notes (historical)
+
+# MellorCraft v1.8.5 — Rivers Removed, Aquatic Visuals & Wood Crafting Update
+
+This incremental v1.8.5 hotfix addresses the next playtest report. It is a complete
+replacement for the previous v1.8.5 hotfix bundle.
+
+## Changes
+
+- **Lakes preserved; rivers removed from newly generated terrain.** Removed the
+  river hydrology mask responsible for exposed walls and flat sand corridors.
+  Lake locations are restricted to suitable low-slope terrain, with underwater
+  transition shelves and smoothed banks rather than abrupt five-block drops.
+- **Ocean frequency and climate:** Reduces the number of ocean regions without
+  uniformly shrinking surviving ocean coastlines; macro temperature/moisture
+  regions are 1.5× larger than the preceding hotfix, preserving more area for
+  snowy mountains.
+- **Visible kelp and seagrass:** Restores missing aquatic vegetation colors in
+  the chunk mesher. Vegetation remains mineable.
+- **Angler fish:** More purposeful natural deep-water spawning, including
+  seabed-near searches below displayed Y=30; `/summon angler_fish`,
+  `/summon anglerfish`, and `/summon angler` search for suitable deep ocean
+  water even when the candidate chunk is not yet streamed in.
+- **Aquatic models and swimming:** New distinct salmon, cod, shark, and
+  angler-fish blocky meshes, anatomically placed eyes and fins, swimming
+  pitch/yaw based on actual motion, and steering away from the seafloor.
+- **Weather:** Rain reaches lake and ocean source-water surfaces with splashes;
+  snow particles reach the surface and create a brief melting-water splash.
+- **Wood crafting:** Oak boats and oak stairs require *oak planks* specifically.
+  Craftable spruce, acacia and jungle stairs are registered as directional,
+  placeable, mineable blocks with matching textures and inventory entries.
+  Spruce/acacia/jungle boats continue to require their own planks.
+
+## Save and multiplayer notes
+
+Back up worlds before replacing the game. Previously saved blocks and player
+edits can retain old river trenches or shoreline shapes; newly generated land
+uses the changed algorithm. For the clearest comparison, make a **new world**.
+Use the included v1.8.5 HTML client, Python dedicated server and relay together;
+server protocol remains 17 and the saved-world format remains 13.
+
+## Validation / known limitations
+
+- Both HTML JavaScript programs passed Node.js syntax validation.
+- The Python server and relay passed `py_compile`.
+- In a 6,400-block-wide deterministic seed-map sample, river labels fell to zero;
+  lakes remained present; ocean/deep-ocean locations became less frequent.
+- In a dense 4,000×4,000-block shoreline sample, tested adjacent heights differed
+  by at most three blocks, with no greater-than-three-block failures.
+- Generated fish meshes produced valid geometry in isolated JavaScript tests;
+  wood recipes and new block IDs passed static checks.
+- **Not fully validated:** interactive WebGL gameplay, live aquatic behavior,
+  shader appearance, cross-device performance, and end-to-end multiplayer.
+  The headless browser in the test environment does not provide a working
+  WebGL context. In-game testing remains necessary.
+
+---
+
+# Earlier v1.8.5 development notes (historical)
+
+# MellorCraft v1.8.5 — Water, Swimming, Boats & Bloom Follow-up
+
+This build incorporates the follow-up fixes prompted by the November 13 screenshots. It is an updated v1.8.5 build, not a separate v1.8.6 release.
+
+## New in this follow-up
+
+- **Shorelines and rivers:** smoother biome-boundary banks and beach heights above the Y=62 source-water surface, avoiding cliff-like river transitions and flowing beach edges in newly generated terrain.
+- **Waterfall mechanics:** a dedicated falling-water block state allows water to descend vertically instead of treating every section of a waterfall as a new lateral spread source. Horizontal spread has a finite radius from supported surfaces. This is a Minecraft-like approximation, not Minecraft's complete fluid engine.
+- **Aquatic life:** corrected fish eye orientation; increased deep-water angler-fish spawn attempts; directed knockback for swimming mobs; `/summon` routed through the world host or dedicated server, with support for aquatic species.
+- **Swimming and spawning:** Shift to descend, improved swimming onto banks, floating dropped items, and selection of a dry initial spawn where a land location can be found.
+- **Water vegetation:** kelp and seagrass are now mineable blocks instead of purely decorative meshes.
+- **Boats:** oak, spruce, acacia, and jungle boats can persist on land after dismounting, be boarded again, and produce the corresponding boat item when broken outside Creative mode; they are represented in singleplayer saves and server snapshots.
+- **Bloom:** shader rendering now uses an off-screen color/depth framebuffer instead of copying the default framebuffer; shader compilation and framebuffer availability are checked before capture to avoid a black screen on unsupported configurations.
+
+## Important compatibility and testing notes
+
+Back up existing worlds before testing. Newly generated terrain uses the improved terrain rules; already saved or player-edited terrain may retain old shoreline artifacts. Use the bundled client and server together for multiplayer.
+
+Static JS and Python syntax checks and focused shoreline, ocean chunk, falling-water, and persistence tests have passed. Interactive WebGL rendering, cross-device bloom compatibility, and end-to-end multiplayer gameplay have **not** been fully tested in this environment. High render distance and bloom can still be performance-intensive.
+
+---
+
+# MellorCraft v1.8.5 — Water Terrain & Aquatic Life Hotfix
+
+This follow-up to the original v1.8.5 release addresses the water problems
+shown in playtest screenshots. **Back up worlds and start a NEW seed/world to
+see all terrain changes.** Previously explored land is regenerated only if its
+voxel data was not preserved; old player edits, tunnels, and saved terrain can
+still cross new coasts. This is not a migration that erases old world data.
+
+## Terrain and water corrections
+
+- Ocean shelves slope down smoothly from the Y=62 waterline. Deep ocean
+  floor heights transition through **Y=40 down to approximately Y=10**. The
+  seeded ocean field is continuous across chunk boundaries.
+- Inland lake footprints are smaller and have an entire smooth embankment
+  contained in their generation tile; this prevents cut-off circular lakes
+  or cliffs along generation-cell boundaries.
+- Rivers have broad, graded banks rather than narrow elevated aqueduct walls.
+  Rivers, lakes and their banks are excluded from steep mountain regions and
+  protected from exposed ravine cuts. The waterline remains at displayed Y=62.
+- Every wet terrain column fills with source water even when an underground
+  dungeon exists beneath the floor; previously, entire dungeon columns were
+  omitted and left rectangular dry holes in an otherwise filled lake.
+- Unknown adjacent terrain chunks are treated as containing the expected
+  water from the same deterministic hydrology rule. Exposed source edges
+  schedule falling and lateral fluid updates when nearby air exists.
+- Underwater kelp and seagrass appear as sparse decorative mesh geometry.
+  These decorations are currently visual vegetation, not collectible crops.
+
+## Aquatic creatures, boats, rendering
+
+- New **Aquatic Mob Cap** defaults to **16** and is independent of the docile
+  and hostile caps. Change via world options or `/gamerule aquaticCap 16`.
+- **Salmon** and **Cod** spawn throughout viable open water and drop raw fish
+  (cook in a furnace). **Sharks** spawn only in oceans, are hostile, and can
+  attack a player in water. **Angler Fish** spawn only in oceans at displayed
+  Y below 30. Aquatic creatures swim vertically as well as horizontally and
+  take damage when stranded out of the water.
+- **Oak, Spruce, Acacia and Jungle Boats** each use five matching planks;
+  the chosen wood variety is preserved when boarding and dismounting.
+  Creative inventory now explicitly includes all four boats, the empty
+  bucket, and the water bucket.
+- Water is visually darker with stronger underwater fog. The Shaders settings
+  include **Better Shadows** and **Bloom**, plus bloom strength. Underwater
+  surfaces receive procedural animated sunlight shafts/caustic highlights.
+  These are screen-space/procedural approximations, not a full ray-traced shader.
+  Extra shadow samples and bloom increase graphics workload.
+
+## Verification and limits
+
+- JavaScript files pass syntax checks; server and relay compile; server reads
+  and validates the independent aquatic cap, aquatic species, and furnace
+  recipes. Deterministic test chunks spanning three deep-ocean chunk areas
+  retained all 256 source-water columns each. In a 257 × 261-block sampled
+  coastline, the largest adjacent-column surface step found was 3 blocks.
+- A browser engine allowed menus to load but did **not** expose WebGL or local
+  storage in this restricted execution environment, so interactive world play,
+  shader compilation, FPS, fish combat, and multiplayer stress tests are not
+  verified. Treat this as a playable test build that still needs hands-on QA.
+- Water flow approximates Minecraft-like source and seven flowing levels; it
+  is not a full clone of Minecraft's scheduled simulation. Existing edited
+  terrain or old saves may still show unmodified anomalies.
+
+---
+
+# MellorCraft v1.8.5 — Ocean & Performance Update
+
+**Back up old worlds before opening them.** Terrain generation has changed, and
+existing unedited areas may regenerate differently from older saves. Game worlds
+and browser client storage remain separate from dedicated server world saves.
+
+## Features
+
+- Render distance: a single full-resolution **2–64 chunk** slider. Extended
+  render distance workers and settings are disabled (the old UI is hidden).
+- Chunk streaming: up to three parallel prioritized Web Workers on desktop,
+  one on mobile; urgent chunks around the player or a teleport win priority,
+  while WebGL meshing remains frame-budgeted on the main thread.
+- Climate: temperature regions sample at 2× frequency and small biome
+  provinces now span 176 rather than 88 blocks, reducing cactus-strip patterns.
+- Water: large seeded ocean/deep-ocean regions, gradually descending beaches,
+  inland rivers/lakes, sea surface at **displayed Y=62** (internal voxel Y=110).
+  Water is rendered transparent, can be swum in, and uses source and flowing
+  states with seven spread steps, gravity and renewable sources.
+- Craft an **Oak Boat** with five planks (crafting table), then right-click
+  water with the boat and steer using WASD; Shift dismounts. Dismount returns
+  the boat item to inventory.
+- Craft a **Bucket** with three iron ingots; right-click source water to
+  collect a water bucket, and right-click terrain to pour a new source.
+- Unlinked portals find naturally open two-block-high areas with a solid floor,
+  rather than clearing platforms, both Overworld → Timeless Void and back.
+  Separate portals maintain independent, bidirectional saved links. Destroying
+  either linked portal also removes its partner.
+- Server protocol upgraded to **17**. Use this client and dedicated server
+  together. The browser relay still uses its own protocol.
+- Seed map matches the updated terrain and water distribution.
+
+## Setup
+
+Open `index.html` locally or launch `mellorcraft.html` directly in your browser.
+For dedicated multiplayer, install `websockets>=10`, then run
+`python mellorcraft_server.py`; the server hosts HTTP on port 8000 and WebSockets
+on 8765. To host an existing singleplayer world as a relay session, run
+`python mellorcraft_relay.py` and follow in-game LAN instructions.
+
+## Testing caveats
+
+JavaScript syntax, Python module compilation, deterministic hydrology sampling,
+and seed-map browser rendering have been checked in a restricted test runtime.
+Full interactive WebGL gameplay/performance and high-population multiplayer
+stress tests have **not** been completed. Minecraft water rules are *approximated*
+with a seven-level source/flow system, not guaranteed bit-for-bit parity with
+Minecraft's full scheduled-fluid implementation. At 32–64 chunks, rendering all
+chunks at full resolution can be resource-heavy on mobile and low-end PCs.
+
+---
+
+## v1.8.4 historical notes (previous build)
+
 MellorCraft v1.8.4 — latest visibility/decorations fix
 ======================================================
 See README_VISIBILITY_FIX.md for the latest changes and tests.
