@@ -2697,7 +2697,7 @@ async def process_console_command(line: str, requester: Any = None) -> str:
             # Clients don't upload natural water voxels to the dedicated server.
             # Search for a water-level candidate below the operator; deep-ocean
             # anglers spawn at Y=20 and require ocean depth at that location.
-            sy = (WORLD_Y_ORIGIN + 20) if species == "ANGLER_FISH" else min(sy, WORLD_Y_ORIGIN + 60)
+            sy = (WORLD_Y_ORIGIN + 20) if species == "ANGLER_FISH" else min(sy, WORLD_Y_ORIGIN + 48)
         definition = MOB_DEFINITIONS[species]
         if not all(math.isfinite(v) for v in (sx, sy, sz)):
             return "Invalid summon coordinates."

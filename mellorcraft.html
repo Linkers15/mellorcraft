@@ -860,7 +860,7 @@
                     <div id="flatStructureControls" class="generator-list"></div>
                   </div>
                 </div>
-                <div class="generator-note">The total layer height must be between 1 and 199 blocks. Ocean and Deep Ocean presets put the sandy seabed below sea level (Y=62), and the water fills above it. You can edit the layers afterward. Beach creates dry sand above Y=62. Structures are placed on the top layer.</div>
+                <div class="generator-note">The total layer height must be between 1 and 199 blocks. Ocean and Deep Ocean presets put the sandy seabed below sea level (Y=50), and the water fills above it. You can edit the layers afterward. Beach creates dry sand above Y=50. Structures are placed on the top layer.</div>
               </div>
               <div class="world-rule-row"><label for="ruleDaylightCycle">Daylight Cycle<span class="world-rule-help">Allow time of day to advance.</span></label><input type="checkbox" id="ruleDaylightCycle" checked></div>
               <div class="world-rule-row"><label for="ruleWeatherCycle">Weather Cycle<span class="world-rule-help">Allow pressure systems and storms to move.</span></label><input type="checkbox" id="ruleWeatherCycle" checked></div>
@@ -1276,6 +1276,11 @@
             mobileCpuCores <= 4 ||
             (isIOSDevice && mobileShortEdge <= 375 && mobileDpr <= 2.1)
         ));
+        // Chromebooks are desktop-input devices, so mobile-only optimization
+        // missed them. Avoid saturating limited CPU/RAM with concurrent workers.
+        const LOW_POWER_DEVICE = LOW_END_MOBILE || /CrOS/i.test(navigator.userAgent||'') ||
+            (!isMobilePlaying && ((mobileDeviceMemory>0 && mobileDeviceMemory<=4) ||
+              (mobileCpuCores<=4 && mobileDeviceMemory>0 && mobileDeviceMemory<=8)));
         document.documentElement.classList.toggle('mobile-mode', isMobilePlaying);
         if (isMobilePlaying) {
             document.getElementById('versionSubtitle').textContent = 'v1.8.5';
@@ -1350,14 +1355,16 @@
         const WORLD_Y_ORIGIN = 48;
         function worldYFromVoxel(y,dim=currentDimension){return dim===0?y-WORLD_Y_ORIGIN:y;}
         function voxelYFromWorld(y,dim=currentDimension){return dim===0?y+WORLD_Y_ORIGIN:y;}
-        const WATER_LEVEL = 62; // displayed sea level, mapped to voxel Y=110 in the Overworld
+        const WATER_LEVEL = 50; // new displayed ocean sea level (voxel Y=98)
         const WATER_SURFACE_Y = WATER_LEVEL + WORLD_Y_ORIGIN;
+        const LAKE_WATER_LEVEL = 62; // inland lakes retain their former natural surface
+        const LAKE_SURFACE_Y = LAKE_WATER_LEVEL + WORLD_Y_ORIGIN;
         const MOUNTAIN_XZ_SCALE = Math.SQRT1_2; // v1.4.1: same range shape at 50% X/Z land area
         const ALT_WORLD_HEIGHT = 50;
         function getDimensionHeight(dim = currentDimension) { return dim === 1 ? ALT_WORLD_HEIGHT : WORLD_HEIGHT; }
         const MOBILE_DEFAULT_RENDER_DISTANCE = LOW_END_MOBILE ? 2 : (isIOSDevice ? 2 : 4);
         const MOBILE_MAX_RENDER_DISTANCE = LOW_END_MOBILE ? 4 : (isIOSDevice ? 5 : 10);
-        let RENDER_DISTANCE = Math.max(2,Math.min(64,parseInt(safeStorageGet('mellorcraftRenderDistance'))||(isMobilePlaying?MOBILE_DEFAULT_RENDER_DISTANCE:6)));
+        let RENDER_DISTANCE = Math.max(2,Math.min(64,parseInt(safeStorageGet('mellorcraftRenderDistance'))||(isMobilePlaying?MOBILE_DEFAULT_RENDER_DISTANCE:(LOW_POWER_DEVICE?3:6))));
         let EXTENDED_ENABLED = false; // v1.8.5 no distant LOD; only full-detail chunks
         let EXTENDED_RENDER_DISTANCE = Math.max(RENDER_DISTANCE+1,Math.min(96,parseInt(safeStorageGet('mellorcraftExtendedDistance'))||32));
         function visibleRenderDistance(){return RENDER_DISTANCE;}
@@ -1506,11 +1513,11 @@
             const hydro=getHydrology(bx,bz);
             // The opaque mesh's shadow-top deliberately excludes water. Weather
             // needs the actual liquid surface at Y=62, not the seafloor below it.
-            const waterTop=hydro.wet?WATER_SURFACE_Y+1:0;
+            const waterTop=hydro.wet?(hydro.kind==='lake'?LAKE_SURFACE_Y:WATER_SURFACE_Y)+1:0;
             const impact=Math.max(terrain,loadedTop??0,waterTop);
             weatherImpactCache.set(key,{y:impact,at:now});if(weatherImpactCache.size>640)weatherImpactCache.clear();return impact;
         }
-        function resetWeatherDrop(drop){const angle=Math.random()*Math.PI*2,distance=Math.sqrt(Math.random())*68;drop.x=player.x+Math.cos(angle)*distance;drop.z=player.z+Math.sin(angle)*distance;drop.ground=weatherImpactY(drop.x,drop.z);drop.waterImpact=getHydrology(drop.x,drop.z).wet && Math.abs(drop.ground-(WATER_SURFACE_Y+1))<1.1;drop.y=Math.max(player.y+16,drop.ground+18)+Math.random()*28;drop.snow=isColdPrecipitationAt(drop.x,drop.z);drop.speed=drop.snow?9+Math.random()*8:65+Math.random()*35;
+        function resetWeatherDrop(drop){const angle=Math.random()*Math.PI*2,distance=Math.sqrt(Math.random())*68;drop.x=player.x+Math.cos(angle)*distance;drop.z=player.z+Math.sin(angle)*distance;drop.ground=weatherImpactY(drop.x,drop.z);drop.waterImpact=getHydrology(drop.x,drop.z).wet && Math.abs(drop.ground-((getHydrology(drop.x,drop.z).kind==='lake'?LAKE_SURFACE_Y:WATER_SURFACE_Y)+1))<1.1;drop.y=Math.max(player.y+16,drop.ground+18)+Math.random()*28;drop.snow=isColdPrecipitationAt(drop.x,drop.z);drop.speed=drop.snow?9+Math.random()*8:65+Math.random()*35;
             drop.drift=(Math.random()-.5)*2.6;drop.phase=Math.random()*Math.PI*2;}
         function updateWeatherRain(dt){
             if(!gameStarted||currentDimension!==0||!gameRules.doWeatherCycle){localRainIntensity=0;weatherDrops.length=0;weatherSplashes.length=0;return;}
@@ -4164,9 +4171,9 @@
             {blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:50},{blockId:BLOCKS.DIRT,count:3},{blockId:BLOCKS.GRASS,count:1}
         ];
         const FLAT_MARINE_LAYER_PRESETS={
-            OCEAN:[{blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:49},{blockId:BLOCKS.SAND,count:1}],
-            DEEP_OCEAN:[{blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:24},{blockId:BLOCKS.SAND,count:1}],
-            BEACH:[{blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:62},{blockId:BLOCKS.SAND,count:1}]
+            OCEAN:[{blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:43},{blockId:BLOCKS.SAND,count:1}],
+            DEEP_OCEAN:[{blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:16},{blockId:BLOCKS.SAND,count:1}],
+            BEACH:[{blockId:BLOCKS.BEDROCK,count:1},{blockId:BLOCKS.STONE,count:49},{blockId:BLOCKS.SAND,count:1}]
         };
         function defaultWorldGenSettings(type='normal') {
             const biomes={}; for(const b of CUSTOM_BIOME_DEFS)biomes[b.key]={enabled:!['OCEAN','DEEP_OCEAN','BEACH'].includes(b.key),concentration:100};
@@ -4466,7 +4473,7 @@
         // WebGL
         const canvas = document.getElementById('gameCanvas');
         const gl = canvas.getContext('webgl', {
-            antialias: !isIOSDevice,
+            antialias: !LOW_POWER_DEVICE && !isIOSDevice,
             alpha: false,
             depth: true,
             preserveDrawingBuffer: false,
@@ -4477,24 +4484,24 @@
         const savedMobileResolution = Number(savedMobileResolutionRaw);
         let mobileResolutionPercent = savedMobileResolutionRaw !== null && savedMobileResolutionRaw !== '' && Number.isFinite(savedMobileResolution)
             ? Math.max(40, Math.min(100, Math.round(savedMobileResolution / 5) * 5))
-            : (isMobilePlaying ? DEFAULT_MOBILE_RESOLUTION : 100);
+            : (isMobilePlaying ? DEFAULT_MOBILE_RESOLUTION : (LOW_POWER_DEVICE?75:100));
         let MOBILE_RENDER_SCALE = mobileResolutionPercent / 100;
         // Dynamic scale only changes the internal framebuffer. UI, textures, weather,
         // entities and gameplay remain enabled. It recovers slowly when headroom returns.
         let mobileAdaptiveScale = 1.0;
         let mobilePerfWindowTime = 0, mobilePerfWindowFrames = 0, mobileLastScaleChange = 0;
         function effectiveMobileRenderScale(){
-            return Math.max(0.40, Math.min(1.0, MOBILE_RENDER_SCALE * (isMobilePlaying ? mobileAdaptiveScale : 1.0)));
+            return Math.max(0.40, Math.min(1.0, MOBILE_RENDER_SCALE * ((isMobilePlaying || LOW_POWER_DEVICE) ? mobileAdaptiveScale : 1.0)));
         }
         function updateMobilePerformanceGovernor(dt, nowMs){
-            if(!isMobilePlaying || !gameStarted || deathScreenOpen || settingsOpen)return;
+            if((!isMobilePlaying && !LOW_POWER_DEVICE) || !gameStarted || deathScreenOpen || settingsOpen)return;
             mobilePerfWindowTime += dt; mobilePerfWindowFrames++;
             if(mobilePerfWindowTime < 2.5)return;
             const fps = mobilePerfWindowFrames / Math.max(0.001, mobilePerfWindowTime);
             mobilePerfWindowTime = 0; mobilePerfWindowFrames = 0;
             if(nowMs-mobileLastScaleChange < 2500)return;
             let next = mobileAdaptiveScale;
-            const floor = LOW_END_MOBILE ? 0.70 : 0.76;
+            const floor = LOW_POWER_DEVICE ? 0.67 : 0.76;
             if(fps < 27 && mobileAdaptiveScale > floor) next = Math.max(floor, mobileAdaptiveScale - 0.08);
             else if(fps > 50 && mobileAdaptiveScale < 0.999 && nowMs-mobileLastScaleChange > 8000) next = Math.min(1.0, mobileAdaptiveScale + 0.04);
             if(Math.abs(next-mobileAdaptiveScale) >= 0.02){
@@ -5590,6 +5597,7 @@
         let chunkMeshRevision = 0;
         let chunkMaintenanceTimer = 0;
         let lastChunkCenterX = Number.NaN, lastChunkCenterZ = Number.NaN, lastChunkDimension = -1;
+        let lastChunkQueueScanPx=NaN,lastChunkQueueScanPz=NaN,lastChunkQueueScanDim=-1,chunkQueueScanCursor=0;
 
         function chunkKey(dim, cx, cz) { return `${dim},${cx},${cz}`; }
         function enqueueChunkMeshBuild(key) {
@@ -5778,14 +5786,22 @@
 // sand stripes or narrow, river-like inlets. A lower-detail continental
 // contour rounds off thin water arms; the ocean province switch is local
 // instead of the old hundreds-of-block-wide fade through the beach band.
-function getRawOceanField(x,z){
-    const natural=continentalNoise.octave(x*.00083+481,z*.00083-719,2,.53)*.955 +
-                  continentalNoise.octave(x*.0019-1704,z*.0019+2201,2,.52)*.045;
-    const marineProvince=continentalNoise.octave(x*.00024+9167,z*.00024-7421,2,.57);
-    const shorelineWarp=continentalNoise.noise2D(x*.00123-1405,z*.00123+1702)*.04;
-    const oceanGate=smoothstep(-.16,-.07,marineProvince+shorelineWarp);
-    return Math.min(natural, -.24+1.25*oceanGate);
+// One continuous, low-frequency thermal field controls EVERY mainland climate
+// and the ocean boundary. Ocean is the hottest band; the immediately adjacent
+// dry ground can therefore only be hot land, never cold terrain or mountains.
+function getThermalField(x,z){
+    const wx=biomeNoise.octave(x*.0003333333+1813,z*.0003333333-2341,2,.55)*100;
+    const wz=biomeNoise.octave(x*.0003333333-3411,z*.0003333333+4187,2,.55)*100;
+    const sx=x+wx,sz=z+wz;
+    const moist=biomeNoise.octave(sx*.0002933333-3893,sz*.0002933333+5819,3,.55)*1.3;
+    const base=biomeNoise.octave(sx*.00024+1307,sz*.00024-2417,3,.55)*1.55;
+    const oceanSize=continentalNoise.octave(sx*.00032+9167,sz*.00032-7421,2,.57)*.40;
+    return {heat:base+oceanSize-moist*.07,moist};
 }
+// A single signed field controls both coast and sea floor. Positive ocean
+// threshold is 0.205; the lower beach and inland thresholds give wide,
+// continuous shores without a separate ocean gate that cuts across cold land.
+function getRawOceanField(x,z){return .205+(getThermalField(x,z).heat-.70)*3.6;}
 function getOceanField(x,z){return getRawOceanField(x,z);}
 function naturalLakeGroundEstimate(x,z){
     // Dry-land approximation of the same broad terrain profile used by
@@ -5795,7 +5811,7 @@ function naturalLakeGroundEstimate(x,z){
     const detail=noise.octave(x*.022+400,z*.022-400,3,.48);
     const ridge=1-Math.abs(noise.octave(x*.0022+1200,z*.0022+1200,4,.55));
     const {temp,moist}=getClimateZone(x,z);
-    const cold=smoothstep(.02,.34,-temp),hot=smoothstep(.16,.52,temp);
+    const cold=smoothstep(.34,.72,-temp),hot=smoothstep(.04,.45,temp);
     let height=58+broad*10+detail*3+hot*(2+broad*3)+smoothstep(.55,.82,-moist)*5;
     height=mix(height,80+broad*9+detail*2.2+(ridge-.5)*6,cold);
     return height+hot*smoothstep(.22,.68,moist)*3;
@@ -5827,7 +5843,7 @@ function computeHydrology(x,z){
     // Hydrological classification is a deterministic X/Z field: independent of
     // chunk order, view distance, worker count, and the previously loaded chunks.
     const field=getOceanField(x,z);
-    if(field>.205) return {kind:field>.60?'deep_ocean':'ocean',field,wet:true};
+    if(field>.205) return {kind:field>.70?'deep_ocean':'ocean',field,wet:true};
     // A wide ABOVE-WATER shoreline is essential. A 1-3 block biome threshold
     // near high cold terrain previously created giant exposed dirt/stone walls.
     if(field>.055) return {kind:'beach',field,wet:false,bank:Math.max(0,Math.min(1,(.205-field)/.15))};
@@ -5857,20 +5873,12 @@ function computeHydrology(x,z){
     return {kind:'land',field};
 }
 
-function getClimateZone(x,z) {
-    // Climate zones follow broad, warped temperature/moisture contours. Adjacent
-    // zones are ordered cold -> temperate -> warm -> arid, with wet hot land
-    // remaining warm instead of turning into desert. The underlying wavelengths
-    // are ~1,000+ blocks; 88-block biome provinces subdivide each broad zone.
-    const wx = biomeNoise.octave(x*.0003333333+1813,z*.0003333333-2341,2,.55)*131.25;
-    const wz = biomeNoise.octave(x*.0003333333-3411,z*.0003333333+4187,2,.55)*131.25;
-    const sx=x+wx,sz=z+wz;
-    const temp=biomeNoise.octave(sx*.00024+1307,sz*.00024-2417,3,.55)*1.55;
-    const moist=biomeNoise.octave(sx*.0002933333-3893,sz*.0002933333+5819,3,.55)*1.3;
-    // Four stable climate families with ecotones, not independently scattered IDs.
-    const heat=temp-moist*.16;
-    const zone=getOceanField(x,z)>.205?'marine':(heat<-.34?'cold':heat<.03?'temperate':heat<.41?'warm':'arid');
-    return {zone,temp,moist};
+function getClimateZone(x,z){
+    // Thermal order is immutable: cold -> temperate -> hot -> ocean.
+    const climate=getThermalField(x,z);
+    const heat=climate.heat;
+    const zone=heat>=.70?'marine':heat>=-.08?'hot':heat>=-.55?'temperate':'cold';
+    return {zone,temp:heat,heat,moist:climate.moist};
 }
 function climateTouchesZone(x,z,zone,radius=135) {
     // A cheap, shared ecotone rule: choose sensible biome neighbors on both
@@ -5881,64 +5889,66 @@ function climateTouchesZone(x,z,zone,radius=135) {
         getClimateZone(x,z-radius).zone===zone;
 }
 
-function getBiomeProvince(cellX,cellZ) {
+function getBiomeProvince(cellX,cellZ){
     const key=`${cellX},${cellZ}`;
-    const existing=biomeProvinceCache.get(key);if(existing)return existing;
+    const cached=biomeProvinceCache.get(key);if(cached)return cached;
     if(biomeProvinceCache.size>20000)biomeProvinceCache.clear();
     const size=176;
     const px=(cellX+.5+(coordHash(cellX,cellZ,9101,WORLD_SEED)-.5)*.54)*size;
     const pz=(cellZ+.5+(coordHash(cellX,cellZ,9102,WORLD_SEED)-.5)*.54)*size;
-    const climate=getClimateZone(px,pz),{zone,temp,moist}=climate;
+    const {zone,temp,moist}=getClimateZone(px,pz);
     const rand=coordHash(cellX,cellZ,9372,WORLD_SEED);
     let biome;
-    if(zone==='marine') {
-        biome=BIOMES.OCEAN;
-    } else if(zone==='cold') {
-        // Moist wooded cold borders adjoin forests; open icy fields adjoin plains.
+    if(zone==='marine')biome=BIOMES.OCEAN;
+    else if(zone==='cold'){
         biome=moist>.02?(rand<.72?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS):
             (rand<.28?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS);
-    } else if(zone==='temperate') {
-        // Avoid desert meeting deep forest and snow meeting savanna directly.
-        const warmEdge=climateTouchesZone(px,pz,'warm');
-        const coldEdge=climateTouchesZone(px,pz,'cold');
+    }else if(zone==='temperate'){
         const forestChance=moist>.06?.77:moist>-.12?.49:.22;
-        const chance=coldEdge&&moist>.04?Math.max(.78,forestChance):
-            warmEdge&&moist<.04?Math.min(.25,forestChance):forestChance;
-        biome=rand<chance?(coordHash(cellX,cellZ,8151,WORLD_SEED)<.095?
+        biome=rand<forestChance?(coordHash(cellX,cellZ,8151,WORLD_SEED)<.095?
             BIOMES.FLOWER_FOREST:BIOMES.FOREST):BIOMES.PLAINS;
-    } else if(zone==='warm') {
-        const aridEdge=climateTouchesZone(px,pz,'arid');
-        biome=aridEdge||moist<.035||rand>.84?BIOMES.SAVANNA:BIOMES.JUNGLE;
-    } else {
-        // At warm/arid edges, choose savanna next to ordinary deserts.
-        const edge=climateTouchesZone(px,pz,'warm');
-        biome=moist<-.30&&rand<.55?BIOMES.BADLANDS:
-            (rand<.52?BIOMES.DESERT_CACTUS:BIOMES.DESERT_BARREN);
-        if(edge&&biome===BIOMES.BADLANDS)biome=BIOMES.DESERT_CACTUS;
+    }else{
+        // Hot band contains all five hot-land biomes, split into large,
+        // rounded provinces by moisture and a stable per-province roll.
+        if(moist>.20)biome=rand<.77?BIOMES.JUNGLE:BIOMES.SAVANNA;
+        else if(moist>-.07)biome=rand<.38?BIOMES.JUNGLE:BIOMES.SAVANNA;
+        else if(moist>-.27)biome=rand<.41?BIOMES.SAVANNA:(rand<.77?BIOMES.DESERT_CACTUS:BIOMES.DESERT_BARREN);
+        else biome=rand<.34?BIOMES.BADLANDS:(rand<.67?BIOMES.DESERT_BARREN:BIOMES.DESERT_CACTUS);
     }
     const result={x:px,z:pz,biome,temp,moist,zone};
-    biomeProvinceCache.set(key,result);
-    return result;
+    biomeProvinceCache.set(key,result);return result;
 }
 
-function getBaseBiome(x, z) {
-    // Seeded, jittered two-dimensional climate provinces. The closest center
-    // gives each biome a substantial rounded footprint instead of a thin strip
-    // formed where several climate thresholds almost coincide.
-    const warpX = biomeNoise.octave(x*.0023+1741,z*.0023-1927,2,.55)*36;
-    const warpZ = biomeNoise.octave(x*.0023-2881,z*.0023+3653,2,.55)*36;
+function getBaseBiome(x,z){
+    // A province may be centered over a neighboring climate. Only select
+    // provinces from the local thermal band: this prevents e.g. snowy plains
+    // from leaking across the hot buffer adjacent to an ocean.
+    const zone=getClimateZone(x,z).zone;
+    const warpX=biomeNoise.octave(x*.0023+1741,z*.0023-1927,2,.55)*36;
+    const warpZ=biomeNoise.octave(x*.0023-2881,z*.0023+3653,2,.55)*36;
     const px=x+warpX,pz=z+warpZ,grid=176;
     const cx=Math.floor(px/grid),cz=Math.floor(pz/grid);
     let nearest=null,best=Infinity;
     for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
         const province=getBiomeProvince(cx+dx,cz+dz);
+        if(province.zone!==zone)continue;
         const distance=(px-province.x)**2+(pz-province.z)**2;
         if(distance<best){best=distance;nearest=province;}
     }
-    return nearest.biome;
+    if(nearest)return nearest.biome;
+    // Narrow ecotones can fall between all nine province centers. Use the
+    // appropriate local climate family rather than a distant wrong-zone ID.
+    const moist=getClimateZone(x,z).moist;
+    const rand=coordHash(Math.floor(x/grid),Math.floor(z/grid),9372,WORLD_SEED);
+    if(zone==='marine')return BIOMES.OCEAN;
+    if(zone==='cold')return moist>.0?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS;
+    if(zone==='temperate')return moist>.0?BIOMES.FOREST:BIOMES.PLAINS;
+    if(moist>.16)return BIOMES.JUNGLE;
+    if(moist>-.09)return BIOMES.SAVANNA;
+    return moist<-.29&&rand<.35?BIOMES.BADLANDS:rand<.55?BIOMES.DESERT_CACTUS:BIOMES.DESERT_BARREN;
 }
 
-        function getMountainRegion(cellX, cellZ) {
+function getMountainRegion(cellX, cellZ) {
             const key = `${cellX},${cellZ}`;
             if (mountainRegionCache.has(key)) return mountainRegionCache.get(key);
             const grid = 420;
@@ -6181,10 +6191,9 @@ function getBaseBiome(x, z) {
             // Marine macroclimate is not enough to make an ocean. The actual
             // hydrology column must be wet below sea level or it is dry land.
             if(fallback===BIOMES.OCEAN||fallback===BIOMES.DEEP_OCEAN){
-                const climate=getClimateZone(x,z),heat=climate.temp-climate.moist*.16;
-                if(heat<-.34)return climate.moist>.02?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS;
-                if(heat>.41)return climate.moist<.02?BIOMES.DESERT_BARREN:BIOMES.SAVANNA;
-                return climate.moist>.04?BIOMES.FOREST:BIOMES.PLAINS;
+                // An ocean is always in the hottest thermal band; a dry
+                // fringe can only be a warm coast or hot inland terrain.
+                return getClimateZone(x,z).moist>.08?BIOMES.JUNGLE:BIOMES.SAVANNA;
             }
             return fallback;
         }
@@ -6219,8 +6228,8 @@ function getBaseBiome(x, z) {
             const { temp, moist } = getClimate(x, z);
             if(cfg.type==='custom')return clamp(Math.floor(customTerrainHeight(x,z,broad,detail,ridge)),8,190)+WORLD_Y_ORIGIN;
 
-            const cold = smoothstep(0.02, 0.34, -temp);
-            const hot = smoothstep(0.16, 0.52, temp);
+            const cold = smoothstep(.34, .72, -temp);
+            const hot = smoothstep(.04, .45, temp);
             let naturalHeight = 58 + broad * 10 + detail * 3;
             naturalHeight += hot * (2 + broad * 3);
             naturalHeight += smoothstep(0.55, 0.82, -moist) * 5;
@@ -6260,48 +6269,49 @@ function getBaseBiome(x, z) {
             if(hydro.kind==='ocean'||hydro.kind==='deep_ocean'){
                 // Continental shelf and slope: keep a broad shallow margin so
                 // land does not drop into deep ocean within only a few blocks.
+                // Smooth Y=50 continental shelf, then deep-ocean ramp down to Y=-10.
+                // No abrupt threshold jump; both the game and map use this curve.
                 if(hydro.field<=.42){
-                    // Inner shelf: 61 -> 54 over a wide band just offshore.
-                    naturalHeight=mix(61.3,54,smoothstep(.205,.42,hydro.field));
+                    naturalHeight=mix(49,44,smoothstep(.205,.42,hydro.field));
                 }else if(hydro.field<=.60){
-                    // Outer shelf: 54 -> 41 before the true deep-ocean slope.
-                    naturalHeight=mix(54,41,smoothstep(.42,.60,hydro.field));
+                    naturalHeight=mix(44,31,smoothstep(.42,.60,hydro.field));
                 }else if(hydro.field<=.78){
-                    // Continental slope: 41 -> 24.
-                    naturalHeight=mix(41,24,smoothstep(.60,.78,hydro.field));
+                    // Gradual outer continental shelf, not a sudden 12-block cliff.
+                    naturalHeight=mix(31,19,smoothstep(.60,.78,hydro.field));
                 }else{
-                    // Abyssal deep ocean bed ranges from displayed Y 10 to Y 24.
-                    naturalHeight=mix(24,11,smoothstep(.78,.92,hydro.field));
+                    // Abyssal slope continues far offshore to Y=-10.
+                    naturalHeight=mix(19,-10,smoothstep(.78,1.55,hydro.field));
                 }
-                naturalHeight+=noise.noise2D(x*.011+281,z*.011-631)*.7;
-                naturalHeight=Math.max(10,Math.min(60,naturalHeight));
+                naturalHeight+=noise.noise2D(x*.008+281,z*.008-631)*.45;
+                naturalHeight=Math.max(-10,Math.min(49,naturalHeight));
             } else if(hydro.kind==='beach') {
                 // Never jump from inland 80+ to a vertical 62-block shoreline.
-                const targetLand=Math.max(64,Math.min(69,naturalHeight));
+                const targetLand=Math.max(52,Math.min(58,naturalHeight));
                 // Dry beaches must begin ABOVE the source-water top (Y=62),
                 // otherwise adjacent ocean sources flood the beach forever.
-                naturalHeight=mix(62.25,targetLand,1-smoothstep(.055,.205,hydro.field));
+                naturalHeight=mix(50.3,targetLand,1-smoothstep(.055,.205,hydro.field));
             } else if(hydro.kind==='river'||hydro.kind==='lake') {
                 // A lake begins with a shallow shelf rather than a five-block
                 // drop exactly at its source-water boundary.
-                naturalHeight=hydro.kind==='river'?59:mix(61.35,57,hydro.depth??1);
+                naturalHeight=hydro.kind==='river'?47:mix(61.35,57,hydro.depth??1);
             } else if(hydro.kind==='river_bank'||hydro.kind==='lake_bank') {
                 // Banks start above the waterline, not submerged below it.
                 // This prevents water spilling sideways over every dry bank.
-                naturalHeight=mix(62.25,naturalHeight,smoothstep(0,1,hydro.bank));
-            } else if(hydro.field>-.13) {
-                // The inland coast begins flattening before the sand beach starts.
-                const t=smoothstep(-.13,-.045,hydro.field);
-                naturalHeight=mix(naturalHeight,Math.max(64,Math.min(69,naturalHeight)),t);
+                naturalHeight=mix(hydro.kind==='lake_bank'?62.25:50.25,naturalHeight,smoothstep(0,1,hydro.bank));
+            } else if(hydro.field>-.23) {
+                // Wide inland coastal foothill, no high vertical escarpments.
+                const t=smoothstep(-.23,.055,hydro.field);
+                naturalHeight=mix(naturalHeight,Math.max(52,Math.min(58,naturalHeight)),t);
             }
-            return clamp(Math.floor(naturalHeight), 8, 190)+WORLD_Y_ORIGIN;
+            return clamp(Math.floor(naturalHeight), -12, 190)+WORLD_Y_ORIGIN;
         }
 
 
         function getAquaticPlantTop(x,z,dimension=0){
             const floorY=getHeight(Math.floor(x),Math.floor(z),getBiome(Math.floor(x),Math.floor(z)));
             let top=floorY;
-            for(let y=floorY+1;y<=Math.min(WATER_SURFACE_Y-1,floorY+10);y++){
+            const maxWaterY=getHydrology(Math.floor(x),Math.floor(z)).kind==='lake'?LAKE_SURFACE_Y:WATER_SURFACE_Y;
+            for(let y=floorY+1;y<=Math.min(maxWaterY-1,floorY+10);y++){
                 const block=peekLoadedBlock(Math.floor(x),y,Math.floor(z),dimension);
                 if(isAquaticPlant(block)) top=y;
                 else if(!isWaterBlock(block)) break;
@@ -6520,6 +6530,20 @@ function getBaseBiome(x, z) {
                     if (coordHash(cellX, cellZ, 760) >= generatorStructureChance('dungeon',0.20)) continue;
                     const cx = cellX * grid + 10 + Math.floor(coordHash(cellX, cellZ, 761) * (grid - 20));
                     const cz = cellZ * grid + 10 + Math.floor(coordHash(cellX, cellZ, 762) * (grid - 20));
+                    // Most columns are nowhere near a dungeon candidate. Avoid
+                    // expensive terrain, climate and footprint checks there.
+                    const dx=wx-cx,dz=wz-cz;
+                    if(Math.abs(dx)>4||Math.abs(dz)>4)continue;
+
+                    // No dungeons under oceans or across an ocean shoreline.
+                    // Reject the entire 9x9 footprint, so rooms cannot cross
+                    // the coast and hollow out a seabed.
+                    let touchesOcean=false;
+                    for(const sx of [-4,0,4])for(const sz of [-4,0,4]){
+                        const b=getBiome(cx+sx,cz+sz);
+                        if(b===BIOMES.OCEAN||b===BIOMES.DEEP_OCEAN){touchesOcean=true;break;}
+                    }
+                    if(touchesOcean)continue;
 
                     // Use the lowest terrain column under the entire 9x9 footprint.
                     // The dungeon roof stays at least three blocks below that surface,
@@ -6534,8 +6558,7 @@ function getBaseBiome(x, z) {
                     const maximumBaseY = minimumSurface - 9;
                     if (maximumBaseY < 5) continue;
                     const baseY = WORLD_Y_ORIGIN+4 + Math.floor(coordHash(cellX, cellZ, 763) * Math.max(1, maximumBaseY-WORLD_Y_ORIGIN-3));
-                    const dx = wx - cx, dz = wz - cz;
-                    if (Math.abs(dx) <= 4 && Math.abs(dz) <= 4) return { type: 'DUNGEON', cx, cz, dx, dz, baseY };
+                    return { type: 'DUNGEON', cx, cz, dx, dz, baseY };
                 }
             }
             return null;
@@ -7464,11 +7487,14 @@ function getBaseBiome(x, z) {
                     const columnHydro=(dim===0 && genCfg.type==='normal')?getHydrology(wx,wz):null;
                     const marineBiome=biome===BIOMES.OCEAN||biome===BIOMES.DEEP_OCEAN;
                     const wetColumn=Boolean(columnHydro?.wet)||(dim===0&&genCfg.type!=='normal'&&marineBiome&&height<WATER_SURFACE_Y);
+                    const columnWaterTop=columnHydro?.kind==='lake'?LAKE_SURFACE_Y:WATER_SURFACE_Y;
                     const waterway=wetColumn||Boolean(columnHydro && columnHydro.kind!=='land');
                     // Prevent ravine-carved rock walls and floating submerged beds.
                     const ravineRange = waterway?null:getRavineRange(wx, wz, height);
                     const struct = getSurfaceStructure(wx, wz);
-                    const dungeon = getDungeonStructure(wx, wz);
+                    // Never carve dungeon blocks into ocean/deep-ocean columns,
+                    // even if a rare coastal footprint slips through rejection.
+                    const dungeon = marineBiome ? null : getDungeonStructure(wx, wz);
                     const structBaseY = struct ? getHeight(struct.cx, struct.cz, getBiome(struct.cx, struct.cz)) : 0;
                     const structFamily=struct?woodFamilyForBiome(struct.biome??getBiome(struct.cx,struct.cz)):woodFamilyForBiome(biome),structWood=structFamily.wood,structPlanks=structFamily.planks;
 
@@ -7626,18 +7652,18 @@ function getBaseBiome(x, z) {
                     // Every wet column receives water, even above an underground dungeon
                     // or at a structure footprint: skipping entire columns created square dry holes.
                     if (dim===0 && wetColumn) {
-                        for(let fy=height+1;fy<=WATER_SURFACE_Y&&fy<WORLD_HEIGHT;fy++) {
+                        for(let fy=height+1;fy<=columnWaterTop&&fy<WORLD_HEIGHT;fy++) {
                             const fi=indexOf(x,fy,z);
                             if(chunk[fi]===BLOCKS.AIR)chunk[fi]=BLOCKS.WATER_SOURCE;
                         }
-                        generatedMaxY=Math.max(generatedMaxY,WATER_SURFACE_Y+1);
+                        generatedMaxY=Math.max(generatedMaxY,columnWaterTop+1);
                     }
                     // Physical plants occupy water voxels so mining can target them.
-                    if(dim===0 && wetColumn && height+3<WATER_SURFACE_Y){
+                    if(dim===0 && wetColumn && height+3<columnWaterTop){
                         const roll=coordHash(wx,wz,73511,WORLD_SEED);
                         if(roll<.155){
-                            const isKelp=roll<.044&&height+6<WATER_SURFACE_Y;
-                            const layers=isKelp?Math.min(4,WATER_SURFACE_Y-height-2):1;
+                            const isKelp=roll<.044&&height+6<columnWaterTop;
+                            const layers=isKelp?Math.min(4,columnWaterTop-height-2):1;
                             for(let layer=1;layer<=layers;layer++){
                                 const py=height+layer,idx=indexOf(x,py,z);
                                 if(chunk[idx]!==BLOCKS.WATER_SOURCE)break;
@@ -8222,7 +8248,7 @@ function getBaseBiome(x, z) {
             chunkGenerationPending.clear();chunkGenerationFallBack.clear();
             if (typeof Worker === 'undefined') return;
             const workerFunctions = [
-                SimplexNoise, clamp, smoothstep, mix, activeWorldGen, getClimate, getContinentValue, getRawOceanField, getOceanField, naturalLakeGroundEstimate, lakeSiteViable, computeHydrology, getHydrology, getClimateZone, climateTouchesZone, getBiomeProvince, getBaseBiome,
+                SimplexNoise, clamp, smoothstep, mix, activeWorldGen, getClimate, getContinentValue, getThermalField, getRawOceanField, getOceanField, naturalLakeGroundEstimate, lakeSiteViable, computeHydrology, getHydrology, getClimateZone, climateTouchesZone, getBiomeProvince, getBaseBiome,
                 coordHash, getMountainRegion, getMountainInfo, customBiomeForCell, getCustomBiomeInfo, biomeTerrainHeight, customTerrainHeight, flatWorldHeight, flatBlockAtY, getBiome, getAltBiome, getHeight,
                 posRand, posRand3D, isCave, getMegaCaveCell, deepChamberAt, isMegaCave, getRavineRange, isRavine,
                 storageLootBlock, oreLootBlock, generatorStructureChance, woodFamilyForBiome, getDungeonStructure, getSurfaceStructure,
@@ -8237,7 +8263,7 @@ function getBaseBiome(x, z) {
                 `const ALT_BIOMES=${JSON.stringify(ALT_BIOMES)};`,
                 `const CUSTOM_BIOME_DEFS=${JSON.stringify(CUSTOM_BIOME_DEFS)};`,
                 `let worldGenSettings=${JSON.stringify(normalizeWorldGenSettings(worldGenSettings))};`,
-                `const CHUNK_SIZE=${CHUNK_SIZE},WORLD_HEIGHT=${WORLD_HEIGHT},ALT_WORLD_HEIGHT=${ALT_WORLD_HEIGHT},WATER_LEVEL=${WATER_LEVEL},WATER_SURFACE_Y=${WATER_SURFACE_Y},LOD_GROUP_CHUNKS=${LOD_GROUP_CHUNKS};`,
+                `const CHUNK_SIZE=${CHUNK_SIZE},WORLD_HEIGHT=${WORLD_HEIGHT},ALT_WORLD_HEIGHT=${ALT_WORLD_HEIGHT},WATER_LEVEL=${WATER_LEVEL},WATER_SURFACE_Y=${WATER_SURFACE_Y},LAKE_WATER_LEVEL=${LAKE_WATER_LEVEL},LAKE_SURFACE_Y=${LAKE_SURFACE_Y},LOD_GROUP_CHUNKS=${LOD_GROUP_CHUNKS};`,
                 `const MOUNTAIN_XZ_SCALE=${MOUNTAIN_XZ_SCALE};`,
                 'let currentDimension=0,WORLD_SEED=0,noise,biomeNoise,treeNoise,caveNoise,oreNoise,ravineNoise,structNoise,continentalNoise,lavaNoise;',
                 'const biomeProvinceCache=new Map(),hydrologyCache=new Map(),lakeSiteCache=new Map(),structureHallCache=new Map(),mansionOreCache=new Map(),altMazeRoomCache=new Map(),mountainRegionCache=new Map(),mountainInfoCache=new Map(),megaCaveCache=new Map(),lavaPoolCache=new Map(),plainsTreeSpotCache=new Map(),customBiomeInfoCache=new Map(),knownDungeonSpawners=new Set();',
@@ -8248,7 +8274,7 @@ function getBaseBiome(x, z) {
             const url = URL.createObjectURL(new Blob([workerSource], { type: 'application/javascript' }));
             // Cap parallel workers: generating too many 16x16x248 chunks at once
             // can overwhelm low-memory phones. Desktop cores can stream in pairs.
-            const poolSize=isMobilePlaying?1:Math.min(4,Math.max(2,Math.floor((navigator.hardwareConcurrency||4)/2)));
+            const poolSize=LOW_POWER_DEVICE?1:Math.min(3,Math.max(2,Math.floor((navigator.hardwareConcurrency||4)/2)));
             for(let wi=0;wi<poolSize;wi++){
             const worker = new Worker(url);
             worker.mellorReady=false;worker.mellorBusy=false;worker.mellorKey=null;
@@ -8277,6 +8303,18 @@ function getBaseBiome(x, z) {
                 chunk = applySharedEditsToChunk(chunk, data.cx, data.cz, data.dim);
                 chunks.set(data.key, chunk);
                 scanGeneratedDungeonSpawners(chunk, data.cx, data.cz, data.dim);
+                // Wake saved cross-chunk water edges, without scanning every
+                // voxel in all 248 Y layers. Especially important after mining.
+                if(data.dim===0)for(const [sideX,sideZ] of [[-1,0],[1,0],[0,-1],[0,1]]){
+                    const neighbor=chunks.get(chunkKey(0,data.cx+sideX,data.cz+sideZ));
+                    if(!neighbor)continue;
+                    for(let edge=0;edge<CHUNK_SIZE;edge++)for(let y=16;y<Math.min(WORLD_HEIGHT,WATER_SURFACE_Y+20);y+=4){
+                        const wx=data.cx*CHUNK_SIZE+(sideX===-1?0:sideX===1?15:edge);
+                        const wz=data.cz*CHUNK_SIZE+(sideZ===-1?0:sideZ===1?15:edge);
+                        if(isWaterBlock(peekLoadedBlock(wx,y,wz,0))||isWaterBlock(peekLoadedBlock(wx+sideX,y,wz+sideZ,0)))
+                            queueFluidNeighborhood(wx,y,wz,0);
+                    }
+                }
 
                 const playerCx = Math.floor(player.x / CHUNK_SIZE), playerCz = Math.floor(player.z / CHUNK_SIZE);
                 const dx = data.cx - playerCx, dz = data.cz - playerCz;
@@ -8401,18 +8439,22 @@ function getBaseBiome(x, z) {
                     // turning into lateral sources once the column fills beneath them.
                     desired=(unsupported || (verticalFeed && !supportedFloor))
                         ? BLOCKS.WATER_FALLING : BLOCKS.WATER_FLOW_1;
-                }else if(unsupported || current===BLOCKS.WATER_FALLING){
-                    // A level of flow with nothing below falls only if fed from
-                    // above; otherwise its unsupported horizontal contribution ends.
-                    desired=BLOCKS.AIR;
                 }else{
-                    let lowest=8;
+                    // An empty cell beside a source can feed a *falling* column
+                    // even when the cell below is air (mined shafts/tunnels).
+                    // Older code removed such cells unconditionally and the water
+                    // stopped in midair in front of a player's excavation.
+                    let nearest=8;
                     for(const v of neighborIds){
                         if(isWaterBlock(v) && v!==BLOCKS.WATER_FALLING)
-                            lowest=Math.min(lowest,liquidLevel(v));
+                            nearest=Math.min(nearest,liquidLevel(v));
                     }
-                    const flowLevel=lowest+1;
-                    desired=flowLevel<=7?flowingBlock('water',flowLevel):BLOCKS.AIR;
+                    const flowingLevel=nearest+1;
+                    if(flowingLevel<=7){
+                        desired=unsupported?BLOCKS.WATER_FALLING:flowingBlock('water',flowingLevel);
+                    }else{
+                        desired=BLOCKS.AIR;
+                    }
                 }
                 if(desired!==current){
                     setBlock(x,y,z,desired,dim);
@@ -8731,7 +8773,7 @@ function getBaseBiome(x, z) {
                         Math.floor(ncx/LOD_GROUP_CHUNKS),Math.floor(ncz/LOD_GROUP_CHUNKS)));
                     if(dim===0){
                         const hyd=getHydrology(wx,wz);
-                        if(hyd.wet && y<=WATER_SURFACE_Y && y>getHeight(wx,wz,getBiome(wx,wz)))return BLOCKS.WATER_SOURCE;
+                        if(hyd.wet && y<=(hyd.kind==='lake'?LAKE_SURFACE_Y:WATER_SURFACE_Y) && y>getHeight(wx,wz,getBiome(wx,wz)))return BLOCKS.WATER_SOURCE;
                     }
                     if(dim!==0||!neighborTile||!neighborTile.gpu||neighborTile.gpu.empty)
                         return BLOCKS.STONE;
@@ -9821,7 +9863,8 @@ function getBaseBiome(x, z) {
                     const plantTopAhead=getAquaticPlantTop(aheadX,aheadZ,this.dimension);
                     const desiredBottom=Math.max(bottom,aheadFloor,plantTopHere,plantTopAhead)+(this.type.model==='shark'?1.15:.82);
                     if(this.y<desiredBottom)lift=Math.max(.88,lift);
-                    if(this.y>WATER_SURFACE_Y-this.type.height-1.5)lift=Math.min(-.4,lift);
+                    const localSurface=getHydrology(Math.floor(this.x),Math.floor(this.z)).kind==='lake'?LAKE_SURFACE_Y:WATER_SURFACE_Y;
+                    if(this.y>localSurface-this.type.height-1.5)lift=Math.min(-.4,lift);
                     const speed=this.type.speed*(this.type.hostile?.70:.54);
                     const vx=Math.cos(angle)*speed,vz=Math.sin(angle)*speed,vy=lift*speed*.48;
                     // Kelp and seagrass count as swimmable water. For large sharks
@@ -12732,17 +12775,28 @@ function getBaseBiome(x, z) {
             // Continue filling the *entire* requested full-resolution radius while stationary.
             // The old 80/384-job ceiling could spend ages on near work, leaving
             // far chunks empty until walking promoted them to the front.
-            const limit=isMobilePlaying?Math.min(256,Math.max(100,fineRadius*fineRadius)):
-                Math.min(2048,Math.max(512,fineRadius*fineRadius*3));
-            let remaining=Math.max(0,limit-chunkBuildSet.size-chunkGenerationQueued.size-chunkGenerationPending.size);
+            // Limit outstanding jobs by device capability, not render radius.
+            // A Chromebook used to queue hundreds of huge voxel chunks before
+            // drawing the first visible ones. Keep a replenishing small frontier.
+            const limit=LOW_POWER_DEVICE?36:(isMobilePlaying?72:160);
+            const pending=chunkBuildSet.size+chunkGenerationQueued.size+chunkGenerationPending.size;
+            let remaining=Math.max(0,limit-pending);
+            if(lastChunkQueueScanPx!==px||lastChunkQueueScanPz!==pz||lastChunkQueueScanDim!==currentDimension){
+                lastChunkQueueScanPx=px;lastChunkQueueScanPz=pz;lastChunkQueueScanDim=currentDimension;
+                chunkQueueScanCursor=0;
+            }
             if(remaining>0){
-                // Stop as soon as the streaming budget is full; do not iterate
-                // thousands of far chunks whose jobs cannot start yet.
-                for(const [dx,dz] of orderedChunkOffsets(fineRadius)){
+                const order=orderedChunkOffsets(fineRadius);
+                // Incremental traversal avoids rescanning/sorting 12,000 entries
+                // every maintenance tick at the maximum render distance.
+                let scanned=0;
+                while(scanned<Math.min(order.length,384) && remaining>0){
+                    if(chunkQueueScanCursor>=order.length)chunkQueueScanCursor=0;
+                    const [dx,dz]=order[chunkQueueScanCursor++];scanned++;
                     const cx=px+dx,cz=pz+dz,key=chunkKey(currentDimension,cx,cz);
                     if(chunkMeshes.has(key)||chunkBuildSet.has(key)||chunkGenerationPending.has(key)||chunkGenerationQueued.has(key))continue;
                     queueChunkBuild(key);
-                    if(--remaining<=0)break;
+                    remaining--;
                 }
             }
             const unloadSq=(fineRadius+2)*(fineRadius+2);
@@ -12798,7 +12852,7 @@ function getBaseBiome(x, z) {
         }
         function processUrgentChunkRemeshes(px,pz){
             const start=performance.now(); let built=0;
-            const maxBuilds=isMobilePlaying?1:2, budgetMs=isMobilePlaying?(LOW_END_MOBILE?2.5:4.0):7.0;
+            const maxBuilds=LOW_POWER_DEVICE?1:2, budgetMs=LOW_POWER_DEVICE?2.0:7.0;
             while(urgentChunkRemeshHead<urgentChunkRemeshQueue.length && built<maxBuilds){
                 const key=urgentChunkRemeshQueue[urgentChunkRemeshHead++]; urgentChunkRemeshSet.delete(key);
                 if(!chunkRemeshPending.has(key)) continue;
@@ -12823,11 +12877,11 @@ function getBaseBiome(x, z) {
         }
 
         function processChunkBuildQueue(px,pz,timeMs=performance.now()){
-            if(isMobilePlaying && timeMs-lastChunkBuildAt<(LOW_END_MOBILE?70:50))return;
+            if(LOW_POWER_DEVICE && timeMs-lastChunkBuildAt<(LOW_END_MOBILE?55:35))return;
             const start=performance.now();let built=0;
             const coldStart=chunkMeshes.size<64;
-            const budgetMs=isMobilePlaying?(LOW_END_MOBILE?1.5:2.5):(coldStart?7.0:(RENDER_DISTANCE>=12?4.5:5.5));
-            const maxBuilds=isMobilePlaying?1:(coldStart?5:(RENDER_DISTANCE>=12?3:4));
+            const budgetMs=LOW_POWER_DEVICE?(LOW_END_MOBILE?2.0:2.5):(coldStart?7.0:(RENDER_DISTANCE>=12?4.5:5.5));
+            const maxBuilds=LOW_POWER_DEVICE?1:(coldStart?5:(RENDER_DISTANCE>=12?3:4));
             while(chunkBuildHead<chunkBuildQueue.length&&built<maxBuilds&&performance.now()-start<budgetMs){
                 const key=chunkBuildQueue[chunkBuildHead++];chunkBuildSet.delete(key);
                 if(chunkMeshes.has(key) && !chunkRemeshPending.has(key)) continue; // stale entry already handled by urgent path
@@ -13068,7 +13122,7 @@ function getBaseBiome(x, z) {
                 const clearFactor=Math.pow(16/visibleRenderDistance(),0.55);
                 fd=Math.max(0,fd-.0035)+.0035*clearFactor*weatherSkyExposure;
             }
-            if(cameraInWater)fd=.064+Math.max(0,WATER_SURFACE_Y-playerEyeY())*.00065;
+            if(cameraInWater){const h=getHydrology(Math.floor(player.x),Math.floor(player.z));fd=.064+Math.max(0,(h.kind==='lake'?LAKE_SURFACE_Y:WATER_SURFACE_Y)-playerEyeY())*.00065;}
             gl.uniform1f(uFogDensity, fd);
             
             gl.uniform3fv(uCameraPos, [player.x, playerEyeY(), player.z]);

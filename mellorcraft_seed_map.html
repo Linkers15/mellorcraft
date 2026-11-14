@@ -171,7 +171,8 @@ const STRUCTURE_TYPES=['Mansion','Outpost','Cabin','Dungeon','Alt Maze','Boss Sh
 const enabledBiomes=new Set([...Array(BIOME_NAMES.length).keys()].map(n=>`0:${n}`).concat(ALT_NAMES.map((_,i)=>`1:${i}`),['2:0','2:1']));
 const enabledStructures=new Set(STRUCTURE_TYPES.filter(t=>t!=='Dungeon'));
 let filterRevision=0;
-const WATER_LEVEL=62;
+const WATER_LEVEL=50;
+const LAKE_WATER_LEVEL=62;
 let WORLD_SEED=12345;
 let weatherSeed=1,weatherPhase=0,weatherPlaying=false,weatherAnimationLast=0,weatherLastRender=0;
 const weatherCloudFade=new Map();
@@ -238,14 +239,22 @@ const lakeSiteCache=new Map();
 // sand stripes or narrow, river-like inlets. A lower-detail continental
 // contour rounds off thin water arms; the ocean province switch is local
 // instead of the old hundreds-of-block-wide fade through the beach band.
-function getRawOceanField(x,z){
-    const natural=continentalNoise.octave(x*.00083+481,z*.00083-719,2,.53)*.955 +
-                  continentalNoise.octave(x*.0019-1704,z*.0019+2201,2,.52)*.045;
-    const marineProvince=continentalNoise.octave(x*.00024+9167,z*.00024-7421,2,.57);
-    const shorelineWarp=continentalNoise.noise2D(x*.00123-1405,z*.00123+1702)*.04;
-    const oceanGate=smoothstep(-.16,-.07,marineProvince+shorelineWarp);
-    return Math.min(natural, -.24+1.25*oceanGate);
+// One continuous, low-frequency thermal field controls EVERY mainland climate
+// and the ocean boundary. Ocean is the hottest band; the immediately adjacent
+// dry ground can therefore only be hot land, never cold terrain or mountains.
+function getThermalField(x,z){
+    const wx=biomeNoise.octave(x*.0003333333+1813,z*.0003333333-2341,2,.55)*100;
+    const wz=biomeNoise.octave(x*.0003333333-3411,z*.0003333333+4187,2,.55)*100;
+    const sx=x+wx,sz=z+wz;
+    const moist=biomeNoise.octave(sx*.0002933333-3893,sz*.0002933333+5819,3,.55)*1.3;
+    const base=biomeNoise.octave(sx*.00024+1307,sz*.00024-2417,3,.55)*1.55;
+    const oceanSize=continentalNoise.octave(sx*.00032+9167,sz*.00032-7421,2,.57)*.40;
+    return {heat:base+oceanSize-moist*.07,moist};
 }
+// A single signed field controls both coast and sea floor. Positive ocean
+// threshold is 0.205; the lower beach and inland thresholds give wide,
+// continuous shores without a separate ocean gate that cuts across cold land.
+function getRawOceanField(x,z){return .205+(getThermalField(x,z).heat-.70)*3.6;}
 function getOceanField(x,z){return getRawOceanField(x,z);}
 function naturalLakeGroundEstimate(x,z){
     // Dry-land approximation of the same broad terrain profile used by
@@ -255,7 +264,7 @@ function naturalLakeGroundEstimate(x,z){
     const detail=noise.octave(x*.022+400,z*.022-400,3,.48);
     const ridge=1-Math.abs(noise.octave(x*.0022+1200,z*.0022+1200,4,.55));
     const {temp,moist}=getClimateZone(x,z);
-    const cold=smoothstep(.02,.34,-temp),hot=smoothstep(.16,.52,temp);
+    const cold=smoothstep(.34,.72,-temp),hot=smoothstep(.04,.45,temp);
     let height=58+broad*10+detail*3+hot*(2+broad*3)+smoothstep(.55,.82,-moist)*5;
     height=mix(height,80+broad*9+detail*2.2+(ridge-.5)*6,cold);
     return height+hot*smoothstep(.22,.68,moist)*3;
@@ -287,7 +296,7 @@ function computeHydrology(x,z){
     // Hydrological classification is a deterministic X/Z field: independent of
     // chunk order, view distance, worker count, and the previously loaded chunks.
     const field=getOceanField(x,z);
-    if(field>.205) return {kind:field>.60?'deep_ocean':'ocean',field,wet:true};
+    if(field>.205) return {kind:field>.70?'deep_ocean':'ocean',field,wet:true};
     // A wide ABOVE-WATER shoreline is essential. A 1-3 block biome threshold
     // near high cold terrain previously created giant exposed dirt/stone walls.
     if(field>.055) return {kind:'beach',field,wet:false,bank:Math.max(0,Math.min(1,(.205-field)/.15))};
@@ -317,20 +326,12 @@ function computeHydrology(x,z){
     return {kind:'land',field};
 }
 
-function getClimateZone(x,z) {
-    // Climate zones follow broad, warped temperature/moisture contours. Adjacent
-    // zones are ordered cold -> temperate -> warm -> arid, with wet hot land
-    // remaining warm instead of turning into desert. The underlying wavelengths
-    // are ~1,000+ blocks; 88-block biome provinces subdivide each broad zone.
-    const wx = biomeNoise.octave(x*.0003333333+1813,z*.0003333333-2341,2,.55)*131.25;
-    const wz = biomeNoise.octave(x*.0003333333-3411,z*.0003333333+4187,2,.55)*131.25;
-    const sx=x+wx,sz=z+wz;
-    const temp=biomeNoise.octave(sx*.00024+1307,sz*.00024-2417,3,.55)*1.55;
-    const moist=biomeNoise.octave(sx*.0002933333-3893,sz*.0002933333+5819,3,.55)*1.3;
-    // Four stable climate families with ecotones, not independently scattered IDs.
-    const heat=temp-moist*.16;
-    const zone=getOceanField(x,z)>.205?'marine':(heat<-.34?'cold':heat<.03?'temperate':heat<.41?'warm':'arid');
-    return {zone,temp,moist};
+function getClimateZone(x,z){
+    // Thermal order is immutable: cold -> temperate -> hot -> ocean.
+    const climate=getThermalField(x,z);
+    const heat=climate.heat;
+    const zone=heat>=.70?'marine':heat>=-.08?'hot':heat>=-.55?'temperate':'cold';
+    return {zone,temp:heat,heat,moist:climate.moist};
 }
 function climateTouchesZone(x,z,zone,radius=135) {
     // A cheap, shared ecotone rule: choose sensible biome neighbors on both
@@ -341,61 +342,63 @@ function climateTouchesZone(x,z,zone,radius=135) {
         getClimateZone(x,z-radius).zone===zone;
 }
 
-function getBiomeProvince(cellX,cellZ) {
+function getBiomeProvince(cellX,cellZ){
     const key=`${cellX},${cellZ}`;
-    const existing=biomeProvinceCache.get(key);if(existing)return existing;
+    const cached=biomeProvinceCache.get(key);if(cached)return cached;
     if(biomeProvinceCache.size>20000)biomeProvinceCache.clear();
     const size=176;
     const px=(cellX+.5+(coordHash(cellX,cellZ,9101,WORLD_SEED)-.5)*.54)*size;
     const pz=(cellZ+.5+(coordHash(cellX,cellZ,9102,WORLD_SEED)-.5)*.54)*size;
-    const climate=getClimateZone(px,pz),{zone,temp,moist}=climate;
+    const {zone,temp,moist}=getClimateZone(px,pz);
     const rand=coordHash(cellX,cellZ,9372,WORLD_SEED);
     let biome;
-    if(zone==='marine') {
-        biome=BIOMES.OCEAN;
-    } else if(zone==='cold') {
-        // Moist wooded cold borders adjoin forests; open icy fields adjoin plains.
+    if(zone==='marine')biome=BIOMES.OCEAN;
+    else if(zone==='cold'){
         biome=moist>.02?(rand<.72?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS):
             (rand<.28?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS);
-    } else if(zone==='temperate') {
-        // Avoid desert meeting deep forest and snow meeting savanna directly.
-        const warmEdge=climateTouchesZone(px,pz,'warm');
-        const coldEdge=climateTouchesZone(px,pz,'cold');
+    }else if(zone==='temperate'){
         const forestChance=moist>.06?.77:moist>-.12?.49:.22;
-        const chance=coldEdge&&moist>.04?Math.max(.78,forestChance):
-            warmEdge&&moist<.04?Math.min(.25,forestChance):forestChance;
-        biome=rand<chance?(coordHash(cellX,cellZ,8151,WORLD_SEED)<.095?
+        biome=rand<forestChance?(coordHash(cellX,cellZ,8151,WORLD_SEED)<.095?
             BIOMES.FLOWER_FOREST:BIOMES.FOREST):BIOMES.PLAINS;
-    } else if(zone==='warm') {
-        const aridEdge=climateTouchesZone(px,pz,'arid');
-        biome=aridEdge||moist<.035||rand>.84?BIOMES.SAVANNA:BIOMES.JUNGLE;
-    } else {
-        // At warm/arid edges, choose savanna next to ordinary deserts.
-        const edge=climateTouchesZone(px,pz,'warm');
-        biome=moist<-.30&&rand<.55?BIOMES.BADLANDS:
-            (rand<.52?BIOMES.DESERT_CACTUS:BIOMES.DESERT_BARREN);
-        if(edge&&biome===BIOMES.BADLANDS)biome=BIOMES.DESERT_CACTUS;
+    }else{
+        // Hot band contains all five hot-land biomes, split into large,
+        // rounded provinces by moisture and a stable per-province roll.
+        if(moist>.20)biome=rand<.77?BIOMES.JUNGLE:BIOMES.SAVANNA;
+        else if(moist>-.07)biome=rand<.38?BIOMES.JUNGLE:BIOMES.SAVANNA;
+        else if(moist>-.27)biome=rand<.41?BIOMES.SAVANNA:(rand<.77?BIOMES.DESERT_CACTUS:BIOMES.DESERT_BARREN);
+        else biome=rand<.34?BIOMES.BADLANDS:(rand<.67?BIOMES.DESERT_BARREN:BIOMES.DESERT_CACTUS);
     }
     const result={x:px,z:pz,biome,temp,moist,zone};
-    biomeProvinceCache.set(key,result);
-    return result;
+    biomeProvinceCache.set(key,result);return result;
 }
 
-function getBaseBiome(x, z) {
-    // Seeded, jittered two-dimensional climate provinces. The closest center
-    // gives each biome a substantial rounded footprint instead of a thin strip
-    // formed where several climate thresholds almost coincide.
-    const warpX = biomeNoise.octave(x*.0023+1741,z*.0023-1927,2,.55)*36;
-    const warpZ = biomeNoise.octave(x*.0023-2881,z*.0023+3653,2,.55)*36;
+function getBaseBiome(x,z){
+    // A province may be centered over a neighboring climate. Only select
+    // provinces from the local thermal band: this prevents e.g. snowy plains
+    // from leaking across the hot buffer adjacent to an ocean.
+    const zone=getClimateZone(x,z).zone;
+    const warpX=biomeNoise.octave(x*.0023+1741,z*.0023-1927,2,.55)*36;
+    const warpZ=biomeNoise.octave(x*.0023-2881,z*.0023+3653,2,.55)*36;
     const px=x+warpX,pz=z+warpZ,grid=176;
     const cx=Math.floor(px/grid),cz=Math.floor(pz/grid);
     let nearest=null,best=Infinity;
     for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
         const province=getBiomeProvince(cx+dx,cz+dz);
+        if(province.zone!==zone)continue;
         const distance=(px-province.x)**2+(pz-province.z)**2;
         if(distance<best){best=distance;nearest=province;}
     }
-    return nearest.biome;
+    if(nearest)return nearest.biome;
+    // Narrow ecotones can fall between all nine province centers. Use the
+    // appropriate local climate family rather than a distant wrong-zone ID.
+    const moist=getClimateZone(x,z).moist;
+    const rand=coordHash(Math.floor(x/grid),Math.floor(z/grid),9372,WORLD_SEED);
+    if(zone==='marine')return BIOMES.OCEAN;
+    if(zone==='cold')return moist>.0?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS;
+    if(zone==='temperate')return moist>.0?BIOMES.FOREST:BIOMES.PLAINS;
+    if(moist>.16)return BIOMES.JUNGLE;
+    if(moist>-.09)return BIOMES.SAVANNA;
+    return moist<-.29&&rand<.35?BIOMES.BADLANDS:rand<.55?BIOMES.DESERT_CACTUS:BIOMES.DESERT_BARREN;
 }
 
 function getMountainRegion(cellX, cellZ) {
@@ -559,10 +562,9 @@ const hydro=getHydrology(x,z);
             // Marine macroclimate is not enough to make an ocean. The actual
             // hydrology column must be wet below sea level or it is dry land.
             if(fallback===BIOMES.OCEAN||fallback===BIOMES.DEEP_OCEAN){
-                const climate=getClimateZone(x,z),heat=climate.temp-climate.moist*.16;
-                if(heat<-.34)return climate.moist>.02?BIOMES.TAIGA:BIOMES.SNOWY_PLAINS;
-                if(heat>.41)return climate.moist<.02?BIOMES.DESERT_BARREN:BIOMES.SAVANNA;
-                return climate.moist>.04?BIOMES.FOREST:BIOMES.PLAINS;
+                // An ocean is always in the hottest thermal band; a dry
+                // fringe can only be a warm coast or hot inland terrain.
+                return getClimateZone(x,z).moist>.08?BIOMES.JUNGLE:BIOMES.SAVANNA;
             }
             return fallback;
         }
@@ -582,8 +584,8 @@ function getHeight(x, z, biome = getBiome(x, z)) {
             const ridge = 1 - Math.abs(noise.octave(x * 0.0022 + 1200, z * 0.0022 + 1200, 4, 0.55));
             const { temp, moist } = getClimate(x, z);
 
-            const cold = smoothstep(0.02, 0.34, -temp);
-            const hot = smoothstep(0.16, 0.52, temp);
+            const cold = smoothstep(.34, .72, -temp);
+            const hot = smoothstep(.04, .45, temp);
             let naturalHeight = 58 + broad * 10 + detail * 3;
             naturalHeight += hot * (2 + broad * 3);
             naturalHeight += smoothstep(0.55, 0.82, -moist) * 5;
@@ -620,37 +622,40 @@ function getHeight(x, z, biome = getBiome(x, z)) {
             if(hydro.kind==='ocean'||hydro.kind==='deep_ocean'){
                 // Continental shelf and slope: keep a broad shallow margin so
                 // land does not drop into deep ocean within only a few blocks.
+                // Smooth Y=50 continental shelf, then deep-ocean ramp down to Y=-10.
+                // No abrupt threshold jump; both the game and map use this curve.
                 if(hydro.field<=.42){
-                    naturalHeight=mix(61.3,54,smoothstep(.205,.42,hydro.field));
+                    naturalHeight=mix(49,44,smoothstep(.205,.42,hydro.field));
                 }else if(hydro.field<=.60){
-                    naturalHeight=mix(54,41,smoothstep(.42,.60,hydro.field));
+                    naturalHeight=mix(44,31,smoothstep(.42,.60,hydro.field));
                 }else if(hydro.field<=.78){
-                    naturalHeight=mix(41,24,smoothstep(.60,.78,hydro.field));
+                    // Gradual outer continental shelf, not a sudden 12-block cliff.
+                    naturalHeight=mix(31,19,smoothstep(.60,.78,hydro.field));
                 }else{
-                    naturalHeight=mix(24,11,smoothstep(.78,.92,hydro.field));
+                    // Abyssal slope continues far offshore to Y=-10.
+                    naturalHeight=mix(19,-10,smoothstep(.78,1.55,hydro.field));
                 }
-                naturalHeight+=noise.noise2D(x*.011+281,z*.011-631)*.7;
-                naturalHeight=Math.max(10,Math.min(60,naturalHeight));
-            } else if(hydro.kind==='beach') {
+                naturalHeight+=noise.noise2D(x*.008+281,z*.008-631)*.45;
+                naturalHeight=Math.max(-10,Math.min(49,naturalHeight));            } else if(hydro.kind==='beach') {
                 // Never jump from inland 80+ to a vertical 62-block shoreline.
-                const targetLand=Math.max(64,Math.min(69,naturalHeight));
+                const targetLand=Math.max(52,Math.min(58,naturalHeight));
                 // Dry beaches must begin ABOVE the source-water top (Y=62),
                 // otherwise adjacent ocean sources flood the beach forever.
-                naturalHeight=mix(62.25,targetLand,1-smoothstep(.055,.205,hydro.field));
+                naturalHeight=mix(50.3,targetLand,1-smoothstep(.055,.205,hydro.field));
             } else if(hydro.kind==='river'||hydro.kind==='lake') {
                 // A lake begins with a shallow shelf rather than a five-block
                 // drop exactly at its source-water boundary.
-                naturalHeight=hydro.kind==='river'?59:mix(61.35,57,hydro.depth??1);
+                naturalHeight=hydro.kind==='river'?47:mix(61.35,57,hydro.depth??1);
             } else if(hydro.kind==='river_bank'||hydro.kind==='lake_bank') {
                 // Banks start above the waterline, not submerged below it.
                 // This prevents water spilling sideways over every dry bank.
-                naturalHeight=mix(62.25,naturalHeight,smoothstep(0,1,hydro.bank));
-            } else if(hydro.field>-.13) {
-                // The inland coast begins flattening before the sand beach starts.
-                const t=smoothstep(-.13,-.045,hydro.field);
-                naturalHeight=mix(naturalHeight,Math.max(64,Math.min(69,naturalHeight)),t);
+                naturalHeight=mix(hydro.kind==='lake_bank'?62.25:50.25,naturalHeight,smoothstep(0,1,hydro.bank));
+            } else if(hydro.field>-.23) {
+                // Wide inland coastal foothill, no high vertical escarpments.
+                const t=smoothstep(-.23,.055,hydro.field);
+                naturalHeight=mix(naturalHeight,Math.max(52,Math.min(58,naturalHeight)),t);
             }
-            return clamp(Math.floor(naturalHeight),8,190);
+            return clamp(Math.floor(naturalHeight),-12,190);
         }
 
 function posRand(x, z, off = 0) { return (treeNoise.noise2D(x * 0.1 + off, z * 0.1 + off) + 1) * 0.5; }
@@ -701,8 +706,13 @@ function getSurfaceStructuresInBounds(minX,minZ,maxX,maxZ){
       const cx=cellX*56+10+Math.floor(coordHash(cellX,cellZ,761)*36);
       const cz=cellZ*56+10+Math.floor(coordHash(cellX,cellZ,762)*36);
       if(cx<minX-4||cx>maxX+4||cz<minZ-4||cz>maxZ+4)continue;
-      let minY=248;
-      for(const ox of [-4,0,4])for(const oz of [-4,0,4])minY=Math.min(minY,getHeight(cx+ox,cz+oz));
+      let minY=248,touchesOcean=false;
+      for(const ox of [-4,0,4])for(const oz of [-4,0,4]){
+        const b=getBiome(cx+ox,cz+oz);
+        if(b===BIOMES.OCEAN||b===BIOMES.DEEP_OCEAN)touchesOcean=true;
+        minY=Math.min(minY,getHeight(cx+ox,cz+oz));
+      }
+      if(touchesOcean)continue;
       if(minY-9>=5){const maxBase=minY-9;const y=48+4+Math.floor(coordHash(cellX,cellZ,763)*Math.max(1,maxBase-48-3));result.push({type:'Dungeon',cx,cz,y});}
     }
   }
